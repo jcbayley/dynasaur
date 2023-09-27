@@ -33,12 +33,12 @@ def train_model(root_dir):
     if not os.path.isdir(root_dir):
         os.makedirs(root_dir)
 
-    n_data = 50000
+    n_data = 30000
     batch_size = 512
     chebyshev_order = 4
     n_masses = 2
     sample_rate = 128
-    n_epochs = 3000
+    n_epochs = 1000
     device = "cuda:0"
 
     n_features = chebyshev_order*n_masses + n_masses
@@ -127,10 +127,9 @@ def test_model(model, dataloader, times, n_masses, chebyshev_order, root_dir, de
                 ax[1].plot(times, recon_tseries[mass_index])
                 ax[2].plot(times, source_tseries[mass_index] - recon_tseries[mass_index])
     
-            recon_weighted_coeffs = np.sum(recon_coeffs * recon_masses[:, None], axis=1)
-            source_weighted_coeffs = np.sum(source_coeffs * source_masses[:, None], axis=1)
+            recon_weighted_coeffs = np.sum(recon_coeffs * recon_masses[:, None], axis=0)
+            source_weighted_coeffs = np.sum(source_coeffs * source_masses[:, None], axis=0)
 
-            print(np.shape(recon_weighted_coeffs))
             recon_strain_coeffs = generate_strain_coefficients(recon_weighted_coeffs)
             source_strain_coeffs = generate_strain_coefficients(source_weighted_coeffs)
 
@@ -140,10 +139,10 @@ def test_model(model, dataloader, times, n_masses, chebyshev_order, root_dir, de
 
             ax[3].plot(times, recon_strain, label="recon")
             ax[3].plot(times, source_strain, label="source")
-            ax[3].plot(times, data[0], label="source data")
+            ax[3].plot(times, data[0].cpu().numpy(), label="source data")
 
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
 if __name__ == "__main__":
 
-    train_model("./test_model")
+    train_model("./test_model_2")
