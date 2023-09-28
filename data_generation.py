@@ -1,6 +1,6 @@
 import numpy as np
 
-def generate_random_coefficients(order: int) -> tuple:
+def generate_random_coefficients(order: int, n_dimensions: int = 1) -> tuple:
     """_summary_
 
     Args:
@@ -10,14 +10,12 @@ def generate_random_coefficients(order: int) -> tuple:
         tuple: _description_
     """
 
-    x_coefficients = np.zeros(order)
-    #y_coefficients = np.zeros(order)
-    #z_coefficients = np.zeros(order)
+    coefficients = np.zeros((order,n_dimensions))
 
     for i in range(order):
-        x_coefficients = 2 * np.random.rand() - 1
+        coefficients[i] = 2 * np.random.rand(n_dimensions) - 1
 
-    return x_coefficients
+    return coefficients
 
 def generate_strain_coefficients(coeffs: np.array) -> np.array:
     """
@@ -49,7 +47,7 @@ def generate_masses(n_masses: int) -> np.array:
 
     return masses
 
-def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: int ) -> np.array:
+def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: int, n_dimensions: int = 1) -> np.array:
     """_summary_
 
     Args:
@@ -62,9 +60,8 @@ def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: 
         np.array: _description_
     """
 
-    cheby_weights = np.zeros((n_data, n_masses))
     strain_timeseries = np.zeros((n_data, sample_rate))
-    flattened_coeffs_mass = np.zeros((n_data, chebyshev_order*n_masses + n_masses))
+    flattened_coeffs_mass = np.zeros((n_data, chebyshev_order*n_masses*n_dimensions + n_masses))
 
     times = np.arange(-1,1,2/sample_rate)
 
@@ -76,10 +73,11 @@ def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: 
         flattened_coeffs_mass[data_index, -n_masses:] = masses
         for mass_index in range(n_masses):
 
-            coeffs = generate_random_coefficients(chebyshev_order)
+            coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
+            flat_coeffs = np.ravel(coeffs)
 
-            flattened_coeffs_mass[data_index, chebyshev_order*mass_index:chebyshev_order*(mass_index+1)] = coeffs
-            all_dynamics += masses[mass_index]*coeffs
+            flattened_coeffs_mass[data_index, chebyshev_order*mass_index*n_dimensions:chebyshev_order*n_dimensions*(mass_index+1)] = flat_coeffs
+            all_dynamics += masses[mass_index]*flat_coeffs
 
         strain_coeffs = generate_strain_coefficients(all_dynamics)
 

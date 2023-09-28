@@ -33,18 +33,19 @@ def train_model(root_dir):
     if not os.path.isdir(root_dir):
         os.makedirs(root_dir)
 
-    n_data = 30000
+    n_data = 100000
     batch_size = 512
-    chebyshev_order = 4
-    n_masses = 2
+    chebyshev_order = 10
+    n_masses = 3
+    n_dimensions = 1
     sample_rate = 128
-    n_epochs = 1000
+    n_epochs = 5000
     device = "cuda:0"
 
-    n_features = chebyshev_order*n_masses + n_masses
+    n_features = chebyshev_order*n_masses*n_dimensions + n_masses
     n_context = sample_rate
 
-    times, labels, strain = generate_data(n_data, chebyshev_order, n_masses, sample_rate)
+    times, labels, strain = generate_data(n_data, chebyshev_order, n_masses, sample_rate, n_dimensions=n_dimensions)
 
     fig, ax = plt.subplots()
     ax.plot(strain[0])
@@ -91,7 +92,10 @@ def train_model(root_dir):
     ax.plot(val_losses)
     fig.savefig(os.path.join(root_dir, "lossplot.png"))
 
-    test_model(model, test_loader, times, n_masses, chebyshev_order, root_dir, device)
+    if n_dimensions == 1:
+        test_model_1d(model, test_loader, times, n_masses, chebyshev_order, root_dir, device)
+    elif n_dimensions == 2:
+        test_model_2d(model, test_loader, times, n_masses, chebyshev_order, root_dir, device)
     
     print("Completed Testing")
 
@@ -106,7 +110,44 @@ def get_dynamics(coeffmass_samples, times, n_masses, chebyshev_order):
 
     return coeffs, masses, tseries
 
-def test_model(model, dataloader, times, n_masses, chebyshev_order, root_dir, device):
+def test_model_1d(model, dataloader, times, n_masses, chebyshev_order, root_dir, device):
+
+    plot_out = os.path.join(root_dir, "testout")
+    if not os.path.isdir(plot_out):
+        os.makedirs(plot_out)
+
+    model.eval()
+    with torch.no_grad():
+        for batch, (label, data) in enumerate(dataloader):
+            label, data = label.to(device), data.to(device)
+            coeffmass_samples = model(data).sample().cpu().numpy()
+
+            source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, chebyshev_order)
+            recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, chebyshev_order)
+
+            fig, ax = plt.subplots(nrows = 4)
+            for mass_index in range(n_masses):
+                ax[0].plot(times, source_tseries[mass_index])
+                ax[1].plot(times, recon_tseries[mass_index])
+                ax[2].plot(times, source_tseries[mass_index] - recon_tseries[mass_index])
+    
+            recon_weighted_coeffs = np.sum(recon_coeffs * recon_masses[:, None], axis=0)
+            source_weighted_coeffs = np.sum(source_coeffs * source_masses[:, None], axis=0)
+
+            recon_strain_coeffs = generate_strain_coefficients(recon_weighted_coeffs)
+            source_strain_coeffs = generate_strain_coefficients(source_weighted_coeffs)
+
+            recon_strain = np.polynomial.chebyshev.chebval(times, recon_strain_coeffs)
+            source_strain = np.polynomial.chebyshev.chebval(times, source_strain_coeffs)
+
+
+            ax[3].plot(times, recon_strain, label="recon")
+            ax[3].plot(times, source_strain, label="source")
+            ax[3].plot(times, data[0].cpu().numpy(), label="source data")
+
+            fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
+
+def test_model_2d(model, dataloader, times, n_masses, chebyshev_order, root_dir, device):
 
     plot_out = os.path.join(root_dir, "testout")
     if not os.path.isdir(plot_out):
@@ -145,4 +186,4 @@ def test_model(model, dataloader, times, n_masses, chebyshev_order, root_dir, de
 
 if __name__ == "__main__":
 
-    train_model("./test_model_2")
+    train_model("./test_model_4")
