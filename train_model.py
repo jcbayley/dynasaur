@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 def train_epoch(dataloader: torch.utils.data.DataLoader, model: torch.nn.Module, optimiser: torch.optim, device:str = "cpu", train:bool = True) -> float:
     """train one epoch for data
@@ -68,7 +69,7 @@ def train_model(config: dict) -> None:
     val_loader = DataLoader(val_set, batch_size=config["batch_size"])
     test_loader = DataLoader(test_set, batch_size=1)
 
-    model = zuko.flows.spline.NSF(n_features, context=n_context, bins=config["nsplines"], hidden_features=config["hidden_features"]).to(config["device"])
+    model = zuko.flows.spline.NSF(n_features, context=n_context, transforms=config["ntransforms"], bins=config["nsplines"], hidden_features=config["hidden_features"]).to(config["device"])
     optimiser = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
     train_losses = []
@@ -94,11 +95,13 @@ def train_model(config: dict) -> None:
             },
             os.path.join(config["root_dir"],"test_model.pt"))
 
+        fig, ax = plt.subplots()
+        ax.plot(train_losses)
+        ax.plot(val_losses)
+        fig.savefig(os.path.join(config["root_dir"], "lossplot.png"))
+
     print("Completed Training")
-    fig, ax = plt.subplots()
-    ax.plot(train_losses)
-    ax.plot(val_losses)
-    fig.savefig(os.path.join(config["root_dir"], "lossplot.png"))
+
 
     if config["n_dimensions"] == 1:
         test_model_1d(model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
@@ -156,6 +159,33 @@ def test_model_1d(model, dataloader, times, n_masses, chebyshev_order, n_dimensi
 
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
+def make_2d_animation(root_dir, index, timeseries, masses):
+
+    n_frames = np.shape(timeseries)[-1]
+    num_masses = len(masses)
+
+    # Create a figure and axis
+    fig, ax = plt.subplots()
+
+    ax.set_xlim([min(timeseries[:,0,:]),max(timeseries[:,0,:])])
+    ax.set_ylim([min(timeseries[:,1,:]),max(timeseries[:,1,:])])
+
+    # Create particles as lines
+    particles = [ax.plot(0, 0, marker="o", markersize=masses[mind]*8) for mind in range(num_masses)]
+
+    def update_plot(frame):
+        for mind in range(num_masses):
+            # Set new positions for each particle based on the current frame
+            x, y = timeseries[mind][:, frame]
+            particles[mind][0].set_data(x, y)
+
+
+    ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
+
+    writergif = animation.PillowWriter(fps=30) 
+    ani.save(os.path.join(root_dir, f"animation_{index}.gif"), writer=writergif)
+
+
 def test_model_2d(model, dataloader, times, n_masses, chebyshev_order, n_dimensions, root_dir, device):
 
     plot_out = os.path.join(root_dir, "testout")
@@ -194,20 +224,23 @@ def test_model_2d(model, dataloader, times, n_masses, chebyshev_order, n_dimensi
 
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
+            make_2d_animation(plot_out, batch, recon_tseries, recon_masses)
+
 if __name__ == "__main__":
 
     config = dict(
-        n_data = 200000,
+        n_data = 100000,
         batch_size = 512,
-        chebyshev_order = 10,
-        n_masses = 3,
+        chebyshev_order = 6,
+        n_masses = 2,
         n_dimensions = 2,
         sample_rate = 128,
-        n_epochs = 5000,
+        n_epochs = 1000,
         device = "cuda:0",
-        nsplines = 5,
+        nsplines = 6,
+        ntransforms = 6,
         hidden_features = [256,256,256],
-        root_dir = "test_model_6"
+        root_dir = "test_model_7"
     )
 
     train_model(config)
