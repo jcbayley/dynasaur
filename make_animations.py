@@ -1,3 +1,8 @@
+import os
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import numpy as np
+
 def make_2d_animation(root_dir, index, timeseries, masses, true_timeseries, true_masses):
     """_summary_
 
