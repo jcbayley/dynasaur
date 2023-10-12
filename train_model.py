@@ -1,5 +1,5 @@
 import zuko
-from data_generation import generate_data, generate_strain_coefficients, generate_2d_derivative
+from data_generation import generate_data, generate_strain_coefficients, generate_2d_derivative, generate_3d_derivative, compute_strain
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
@@ -7,7 +7,8 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from make_animations import make_2d_animation, make_2d_distribution
+from make_animations import make_2d_animation, make_2d_distribution, make_3d_animation, make_3d_distribution
+
 
 def train_epoch(dataloader: torch.utils.data.DataLoader, model: torch.nn.Module, pre_model: torch.nn.Module, optimiser: torch.optim, device:str = "cpu", train:bool = True) -> float:
     """train one epoch for data
@@ -122,6 +123,8 @@ def train_model(config: dict) -> None:
         test_model_1d(model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
     elif config["n_dimensions"] == 2:
         test_model_2d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
+    elif config["n_dimensions"] == 3:
+        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
     
     print("Completed Testing")
 
@@ -255,6 +258,77 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
 
             make_2d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
 
+def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, root_dir, device):
+    """_summary_
+
+    Args:
+        model (_type_): _description_
+        pre_model (_type_): _description_
+        dataloader (_type_): _description_
+        times (_type_): _description_
+        n_masses (_type_): _description_
+        chebyshev_order (_type_): _description_
+        n_dimensions (_type_): _description_
+        root_dir (_type_): _description_
+        device (_type_): _description_
+    """
+    plot_out = os.path.join(root_dir, "testout")
+    if not os.path.isdir(plot_out):
+        os.makedirs(plot_out)
+
+    model.eval()
+    with torch.no_grad():
+        for batch, (label, data) in enumerate(dataloader):
+            label, data = label.to(device), data.to(device)
+            input_data = pre_model(data)
+            coeffmass_samples = model(input_data).sample().cpu().numpy()
+
+            print(np.shape(coeffmass_samples[0]))
+            source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, chebyshev_order, n_dimensions)
+            recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, chebyshev_order, n_dimensions)
+
+            fig, ax = plt.subplots(nrows = 4)
+            for mass_index in range(n_masses):
+                ax[0].plot(times, source_tseries[mass_index,0], color="k", alpha=0.8)
+                ax[0].plot(times, source_tseries[mass_index,1], color="r", alpha=0.8)
+                ax[0].plot(times, source_tseries[mass_index,2], color="g", alpha=0.8)
+                ax[1].plot(times, recon_tseries[mass_index, 0])
+                ax[1].plot(times, recon_tseries[mass_index, 1])
+                ax[1].plot(times, recon_tseries[mass_index, 2])
+                ax[2].plot(times, source_tseries[mass_index,0] - recon_tseries[mass_index,0])
+    
+            recon_weighted_coeffs = np.sum(recon_coeffs * recon_masses[:, None, None], axis=0)
+            source_weighted_coeffs = np.sum(source_coeffs * source_masses[:, None, None], axis=0)
+
+            recon_strain_tensor = generate_3d_derivative(recon_weighted_coeffs, times)
+            source_strain_tensor = generate_3d_derivative(source_weighted_coeffs, times)
+
+            recon_strain = compute_strain(recon_strain_tensor)
+            source_strain = compute_strain(source_strain_tensor)
+
+            ax[3].plot(times, recon_strain, label="recon")
+            ax[3].plot(times, source_strain, label="source")
+            ax[3].plot(times, data[0][0].cpu().numpy(), label="source data")
+
+            fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
+
+            make_3d_animation(plot_out, batch, recon_tseries, recon_masses, source_tseries, source_masses)
+
+
+            nsamples = 50
+            multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
+
+            #print("multishape", multi_coeffmass_samples.shape)
+            m_recon_tseries, m_recon_masses = np.zeros((nsamples, n_masses, n_dimensions, len(times))), np.zeros((nsamples, n_masses))
+            for i in range(nsamples):
+                #print(np.shape(multi_coeffmass_samples[i]))
+                t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, chebyshev_order, n_dimensions)
+                m_recon_tseries[i] = t_time
+                m_recon_masses[i] = t_mass
+
+            make_3d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
+
+
 def test_model_chirp(root_dir):
     """Simulate a chirp and reconstruct the masses
 
@@ -275,19 +349,19 @@ def test_model_chirp(root_dir):
 if __name__ == "__main__":
 
     config = dict(
-        n_data = 500,
+        n_data = 1000000,
         batch_size = 512,
-        chebyshev_order = 6,
+        chebyshev_order = 10,
         n_masses = 2,
-        n_dimensions = 2,
+        n_dimensions = 3,
         sample_rate = 128,
-        n_epochs = 100,
+        n_epochs = 1000,
         learning_rate = 2e-4,
         device = "cuda:0",
         nsplines = 6,
         ntransforms = 6,
         hidden_features = [256,256,256],
-        root_dir = "test_model_12"
+        root_dir = "test_model_3d_1_antenna"
     )
 
     train_model(config)

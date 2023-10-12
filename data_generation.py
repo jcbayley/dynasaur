@@ -1,4 +1,6 @@
 import numpy as np
+import lal
+import lalpulsar 
 
 def generate_random_coefficients(order: int, n_dimensions: int = 1) -> tuple:
     """_summary_
@@ -181,7 +183,7 @@ def generate_3d_derivative(coeffs: np.array, times: np.array) -> np.array:
     co_zz = np.polynomial.chebyshev.chebpow(coeffs[:,2], 2) 
     
     # subtract the trace
-    trace = np.polynomial.chebyshev.add(np.polynomial.chebyshev.chebadd(co_xx, co_yy), co_zz)
+    trace = np.polynomial.chebyshev.chebadd(np.polynomial.chebyshev.chebadd(co_xx, co_yy), co_zz)
     factor = np.polynomial.chebyshev.chebmul(trace, 1./3)
     co_xx = np.polynomial.chebyshev.chebsub(co_xx, factor)
     co_yy = np.polynomial.chebyshev.chebsub(co_yy, factor)
@@ -195,13 +197,13 @@ def generate_3d_derivative(coeffs: np.array, times: np.array) -> np.array:
     co_zx = np.polynomial.chebyshev.chebmul(coeffs[:,2], coeffs[:,0])
     co_zy = np.polynomial.chebyshev.chebmul(coeffs[:,2], coeffs[:,1])
 
-    co_tensor = [
+    co_tensor = np.array([
         [co_xx, co_xy, co_xz],
         [co_yx, co_yy, co_yz],
         [co_zx, co_yz, co_zz]
-    ]
+    ])
 
-    Iprime_coeffs = np.zeros((3,3,))
+    Iprime_coeffs = np.zeros((3,3,len(co_tensor[0,0]) - 2))
     for i in range(np.shape(co_tensor)[0]):
         for j in range(np.shape(co_tensor)[1]):
             Iprime_coeffs[i,j] = np.polynomial.chebyshev.chebder(co_tensor[i,j], m=2)
@@ -271,6 +273,23 @@ def generate_masses(n_masses: int) -> np.array:
 
     return masses
 
+def antenna_pattern(alpha, delta, gpstime, detector="H1"):
+
+    time = lal.GreenwichMeanSiderealTime(gpstime)
+    siteinfo = lalpulsar.GetSiteInfo(detector)
+    am_plus, am_cross = lal.ComputeDetAMResponse(siteinfo.response, alpha, delta, 0.0, time)
+
+    return am_plus, am_cross
+
+def compute_strain(pols):
+    # these are fixed for now so only have to be calculated once
+    alpha, delta = np.pi, np.pi/2 # arbritrary values for now
+    gpstime = 1381142123 # set to current time (when written)
+    aplus, across = antenna_pattern(alpha, delta, gpstime, detector="H1")
+    hplus, hcross = pols[0,0], pols[0,1]
+    strain = aplus*hplus + across*hcross
+    return strain
+
 def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: int, n_dimensions: int = 1) -> np.array:
     """_summary_
 
@@ -315,9 +334,9 @@ def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: 
             strain_timeseries[data_index][0] = hplus + hcross
         elif n_dimensions == 3:
             temp_strain_timeseries = generate_3d_derivative(all_dynamics.reshape(chebyshev_order, n_dimensions), times)
-            hplus = temp_strain_timeseries[0,0]
-            hcross = temp_strain_timeseries[0,1]
-            strain_timeseries[data_index][0] = hplus + hcross
+            strain_timeseries[data_index][0] = compute_strain(temp_strain_timeseries)
+
+
     return times, flattened_coeffs_mass, strain_timeseries
 
 if __name__ == "__main__":
