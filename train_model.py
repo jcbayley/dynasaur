@@ -57,7 +57,7 @@ def train_model(config: dict) -> None:
     n_features = config["chebyshev_order"]*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["sample_rate"]*2
     print("init", n_features, n_context)
-    times, labels, strain = generate_data(config["n_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"])
+    times, labels, strain = generate_data(config["n_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"])
 
     fig, ax = plt.subplots()
     ax.plot(strain[0])
@@ -65,6 +65,7 @@ def train_model(config: dict) -> None:
 
 
     print(np.shape(labels), np.shape(strain))
+
     dataset = TensorDataset(torch.Tensor(labels), torch.Tensor(strain))
     train_size = int(0.9*config["n_data"])
     test_size = 10
@@ -74,12 +75,14 @@ def train_model(config: dict) -> None:
     test_loader = DataLoader(test_set, batch_size=1)
 
     pre_model = nn.Sequential(
-        nn.Conv1d(1, 16, 8, padding="same"),
+        nn.Conv1d(len(config["detectors"]), 16, 8, padding="same"),
         nn.ReLU(),
         nn.Conv1d(16, 16, 4),
         nn.ReLU(),
+        nn.MaxPool1d(2),
         nn.Conv1d(16, 16, 4),
         nn.ReLU(),
+        nn.MaxPool1d(2),
         nn.Flatten(),
         nn.LazyLinear(n_context)
     ).to(config["device"])
@@ -124,7 +127,7 @@ def train_model(config: dict) -> None:
     elif config["n_dimensions"] == 2:
         test_model_2d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
     elif config["n_dimensions"] == 3:
-        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
+        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["detectors"], config["root_dir"], config["device"])
     
     print("Completed Testing")
 
@@ -258,7 +261,7 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
 
             make_2d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
 
-def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, root_dir, device):
+def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, detectors, root_dir, device):
     """_summary_
 
     Args:
@@ -288,14 +291,6 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
             recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, chebyshev_order, n_dimensions)
 
             fig, ax = plt.subplots(nrows = 4)
-            for mass_index in range(n_masses):
-                ax[0].plot(times, source_tseries[mass_index,0], color="k", alpha=0.8)
-                ax[0].plot(times, source_tseries[mass_index,1], color="r", alpha=0.8)
-                ax[0].plot(times, source_tseries[mass_index,2], color="g", alpha=0.8)
-                ax[1].plot(times, recon_tseries[mass_index, 0])
-                ax[1].plot(times, recon_tseries[mass_index, 1])
-                ax[1].plot(times, recon_tseries[mass_index, 2])
-                ax[2].plot(times, source_tseries[mass_index,0] - recon_tseries[mass_index,0])
     
             recon_weighted_coeffs = np.sum(recon_coeffs * recon_masses[:, None, None], axis=0)
             source_weighted_coeffs = np.sum(source_coeffs * source_masses[:, None, None], axis=0)
@@ -303,12 +298,18 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
             recon_strain_tensor = generate_3d_derivative(recon_weighted_coeffs, times)
             source_strain_tensor = generate_3d_derivative(source_weighted_coeffs, times)
 
-            recon_strain = compute_strain(recon_strain_tensor)
-            source_strain = compute_strain(source_strain_tensor)
+            recon_strain = []
+            source_strain = []
+            for detector in detectors:
+                recon_strain.append(compute_strain(recon_strain_tensor, detector=detector))
+                source_strain.append(compute_strain(source_strain_tensor, detector=detector))
 
-            ax[3].plot(times, recon_strain, label="recon")
-            ax[3].plot(times, source_strain, label="source")
-            ax[3].plot(times, data[0][0].cpu().numpy(), label="source data")
+            for i in range(len(detectors)):
+                print(np.shape(times), np.shape(recon_strain))
+
+                ax[i].plot(times, recon_strain[i], label="recon")
+                ax[i].plot(times, source_strain[i], label="source")
+                ax[i].plot(times, data[0][i].cpu().numpy(), label="source data")
 
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
@@ -349,19 +350,21 @@ def test_model_chirp(root_dir):
 if __name__ == "__main__":
 
     config = dict(
-        n_data = 1000000,
+        n_data = 200000,
         batch_size = 512,
         chebyshev_order = 10,
         n_masses = 2,
         n_dimensions = 3,
+        detectors=["H1"],
         sample_rate = 128,
         n_epochs = 1000,
+        window=True,
         learning_rate = 2e-4,
         device = "cuda:0",
         nsplines = 6,
         ntransforms = 6,
-        hidden_features = [256,256,256],
-        root_dir = "test_model_3d_1_antenna"
+        hidden_features = [128,128,128],
+        root_dir = "test_model_3d_1det_antenna_window"
     )
 
     train_model(config)
