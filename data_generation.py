@@ -2,6 +2,7 @@ import numpy as np
 import lal
 import lalpulsar 
 import matplotlib.pyplot as plt
+import scipy.signal as signal
 
 def generate_random_coefficients(order: int, n_dimensions: int = 1) -> tuple:
     """_summary_
@@ -35,11 +36,15 @@ def generate_strain_coefficients(coeffs: np.array) -> np.array:
 
     return diff_chebyshev
 
-def fit_cheby_to_hann(n_times):
-    times = np.linspace(-1,1,n_times)
+def fit_cheby_to_hann(times, order=6):
     hwin = np.hanning(len(times))
-    hann_cheb = np.polynomial.chebyshev.chebfit(times, hwin, 6)
-    return_hann_cheb
+    hann_cheb = np.polynomial.chebyshev.chebfit(times, hwin, order)
+    return hann_cheb
+
+def fit_cheby_to_tukey(times, alpha=0.5, order=6):
+    hwin = signal.windows.tukey(len(times), alpha=alpha)
+    tuk_cheb = np.polynomial.chebyshev.chebfit(times, hwin, order)
+    return tuk_cheb
 
 def generate_2d_derivative(coeffs: np.array, times: np.array) -> np.array:
     """ takes in coefficients for polynomial in two dimensions
@@ -168,6 +173,56 @@ def generate_2d_derivative(coeffs: np.array, times: np.array) -> np.array:
 
     return h_TT
 
+def chebint2(times, coeffs):
+    """compute the second integral correcting for offsets in the integrated values
+
+    Args:
+        times (_type_): _description_
+        coeffs (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    win_co_vel = np.polynomial.chebyshev.chebint(coeffs, m=1)
+    # compute the values and subtract the mean from the first coefficient
+    # this is so that there is not a velocity offset
+    win_vel = np.polynomial.chebyshev.chebval(times, win_co_vel)
+    win_co_vel[0] -= np.mean(win_vel)
+
+    # now find the position
+    win_co_pos = np.polynomial.chebyshev.chebint(win_co_vel, m=1)
+    # compute the values and subtract the mean from the first coefficient
+    # this is so that there is not a position offset
+    win_pos = np.polynomial.chebyshev.chebval(times, win_co_pos)
+    win_co_pos[0] -= np.mean(win_pos)
+
+    return win_co_pos
+
+def window_coeffs(times, coeffs, window_coeffs):
+    #hann_coeffs = np.array([ 3.47821791e-01,  1.52306260e-16, -4.85560481e-01, -5.11827799e-17, 1.51255010e-01,  2.65316279e-17, -1.48207898e-02])
+
+    # find the acceleration components for each dimension
+    co_x_acc = np.polynomial.chebyshev.chebder(coeffs[:,0], m=2)
+    co_y_acc = np.polynomial.chebyshev.chebder(coeffs[:,1], m=2)
+    co_z_acc = np.polynomial.chebyshev.chebder(coeffs[:,2], m=2)
+
+    # window each dimension in acceleration according to hann window
+    win_co_x_acc = np.polynomial.chebyshev.chebmul(co_x_acc, window_coeffs)
+    win_co_y_acc = np.polynomial.chebyshev.chebmul(co_y_acc, window_coeffs)
+    win_co_z_acc = np.polynomial.chebyshev.chebmul(co_z_acc, window_coeffs)
+
+    # integrate the windowed acceleration twice to get position back
+    #win_co_x = np.polynomial.chebyshev.chebint(win_co_x_acc, m=2)
+    #win_co_y = np.polynomial.chebyshev.chebint(win_co_y_acc, m=2)
+    #win_co_z = np.polynomial.chebyshev.chebint(win_co_z_acc, m=2)
+
+    win_co_x = chebint2(times, win_co_x_acc)
+    win_co_y = chebint2(times, win_co_y_acc)
+    win_co_z = chebint2(times, win_co_z_acc)
+
+    coarr = np.array([win_co_x, win_co_y, win_co_z]).T
+    return coarr
+
 def generate_3d_derivative(coeffs: np.array, times: np.array, window=False) -> np.array:
     """ takes in coefficients for polynomial in two dimensions
         -> computes quadrupole tensor
@@ -184,28 +239,20 @@ def generate_3d_derivative(coeffs: np.array, times: np.array, window=False) -> n
         np.array: h(t) time series of GW
     """
 
+    """
     if window == True:
-        # these were fitt separately see cheby fit function in this file
-        hann_coeffs = np.array([ 3.47821791e-01,  1.52306260e-16, -4.85560481e-01, -5.11827799e-17, 1.51255010e-01,  2.65316279e-17, -1.48207898e-02])
-
-        # find the acceleration components for each dimension
-        co_x_acc = np.polynomial.chebyshev.chebder(coeffs[:,0], m=2)
-        co_y_acc = np.polynomial.chebyshev.chebder(coeffs[:,1], m=2)
-        co_z_acc = np.polynomial.chebyshev.chebder(coeffs[:,2], m=2)
-
-        # window each dimension in acceleration according to hann window
-        win_co_x_acc = np.polynomial.chebyshev.chebmul(co_x_acc, hann_coeffs)
-        win_co_y_acc = np.polynomial.chebyshev.chebmul(co_y_acc, hann_coeffs)
-        win_co_z_acc = np.polynomial.chebyshev.chebmul(co_z_acc, hann_coeffs)
-
-        # integrate the windowed acceleration twice to get position back
-        win_co_x = np.polynomial.chebyshev.chebint(win_co_x_acc, m=2)
-        win_co_y = np.polynomial.chebyshev.chebint(win_co_y_acc, m=2)
-        win_co_z = np.polynomial.chebyshev.chebint(win_co_z_acc, m=2)
+        win_co_x, win_co_y, win_co_z = window_coeffs_acc(coeffs)
     else:
         win_co_x = coeffs[:,0]
         win_co_y = coeffs[:,1]
         win_co_z = coeffs[:,2]
+
+    """
+    win_co_x = coeffs[:,0]
+    win_co_y = coeffs[:,1]
+    win_co_z = coeffs[:,2]
+
+    #outputcoeffs = np.vstack([win_co_x, win_co_y, win_co_z])
 
     # this is the second mass moment (quadrupole moment)
     # making trace free to get quadrupole moment
@@ -357,22 +404,36 @@ def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: 
     ntimeseries = [0, 1, 3, 6, 10]
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
-    flattened_coeffs_mass = np.zeros((n_data, chebyshev_order*n_masses*n_dimensions + n_masses))
 
     times = np.arange(-1,1,2/sample_rate)
+
+    coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
+    if window != False:
+        if window == "tukey":
+            win_coeffs = fit_cheby_to_tukey(times, alpha=0.5, order=20)
+        elif window == "hann":
+            win_coeffs = fit_cheby_to_hann(times, order=6)
+
+        coeffs = window_coeffs(times, coeffs, win_coeffs)
+
+    acc_chebyshev_order = np.shape(coeffs)[0]
+    flattened_coeffs_mass = np.zeros((n_data, acc_chebyshev_order*n_masses*n_dimensions + n_masses))
+
 
     for data_index in range(n_data):
 
         masses = generate_masses(n_masses)
 
-        all_dynamics = np.zeros(chebyshev_order*n_dimensions)
+        all_dynamics = np.zeros(acc_chebyshev_order*n_dimensions)
         flattened_coeffs_mass[data_index, -n_masses:] = masses
         for mass_index in range(n_masses):
 
             coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
+            if window:
+                coeffs = window_coeffs(times, coeffs, win_coeffs)
             flat_coeffs = np.ravel(coeffs)
 
-            flattened_coeffs_mass[data_index, chebyshev_order*mass_index*n_dimensions:chebyshev_order*n_dimensions*(mass_index+1)] = flat_coeffs
+            flattened_coeffs_mass[data_index, acc_chebyshev_order*mass_index*n_dimensions:acc_chebyshev_order*n_dimensions*(mass_index+1)] = flat_coeffs
             all_dynamics += masses[mass_index]*flat_coeffs
 
         if n_dimensions == 1:
@@ -384,35 +445,65 @@ def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: 
             hcross = temp_strain_timeseries[0,1]
             strain_timeseries[data_index][0] = hplus + hcross
         elif n_dimensions == 3:
-            temp_strain_timeseries = generate_3d_derivative(all_dynamics.reshape(chebyshev_order, n_dimensions), times, window=window)
+            temp_strain_timeseries = generate_3d_derivative(all_dynamics.reshape(acc_chebyshev_order, n_dimensions), times)
             for dind, detector in enumerate(detectors):
                 strain_timeseries[data_index][dind] = compute_strain(temp_strain_timeseries, detector)
 
 
-    return times, flattened_coeffs_mass, strain_timeseries
+    return times, flattened_coeffs_mass, strain_timeseries, acc_chebyshev_order
 
 if __name__ == "__main__":
 
+
+    # TESTING code
     n_masses = 2
     chebyshev_order = 8
     n_dimensions = 3
     sample_rate = 32
     times = np.arange(-1,1,2/sample_rate)
     masses = generate_masses(n_masses)
+    window = "tukey"
 
-    all_dynamics = np.zeros(chebyshev_order*n_dimensions)
-    flattened_coeffs_mass = np.zeros((chebyshev_order*n_masses*n_dimensions + n_masses))
+    #np.random.seed(123)
 
+    if window == "tukey":
+        win_coeffs = fit_cheby_to_tukey(times, alpha=0.1, order=30)
+    elif window == "hann":
+        win_coeffs = fit_cheby_to_hann(times, order=6)
+
+    coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
+    if window:
+        coeffs = window_coeffs(times, coeffs, win_coeffs)
+    acc_chebyshev_order = np.shape(coeffs)[0]
+    
+
+    all_dynamics = np.zeros(acc_chebyshev_order*n_dimensions)
+    flattened_coeffs_mass = np.zeros((acc_chebyshev_order*n_masses*n_dimensions + n_masses))
+    sep_dynamics = np.zeros((n_masses, acc_chebyshev_order, n_dimensions))
     flattened_coeffs_mass[-n_masses:] = masses
+
     for mass_index in range(n_masses):
 
         coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
+        if window:
+            coeffs = window_coeffs(times, coeffs, win_coeffs)
         flat_coeffs = np.ravel(coeffs)
 
-        flattened_coeffs_mass[chebyshev_order*mass_index*n_dimensions:chebyshev_order*n_dimensions*(mass_index+1)] = flat_coeffs
+        sep_dynamics[mass_index] = coeffs
+        flattened_coeffs_mass[acc_chebyshev_order*mass_index*n_dimensions:acc_chebyshev_order*n_dimensions*(mass_index+1)] = flat_coeffs
         all_dynamics += masses[mass_index]*flat_coeffs
 
-    temp_strain_timeseries = generate_3d_derivative(all_dynamics.reshape(chebyshev_order, n_dimensions), times, window=True)
+    temp_strain_timeseries = generate_3d_derivative(all_dynamics.reshape(acc_chebyshev_order, n_dimensions), times)
+    
+    alldyn = all_dynamics.reshape(acc_chebyshev_order, n_dimensions)
+
+    fig, ax = plt.subplots(nrows = n_dimensions)
+    for dim in range(n_dimensions):
+        for ms in range(n_masses):
+            dyn = np.polynomial.chebyshev.chebval(times, sep_dynamics[ms,:,dim])
+            ax[dim].plot(times, dyn)
+
+    fig.savefig("test_dyn.png")
     print(temp_strain_timeseries[0,0] + temp_strain_timeseries[1,1])
     print(temp_strain_timeseries[0,1] - temp_strain_timeseries[1,0])
     hplus = temp_strain_timeseries[0,0]

@@ -1,5 +1,5 @@
 import zuko
-from data_generation import generate_data, generate_strain_coefficients, generate_2d_derivative, generate_3d_derivative, compute_strain
+from data_generation import generate_data, generate_strain_coefficients, generate_2d_derivative, generate_3d_derivative, compute_strain, window_coeffs
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
@@ -54,10 +54,13 @@ def train_model(config: dict) -> None:
     if not os.path.isdir(config["root_dir"]):
         os.makedirs(config["root_dir"])
 
-    n_features = config["chebyshev_order"]*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    times, labels, strain, cshape = generate_data(config["n_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"])
+
+    acc_chebyshev_order = cshape
+
+    n_features = acc_chebyshev_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["sample_rate"]*2
     print("init", n_features, n_context)
-    times, labels, strain = generate_data(config["n_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"])
 
     fig, ax = plt.subplots()
     ax.plot(strain[0])
@@ -75,12 +78,11 @@ def train_model(config: dict) -> None:
     test_loader = DataLoader(test_set, batch_size=1)
 
     pre_model = nn.Sequential(
-        nn.Conv1d(len(config["detectors"]), 16, 8, padding="same"),
+        nn.Conv1d(len(config["detectors"]), 32, 8, padding="same"),
         nn.ReLU(),
-        nn.Conv1d(16, 16, 4),
+        nn.Conv1d(32, 32, 4),
         nn.ReLU(),
-        nn.MaxPool1d(2),
-        nn.Conv1d(16, 16, 4),
+        nn.Conv1d(32, 16, 4),
         nn.ReLU(),
         nn.MaxPool1d(2),
         nn.Flatten(),
@@ -127,7 +129,7 @@ def train_model(config: dict) -> None:
     elif config["n_dimensions"] == 2:
         test_model_2d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
     elif config["n_dimensions"] == 3:
-        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["detectors"], config["root_dir"], config["device"])
+        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], acc_chebyshev_order, config["n_dimensions"], config["detectors"], config["window"], config["root_dir"], config["device"])
     
     print("Completed Testing")
 
@@ -261,7 +263,7 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
 
             make_2d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
 
-def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, detectors, root_dir, device):
+def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, detectors, window, root_dir, device):
     """_summary_
 
     Args:
@@ -350,21 +352,21 @@ def test_model_chirp(root_dir):
 if __name__ == "__main__":
 
     config = dict(
-        n_data = 200000,
+        n_data = 600000,
         batch_size = 512,
         chebyshev_order = 10,
         n_masses = 2,
         n_dimensions = 3,
-        detectors=["H1"],
+        detectors=["H1", "L1", "V1"],
         sample_rate = 128,
         n_epochs = 1000,
-        window=True,
+        window="tukey",
         learning_rate = 2e-4,
         device = "cuda:0",
         nsplines = 6,
         ntransforms = 6,
-        hidden_features = [128,128,128],
-        root_dir = "test_model_3d_1det_antenna_window"
+        hidden_features = [256, 256, 256],
+        root_dir = "test_model_3d_3det_antenna_correctedwindow_1"
     )
 
     train_model(config)
