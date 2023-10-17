@@ -112,6 +112,7 @@ def train_model(config: dict) -> None:
             torch.save({
                 "epoch":epoch,
                 "model_state_dict": model.state_dict(),
+                "pre_model_state_dict": pre_model.state_dict(),
                 "optimiser_state_dict":optimiser.state_dict(),
             },
             os.path.join(config["root_dir"],"test_model.pt"))
@@ -331,6 +332,8 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
 
             make_3d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
 
+def project_to_line_of_sight(coeffs):
+    pass
 
 def test_model_chirp(root_dir):
     """Simulate a chirp and reconstruct the masses
@@ -359,14 +362,14 @@ if __name__ == "__main__":
         n_dimensions = 3,
         detectors=["H1", "L1", "V1"],
         sample_rate = 128,
-        n_epochs = 1000,
-        window="tukey",
+        n_epochs = 500,
+        window="hann",
         learning_rate = 2e-4,
         device = "cuda:0",
         nsplines = 6,
         ntransforms = 6,
         hidden_features = [256, 256, 256],
-        root_dir = "test_model_3d_3det_antenna_correctedwindow_1"
+        root_dir = "test_model_3d_3det_antenna_hannwindow_1"
     )
 
     train_model(config)
