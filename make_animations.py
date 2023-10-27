@@ -115,7 +115,8 @@ def make_3d_animation(root_dir, index, timeseries, masses, true_timeseries, true
     # Create particles as lines
     particles = ax.scatter(timeseries[:,0,0], timeseries[:,1,0], timeseries[:,2,0], s=masses*10)
 
-    true_particles = ax.scatter(true_timeseries[:,0,0], true_timeseries[:,1,0], true_timeseries[:,2,0], s=true_masses*10) 
+    if true_timeseries is not None:
+        true_particles = ax.scatter(true_timeseries[:,0,0], true_timeseries[:,1,0], true_timeseries[:,2,0], s=true_masses*10) 
 
     #true_particles = [ax.scatter(0, 0, 0, s=true_masses[mind]*10, color="k") for mind in range(num_masses)]
 
@@ -127,11 +128,12 @@ def make_3d_animation(root_dir, index, timeseries, masses, true_timeseries, true
         #particles[mind][0].set_3d_properties(z)
 
         #print(np.shape(true_timeseries), np.shape(true_timeseries[mind]))
-        xt, yt, zt = np.transpose(true_timeseries[:,:,frame], (1,0))
-        true_particles._offsets3d = (xt, yt, zt)
-        #true_particles[mind][0].set_data(xt, yt)
-        #true_particles[mind][0].set_3d_properties(zt)
-        #print("update")
+        if true_timeseries is not None:
+            xt, yt, zt = np.transpose(true_timeseries[:,:,frame], (1,0))
+            true_particles._offsets3d = (xt, yt, zt)
+            #true_particles[mind][0].set_data(xt, yt)
+            #true_particles[mind][0].set_3d_properties(zt)
+            #print("update")
 
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1, blit=False)
@@ -166,8 +168,9 @@ def make_3d_distribution(root_dir, index, timeseries, masses, true_timeseries, t
     #particles = [ax.plot(timeseries[:,mind,0,0], timeseries[:,mind,1,0], timeseries[:,mind,2,0], marker="o", ls="none",markersize=masses[0,mind]*10) for mind in range(num_masses)]
     particles = [ax.scatter(timeseries[:,mind,0,0], timeseries[:,mind,1,0],timeseries[:,mind,2,0],s=masses[:,mind]*10) for mind in range(num_masses)]
 
-    #true_particles = [ax.plot(true_timeseries[mind,0,0], true_timeseries[mind,1,0], true_timeseries[mind,2,0], marker="o", ls="none", color="k", markersize=true_masses[mind]*10) for mind in range(num_masses)]
-    true_particles = ax.scatter(true_timeseries[:,0,0], true_timeseries[:,1,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
+    if true_timeseries is not None:
+        #true_particles = [ax.plot(true_timeseries[mind,0,0], true_timeseries[mind,1,0], true_timeseries[mind,2,0], marker="o", ls="none", color="k", markersize=true_masses[mind]*10) for mind in range(num_masses)]
+        true_particles = ax.scatter(true_timeseries[:,0,0], true_timeseries[:,1,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
 
     def update_plot(frame):
         for mind in range(num_masses):
@@ -178,10 +181,11 @@ def make_3d_distribution(root_dir, index, timeseries, masses, true_timeseries, t
             #particles[mind][0].set_3d_properties(z)
             particles[mind]._offsets3d = (x, y, z)
 
-        xt, yt, zt = np.transpose(true_timeseries[:,:,frame], (1,0))
-        #true_particles[mind][0].set_data(xt, yt)
-        #true_particles[mind][0].set_3d_properties(zt)
-        true_particles._offsets3d = (xt, yt, zt)
+        if true_timeseries is not None:
+            xt, yt, zt = np.transpose(true_timeseries[:,:,frame], (1,0))
+            #true_particles[mind][0].set_data(xt, yt)
+            #true_particles[mind][0].set_3d_properties(zt)
+            true_particles._offsets3d = (xt, yt, zt)
 
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
