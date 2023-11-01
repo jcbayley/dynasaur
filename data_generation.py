@@ -181,25 +181,34 @@ def compute_second_mass_moment(masses, coeffs, remove_trace = False, poly_type="
 
     Args:
         masses (np.array): (nmasses) masses of objects
-        coeffs (np.array): (ndimension, ncoeffs) x(t),y(t),z(t) position coefficients as a function of time
+        coeffs (np.array): (nmasses, ndimension, ncoeffs) x(t),y(t),z(t) position coefficients as a function of time
     Returns:
         second_mass_moment: second moment of the mass distribution
     """
     n_masses, n_dimensions, n_coeffs = np.shape(coeffs) 
     #using lists as I do not know the number of coeficcients after multiplying
-    second_mass_moment = []#np.zeros((n_dimensions, n_dimensions, n_coeffs))
+    # find out what the shape will be with a quick test
+    new_coeff_shape = n_coeffs
+    for i in range(n_dimensions):
+        tshape = np.shape(polynomial_dict[poly_type]["multiply"](coeffs[0, 0], coeffs[0, 0]))[-1]
+        if tshape > new_coeff_shape:
+            new_coeff_shape = tshape
+
+    second_mass_moment = np.zeros((n_dimensions, n_dimensions, new_coeff_shape))
 
     for i in range(n_dimensions):
-        second_mass_moment.append([])
+        #second_mass_moment.append([])
         for j in range(n_dimensions):
-            second_mass_moment[i].append([])
+            #second_mass_moment[i].append([])
             for mass_ind in range(len(masses)):
+                second_mass_moment[i,j] += masses[mass_ind]*polynomial_dict[poly_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
+                """
                 temp_moment = masses[mass_ind]*polynomial_dict[poly_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
                 if len(second_mass_moment[i][j]) == 0:
                     second_mass_moment[i][j] = temp_moment
                 else:
                     second_mass_moment[i][j] += temp_moment
-    
+                """
     second_mass_moment = np.array(second_mass_moment)
 
     if remove_trace:
@@ -239,7 +248,6 @@ def compute_projection_tensor(r=1, x=0, y=0, z=1):
     Returns:
         _type_: projection tensor
     """
-    r = 1
     normx = x/r
     normy = y/r
     normz = z/r
@@ -327,7 +335,16 @@ def project_and_remove_trace(projection_tensor, coeffs, poly_type="chebyshev"):
     return np.array(h_TT)
 
 def compute_hTT_coeffs(masses, coeffs, poly_type="chebyshev"):
+    """compute the htt coefficients for polynomial
 
+    Args:
+        masses (_type_): _description_
+        coeffs (_type_): _description_
+        poly_type (str, optional): _description_. Defaults to "chebyshev".
+
+    Returns:
+        _type_: _description_
+    """
     second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, poly_type=poly_type)
     projection_tensor = compute_projection_tensor()
     
@@ -409,14 +426,23 @@ def compute_strain_from_coeffs(times, pols, detector="H1", poly_type="chebyshev"
 
     return strain
 
-def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: int, n_dimensions: int = 1, detectors=["H1"], window=False, return_windowed_coeffs=True, poly_type="chebyshev") -> np.array:
+def generate_data(
+    n_data: int, 
+    chebyshev_order: int, 
+    n_masses:int, 
+    sample_rate: int, 
+    n_dimensions: int = 1, 
+    detectors=["H1"], 
+    window=False, 
+    return_windowed_coeffs=True, 
+    poly_type="chebyshev") -> np.array:
     """_summary_
 
     Args:
-        n_data (int): _description_
-        n_order (int): _description_
-        n_masses (int): 
-        sample_rate (int): _description_
+        n_data (int): number of data samples to generate
+        n_order (int): order of polynomials 
+        n_masses (int): number of masses in system
+        sample_rate (int): sample rate of data
 
     Returns:
         np.array: _description_
@@ -430,7 +456,7 @@ def generate_data(n_data: int, chebyshev_order: int, n_masses:int, sample_rate: 
 
     random_coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
 
-    if window != False:
+    if window != False and window != None:
         coeffs, win_coeffs = perform_window(times, random_coeffs, window, poly_type=poly_type)
     else:
         coeffs = random_coeffs

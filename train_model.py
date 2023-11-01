@@ -7,8 +7,12 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from make_animations import make_2d_animation, make_2d_distribution, make_3d_animation, make_3d_distribution
+#from make_animations import make_2d_animation, make_2d_distribution, make_3d_animation, make_3d_distribution
+import make_animations as animations
+import plotting
 import json
+import argparse
+import copy
 
 def train_epoch(dataloader: torch.utils.data.DataLoader, model: torch.nn.Module, pre_model: torch.nn.Module, optimiser: torch.optim, device:str = "cpu", train:bool = True) -> float:
     """train one epoch for data
@@ -48,9 +52,9 @@ def create_model(conv_layers, linear_layers, n_context):
     """create a convolutional to linear model with n_context outputs
 
     Args:
-        conv_layers (_type_): _description_
-        linear_layers (_type_): _description_
-        n_context (_type_): _description_
+        conv_layers (_type_): convolutional layers [(input_channels, output_channels, filter_size, max_pool_size), (), ...]
+        linear_layers (_type_): fully connected layers [layer1_size, layer2_size, ...]
+        n_context (_type_): number of context inputs to flow (output size of this network)
 
     Returns:
         _type_: _description_
@@ -72,46 +76,74 @@ def create_model(conv_layers, linear_layers, n_context):
 
     return pre_model
 
-def plot_data(times, positions, strain, n_examples, root_dir):
-    """plot some examples of data
+def load_models(config, device):
+    """Load in models from config
 
     Args:
-        times (_type_): _description_
-        labels (_type_): _description_
-        strain (_type_): _description_
-        n_examples (_type_): _description_
-        root_dir (_type_): _description_
+        config (_type_): config dictionary
+        device (_type_): which device to put the models on
+
+    Returns:
+        tuple: pre_model, model
     """
-    savedir = os.path.join(root_dir, "train_data")
-    if not os.path.isdir(savedir):
-        os.makedirs(savedir)
+    times, labels, strain, cshape, positions = generate_data(2, config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
 
-    n_examples = min(n_examples, len(positions))
+    n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    n_context = config["sample_rate"]*2
 
+    pre_model = create_model(config["conv_layers"], config["linear_layers"], n_context).to(device)
 
-    n_dim = np.shape(positions)[2]
-    n_det = np.shape(strain)[1]
-
-    for i in range(n_examples):
-        fig, ax = plt.subplots(nrows=n_dim)
-        for dim in range(n_dim):
-            ax[dim].plot(times, positions[i, :, dim, :].T)
-
-        fig.savefig(os.path.join(savedir, f"output_positions_{i}.png"))
-
+    model = zuko.flows.spline.NSF(n_features, context=n_context, transforms=config["ntransforms"], bins=config["nsplines"], hidden_features=config["hidden_features"]).to(device)
     
-        fig, ax = plt.subplots()
-        for det in range(n_det):
-            ax.plot(times, strain[i, det, :])
+    weights = torch.load(os.path.join(config["root_dir"],"test_model.pt"), map_location=device)
 
-        fig.savefig(os.path.join(savedir, f"output_strain_{i}.png"))
+    pre_model.load_state_dict(weights["pre_model_state_dict"])
+
+    model.load_state_dict(weights["model_state_dict"])
+
+    return pre_model, model
 
 def normalise_data(strain):
+    """normalise the data to the maximum strain in all data
+
+    Args:
+        strain (_type_): strain array
+
+    Returns:
+        _type_: normalised strain
+    """
     max_strain = np.max(strain)
     return strain/max_strain
 
-def train_model(config: dict) -> None:
-    """_summary_
+def run_testing(config:dict) -> None:
+    """ run testing (loads saved model and runs testing scripts)
+
+    Args:
+        config (dict): _description_
+    """
+    pre_model, model = load_models(config, config["device"])
+
+    times, labels, strain, cshape, positions = generate_data(config["n_test_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
+
+    acc_chebyshev_order = cshape
+
+    n_features = acc_chebyshev_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    n_context = config["sample_rate"]*2
+
+    dataset = TensorDataset(torch.Tensor(labels), torch.Tensor(strain))
+    test_loader = DataLoader(dataset, batch_size=1)
+
+
+    if config["n_dimensions"] == 1:
+        test_model_1d(model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
+    elif config["n_dimensions"] == 2:
+        test_model_2d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
+    elif config["n_dimensions"] == 3:
+        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], acc_chebyshev_order, config["n_dimensions"], config["detectors"], config["window"], config["root_dir"], config["device"], config["return_windowed_coeffs"])
+    
+
+def run_training(config: dict, continue_train:bool = False) -> None:
+    """ run the training loop 
 
     Args:
         root_dir (str): _description_
@@ -127,7 +159,7 @@ def train_model(config: dict) -> None:
 
     #strain = normalise_data(strain)
 
-    plot_data(times, positions, strain, 10, config["root_dir"])
+    plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 
     acc_chebyshev_order = cshape
 
@@ -144,35 +176,52 @@ def train_model(config: dict) -> None:
 
     dataset = TensorDataset(torch.Tensor(labels), torch.Tensor(strain))
     train_size = int(0.9*config["n_data"])
-    test_size = 10
-    train_set, val_set, test_set = random_split(dataset, (train_size, config["n_data"] - train_size - test_size, test_size))
+    #test_size = 10
+    train_set, val_set = random_split(dataset, (train_size, config["n_data"] - train_size))
     train_loader = DataLoader(train_set, batch_size=config["batch_size"],shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=config["batch_size"])
-    test_loader = DataLoader(test_set, batch_size=1)
-
-    pre_model = create_model(config["conv_layers"], config["linear_layers"], n_context)
-
-    pre_model.to(config["device"])
+    val_loader = DataLoader(val_set, batch_size=config["batch_size"]).to(config["device"])
     
-    model = zuko.flows.spline.NSF(n_features, context=n_context, transforms=config["ntransforms"], bins=config["nsplines"], hidden_features=config["hidden_features"]).to(config["device"])
-    
+    #test_loader = DataLoader(test_set, batch_size=1)
+
+    if continue_train:
+        pre_model, model = load_models(config, device=config["device"])
+    else:   
+        pre_model = create_model(config["conv_layers"], config["linear_layers"], n_context)
+
+        pre_model.to(config["device"])
+        
+        model = zuko.flows.spline.NSF(n_features, context=n_context, transforms=config["ntransforms"], bins=config["nsplines"], hidden_features=config["hidden_features"]).to(config["device"])
+        
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config["learning_rate"])
 
-    train_losses = []
-    val_losses = []
+    if continue_train:
+        with open(os.path.join(config["root_dir"], "train_losses.txt"), "r") as f:
+            losses = np.loadtxt(f)
+        train_losses = losses[0]
+        val_losses = losses[1]
+        start_epoch = len(train_losses)
+    else:
+        train_losses = []
+        val_losses = []
+        start_epoch = 0
 
     print("Start training")
     for epoch in range(config["n_epochs"]):
+        if continue_train:
+            epoch = epoch + start_epoch
 
         train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config["device"], train=True)
         train_losses.append(train_loss)
 
         with torch.no_grad():
-            val_loss = train_epoch(test_loader, model, pre_model, optimiser, device=config["device"], train=False)
+            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config["device"], train=False)
             val_losses.append(val_loss)
             
         if epoch % 100 == 0:
             print(f"Epoch: {epoch}, Train loss: {train_loss}, Val loss: {val_loss}")
+
+            with open(os.path.join(config["root_dir"], "train_losses.txt"), "w") as f:
+                np.savetxt(f, [train_losses, val_losses])
 
             torch.save({
                 "epoch":epoch,
@@ -190,27 +239,18 @@ def train_model(config: dict) -> None:
     print("Completed Training")
 
 
-    if config["n_dimensions"] == 1:
-        test_model_1d(model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
-    elif config["n_dimensions"] == 2:
-        test_model_2d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
-    elif config["n_dimensions"] == 3:
-        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], acc_chebyshev_order, config["n_dimensions"], config["detectors"], config["window"], config["root_dir"], config["device"], config["return_windowed_coeffs"])
-    
-    print("Completed Testing")
-
 def get_dynamics(coeffmass_samples, times, n_masses, chebyshev_order, n_dimensions, poly_type="chebyshev"):
-    """_summary_
+    """get the dynamics of the system from polynomial cooefficients and masses
 
     Args:
-        coeffmass_samples (_type_): _description_
-        times (_type_): _description_
-        n_masses (_type_): _description_
-        chebyshev_order (_type_): _description_
-        n_dimensions (_type_): _description_
+        coeffmass_samples (_type_): samples of the coefficients and masses
+        times (_type_): times when to evaluate the polynomial
+        n_masses (_type_): how many masses 
+        chebyshev_order (_type_): order of the polynomimal
+        n_dimensions (_type_): how many dimensions 
 
     Returns:
-        _type_: _description_
+        tuple: (coefficients, masses, timeseries)
     """
     #print("msshape", np.shape(coeffmass_samples))
     masses = coeffmass_samples[-n_masses:]
@@ -330,7 +370,9 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
             make_2d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
 
 def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, detectors, window, root_dir, device, return_windowed_coeffs=True, poly_type="chebyshev"):
-    """_summary_
+    """test a 3d model sampling from the flow and producing possible trajectories
+
+        makes animations and plots comparing models
 
     Args:
         model (_type_): _description_
@@ -343,7 +385,7 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
         root_dir (_type_): _description_
         device (_type_): _description_
     """
-    plot_out = os.path.join(root_dir, "testout")
+    plot_out = os.path.join(root_dir, "testout_2")
     if not os.path.isdir(plot_out):
         os.makedirs(plot_out)
 
@@ -352,13 +394,11 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
         for batch, (label, data) in enumerate(dataloader):
             label, data = label.to(device), data.to(device)
             input_data = pre_model(data)
+          
             coeffmass_samples = model(input_data).sample().cpu().numpy()
 
             source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
             recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
-
-            fig, ax = plt.subplots(nrows = 4)
-
         
             # if there is a window and I and not predicting the windowed coefficients
             if not return_windowed_coeffs and window != False:
@@ -385,33 +425,38 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
                 recon_strain.append(compute_strain_from_coeffs(times, recon_strain_coeffs, detector=detector, poly_type=poly_type))
                 source_strain.append(compute_strain_from_coeffs(times, source_strain_coeffs, detector=detector, poly_type=poly_type))
 
-            for i in range(len(detectors)):
-                print(np.shape(times), np.shape(recon_strain))
+            fig = plotting.plot_reconstructions(
+                            times, 
+                            detectors, 
+                            recon_strain, 
+                            source_strain, 
+                            data[0].cpu().numpy(), 
+                            fname = os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
-                ax[i].plot(times, recon_strain[i], label="recon")
-                ax[i].plot(times, source_strain[i], label="source")
-                ax[i].plot(times, data[0][i].cpu().numpy(), label="source data")
-                ax[i].legend()
-                ax[i].set_ylabel(f"{detectors[i]} Strain")
+            plotting.plot_positions(
+                times, 
+                source_tseries, 
+                recon_tseries, 
+                n_dimensions, 
+                n_masses,
+                fname = os.path.join(plot_out, f"positions_{batch}.png"))
 
-            fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
-
-
-            fig, ax = plt.subplots(nrows=n_dimensions)
-            print(np.shape(source_tseries), np.shape(recon_tseries))
-            for i in range(n_dimensions):
-                for j in range(n_masses):
-                    ax[i].plot(times, source_tseries[j, i, :], color="C0")
-                    ax[i].plot(times, recon_tseries[j, i, :], color="C1")
-                    ax[i].set_ylabel(f"Dimension {i} position")
-
-            fig.savefig(os.path.join(plot_out, f"positions_{batch}.png"))
-
-
-            make_3d_animation(plot_out, batch, recon_tseries, recon_masses, source_tseries, source_masses)
+            plotting.plot_z_projection(
+                source_tseries, 
+                recon_tseries, 
+                fname = os.path.join(plot_out,f"z_projection_{batch}.png"))
 
 
-            nsamples = 50
+            animations.make_3d_animation(
+                plot_out, 
+                batch, 
+                recon_tseries, 
+                recon_masses, 
+                source_tseries, 
+                source_masses)
+
+            nsamples = 500
+            n_animate_samples = 50
             multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
 
             #print("multishape", multi_coeffmass_samples.shape)
@@ -421,8 +466,71 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
                 t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
                 m_recon_tseries[i] = t_time
                 m_recon_masses[i] = t_mass
+            
+            if n_masses == 2:
+                print(np.shape(m_recon_masses))
+                neginds = m_recon_masses[:,0] - m_recon_masses[:,1] < 0
 
-            make_3d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
+                new_recon_tseries = copy.copy(m_recon_tseries)
+                new_recon_tseries[neginds, 0] = m_recon_tseries[neginds, 1]
+                new_recon_tseries[neginds, 1] = m_recon_tseries[neginds, 0]
+
+                new_recon_masses = copy.copy(m_recon_masses)
+                new_recon_masses[neginds, 0] = m_recon_masses[neginds, 1]
+                new_recon_masses[neginds, 1] = m_recon_masses[neginds, 0]
+
+                m_recon_masses = new_recon_masses
+                m_recon_tseries = new_recon_tseries
+
+
+                if source_masses[0] - source_masses[1] < 0:
+                    new_source_tseries = copy.copy(source_tseries)
+                    new_source_tseries[0] = source_tseries[1]
+                    new_source_tseries[1] = source_tseries[0]
+
+                    new_source_masses = copy.copy(source_masses)
+                    new_source_masses[0] = source_masses[1]
+                    new_source_masses[1] = source_masses[0]
+
+                    source_masses = new_source_masses
+                    source_tseries = new_source_tseries
+            
+
+            plotting.plot_sample_separations(
+                times, 
+                source_tseries, 
+                m_recon_tseries, 
+                fname=os.path.join(plot_out,f"separations_{batch}.png"))
+
+            plotting.plot_mass_distributions(
+                m_recon_masses,
+                source_masses,
+                fname=os.path.join(plot_out,f"massdistributions_{batch}.png"))
+
+            
+            animations.line_of_sight_animation(
+                m_recon_tseries, 
+                m_recon_masses, 
+                source_tseries, 
+                source_masses, 
+                os.path.join(plot_out,f"2d_massdist_{batch}.gif"))
+
+
+            animations.make_3d_distribution(
+                plot_out, 
+                batch, 
+                m_recon_tseries[:n_animate_samples], 
+                m_recon_masses[:n_animate_samples], 
+                source_tseries, 
+                source_masses)
+
+            animations.make_3d_distribution_zproj(
+                plot_out, 
+                batch, 
+                m_recon_tseries, 
+                m_recon_masses, 
+                source_tseries, 
+                source_masses)
 
 def project_to_line_of_sight(coeffs):
     pass
@@ -431,27 +539,47 @@ def project_to_line_of_sight(coeffs):
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser()
 
-    config = dict(
-        n_data = 500000,
-        batch_size = 512,
-        chebyshev_order = 8,
-        n_masses = 2,
-        n_dimensions = 3,
-        detectors=["H1", "L1", "V1"],
-        conv_layers = [(3, 64, 16, 1),(64, 32, 16, 1), (32, 32, 4, 2), (32, 32, 4, 2)],
-        linear_layers = [256, 256],
-        sample_rate = 128,
-        n_epochs = 2000,
-        window="hann",
-        return_windowed_coeffs=False,
-        learning_rate = 1e-4,
-        device = "cuda:0",
-        nsplines = 7,
-        ntransforms = 7,
-        hidden_features = [256, 256, 256, 256],
-        root_dir = "test_cheb8_3d_3det_hannwindowpost"
-    )
+    parser.add_argument("-c", "--config", type=str, required=False, default="none")
+    parser.add_argument("--train", type=bool, required=False, default=False)
+    parser.add_argument("--test", type=bool, required=False, default=False)
+    parser.add_argument("--continuetrain", type=bool, required=False, default=False)
+    args = parser.parse_args()
 
+    if args.config == "none":
+        config = dict(
+            n_data = 600000,
+            n_test_data = 10,
+            batch_size = 2048,
+            chebyshev_order = 20,
+            n_masses = 1,
+            n_dimensions = 3,
+            detectors=["H1", "L1", "V1"],
+            conv_layers = [(3, 64, 16, 1),(64, 32, 16, 1), (32, 32, 4, 1), (32, 32, 4, 2), (32, 32, 4, 2), ],
+            linear_layers = [512, 256, 256],
+            sample_rate = 128,
+            n_epochs = 2000,
+            window=False,
+            poly_type="chebyshev",
+            return_windowed_coeffs=False,
+            learning_rate = 1e-3,
+            device = "cuda:0",
+            nsplines = 8,
+            ntransforms = 8,
+            hidden_features = [512, 512, 512],
+            root_dir = "test_1mass_cheb16_3d_3det_nowindowpost_morelin_batch2048"
+        )
+    else:
+        with open(os.path.abspath(args.config), "r") as f:
+            config = json.load(f)
 
-    train_model(config)
+    continue_train = args.continuetrain
+    train_model = args.train
+    test_model = args.test
+
+    if train_model:
+        run_training(config, continue_train=continue_train)
+
+    if test_model:
+        run_testing(config)
