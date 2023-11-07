@@ -216,7 +216,8 @@ def compute_second_mass_moment(masses, coeffs, remove_trace = False, poly_type="
 
     return second_mass_moment
 
-def compute_second_derivative_of_mass_moment(coeffs, poly_type="chebyshev"):
+
+def compute_derivative_of_mass_moment(coeffs, order=2, poly_type="chebyshev"):
     """compute the second derivative of the second mass moment tensor
 
     Args:
@@ -232,7 +233,7 @@ def compute_second_derivative_of_mass_moment(coeffs, poly_type="chebyshev"):
         for j in range(n_dimensions):
             Iprime2_coeffs[i][j] = polynomial_dict[poly_type]["derivative"](coeffs[i][j], m=2)
 
-    return Iprime2_coeffs
+    return np.array(Iprime2_coeffs)
 
 def compute_projection_tensor(r=1, x=0, y=0, z=1):
     """compute the projection tensor delta_ij - n_i n_j
@@ -346,12 +347,40 @@ def compute_hTT_coeffs(masses, coeffs, poly_type="chebyshev"):
         _type_: _description_
     """
     second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, poly_type=poly_type)
+    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=2, poly_type=poly_type)
     projection_tensor = compute_projection_tensor()
     
-    hTT = project_and_remove_trace(projection_tensor, second_mass_moment, poly_type=poly_type)
+    hTT = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, poly_type=poly_type)
 
     return hTT
 
+def compute_energy_loss(times, masses, coeffs, poly_type="chebyshev"):
+    """compute the energy as a function of time
+
+    Args:
+        masses (_type_): _description_
+        coeffs (_type_): _description_
+        poly_type (str, optional): _description_. Defaults to "chebyshev".
+
+    Returns:
+        _type_: _description_
+    """
+    second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, poly_type=poly_type)
+    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=3, poly_type=poly_type)
+    projection_tensor = compute_projection_tensor()
+    
+    Ider3 = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, poly_type=poly_type)
+
+    n_dimensions, n_dimensions, n_coeffs = np.shape(Ider3)
+    Ider3_timeseries = np.zeros((n_dimensions, n_dimensions, len(times)))
+    for i in range(n_dimensions):
+        for j in range(n_dimensions):
+            Ider3_timeseries[i,j] = polynomial_dict[poly_type]["val"](times, Ider3[i,j])
+
+  
+    energy = np.sum(Ider3_timeseries**2, axis = (0,1))
+
+    return energy
 
 def generate_masses(n_masses: int) -> np.array:
     """generate masses 

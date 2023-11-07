@@ -1,5 +1,5 @@
 import zuko
-from data_generation import generate_data, generate_strain_coefficients, compute_strain_from_coeffs, window_coeffs, perform_window, compute_hTT_coeffs,polynomial_dict
+from data_generation import generate_data, generate_strain_coefficients, compute_strain_from_coeffs, window_coeffs, perform_window, compute_hTT_coeffs,polynomial_dict, compute_energy_loss
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
@@ -103,7 +103,7 @@ def load_models(config, device):
 
     return pre_model, model
 
-def normalise_data(strain):
+def normalise_data(strain, norm_factor = None):
     """normalise the data to the maximum strain in all data
 
     Args:
@@ -112,8 +112,11 @@ def normalise_data(strain):
     Returns:
         _type_: normalised strain
     """
-    max_strain = np.max(strain)
-    return strain/max_strain
+    if norm_factor is None:
+        norm_factor = np.max(strain)
+    
+    return strain/norm_factor, norm_factor
+
 
 def run_testing(config:dict) -> None:
     """ run testing (loads saved model and runs testing scripts)
@@ -157,7 +160,6 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     times, labels, strain, cshape, positions = generate_data(config["n_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
 
-    #strain = normalise_data(strain)
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 
@@ -179,12 +181,12 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     #test_size = 10
     train_set, val_set = random_split(dataset, (train_size, config["n_data"] - train_size))
     train_loader = DataLoader(train_set, batch_size=config["batch_size"],shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=config["batch_size"]).to(config["device"])
-    
+    val_loader = DataLoader(val_set, batch_size=config["batch_size"])
     #test_loader = DataLoader(test_set, batch_size=1)
 
     if continue_train:
         pre_model, model = load_models(config, device=config["device"])
+        strain, norm_factor = normalise_data(strain, pre_model.norm_factor)
     else:   
         pre_model = create_model(config["conv_layers"], config["linear_layers"], n_context)
 
@@ -192,6 +194,9 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         
         model = zuko.flows.spline.NSF(n_features, context=n_context, transforms=config["ntransforms"], bins=config["nsplines"], hidden_features=config["hidden_features"]).to(config["device"])
         
+        strain, norm_factor = normalise_data(strain, None)
+        pre_model.norm_factor = norm_factor
+
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config["learning_rate"])
 
     if continue_train:
@@ -369,6 +374,70 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
 
             make_2d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
 
+def get_strain_from_samples(
+    times, 
+    recon_masses, 
+    source_masses,
+    recon_coeffs, 
+    source_coeffs, 
+    detectors=["H1"],
+    return_windowed_coeffs=False, 
+    window=False, 
+    poly_type="chebyshev"):
+    """_summary_
+
+    Args:
+        times (_type_): _description_
+        recon_masses (_type_): _description_
+        source_masses (_type_): _description_
+        recon_coeffs (_type_): _description_
+        source_coeffs (_type_): _description_
+        detectors (list, optional): _description_. Defaults to ["H1"].
+        return_windowed_coeffs (bool, optional): _description_. Defaults to False.
+        window (bool, optional): _description_. Defaults to False.
+        poly_type (str, optional): _description_. Defaults to "chebyshev".
+
+    Returns:
+        _type_: _description_
+    """
+    # if there is a window and I and not predicting the windowed coefficients
+    n_masses, n_coeffs, n_dimensions = np.shape(recon_coeffs)
+    if not return_windowed_coeffs and window != False:
+        n_recon_coeffs = []
+        n_source_coeffs = []
+        # for each mass perform the window on the xyz positions (acceleration)
+        for mass in range(n_masses):
+            temp_recon, win_coeffs = perform_window(times, recon_coeffs[mass], window, poly_type=poly_type)
+            n_recon_coeffs.append(temp_recon)
+            if source_coeffs is not None:
+                temp_source, win_coeffs = perform_window(times, source_coeffs[mass], window, poly_type=poly_type)
+                n_source_coeffs.append(temp_source)
+            
+
+        
+        # update the coefficients with the windowed version
+        recon_coeffs = np.array(n_recon_coeffs)
+        if source_coeffs is not None:
+            source_coeffs = np.array(n_source_coeffs)
+
+    recon_strain_coeffs = compute_hTT_coeffs(recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
+    if source_coeffs is not None:
+        source_strain_coeffs = compute_hTT_coeffs(source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
+
+    recon_energy = compute_energy_loss(times, recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
+    source_energy = []
+    if source_coeffs is not None:
+        source_energy = compute_energy_loss(times, source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
+
+    recon_strain = []
+    source_strain = []
+    for detector in detectors:
+        recon_strain.append(compute_strain_from_coeffs(times, recon_strain_coeffs, detector=detector, poly_type=poly_type))
+        if source_coeffs is not None:
+            source_strain.append(compute_strain_from_coeffs(times, source_strain_coeffs, detector=detector, poly_type=poly_type))
+
+    return recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs
+
 def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, detectors, window, root_dir, device, return_windowed_coeffs=True, poly_type="chebyshev"):
     """test a 3d model sampling from the flow and producing possible trajectories
 
@@ -397,9 +466,35 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
           
             coeffmass_samples = model(input_data).sample().cpu().numpy()
 
-            source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
-            recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
+            source_coeffs, source_masses, source_tseries = get_dynamics(
+                label[0].cpu().numpy(), 
+                times, 
+                n_masses, 
+                chebyshev_order, 
+                n_dimensions, 
+                poly_type=poly_type)
+
+            recon_coeffs, recon_masses, recon_tseries = get_dynamics(
+                coeffmass_samples[0], 
+                times, 
+                n_masses, 
+                chebyshev_order, 
+                n_dimensions, 
+                poly_type=poly_type)
         
+            
+            recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs = get_strain_from_samples(
+                times, 
+                recon_masses,
+                source_masses, 
+                recon_coeffs, 
+                source_coeffs, 
+                detectors=detectors,
+                return_windowed_coeffs=return_windowed_coeffs, 
+                window=window, 
+                poly_type=poly_type)
+
+            """
             # if there is a window and I and not predicting the windowed coefficients
             if not return_windowed_coeffs and window != False:
                 n_recon_coeffs = []
@@ -418,19 +513,25 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
             recon_strain_coeffs = compute_hTT_coeffs(recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
             source_strain_coeffs = compute_hTT_coeffs(source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
 
+            recon_energy = compute_energy_loss(times, recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
+            source_energy = compute_energy_loss(times, source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
+
+            print(np.shape(recon_energy), np.shape(source_energy))
 
             recon_strain = []
             source_strain = []
             for detector in detectors:
                 recon_strain.append(compute_strain_from_coeffs(times, recon_strain_coeffs, detector=detector, poly_type=poly_type))
                 source_strain.append(compute_strain_from_coeffs(times, source_strain_coeffs, detector=detector, poly_type=poly_type))
-
+            """
             fig = plotting.plot_reconstructions(
                             times, 
                             detectors, 
                             recon_strain, 
                             source_strain, 
                             data[0].cpu().numpy(), 
+                            source_energy,
+                            recon_energy,
                             fname = os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
             plotting.plot_positions(
@@ -549,26 +650,26 @@ if __name__ == "__main__":
 
     if args.config == "none":
         config = dict(
-            n_data = 600000,
+            n_data = 200000,
             n_test_data = 10,
-            batch_size = 2048,
-            chebyshev_order = 20,
-            n_masses = 1,
+            batch_size = 1024,
+            chebyshev_order = 16,
+            n_masses = 2,
             n_dimensions = 3,
             detectors=["H1", "L1", "V1"],
-            conv_layers = [(3, 64, 16, 1),(64, 32, 16, 1), (32, 32, 4, 1), (32, 32, 4, 2), (32, 32, 4, 2), ],
-            linear_layers = [512, 256, 256],
-            sample_rate = 128,
-            n_epochs = 2000,
-            window=False,
+            conv_layers = [(3, 64, 16, 2), (64, 32, 4, 2), ],
+            linear_layers = [256, 256],
+            sample_rate = 256,
+            n_epochs = 4000,
+            window="hann",
             poly_type="chebyshev",
             return_windowed_coeffs=False,
-            learning_rate = 1e-3,
+            learning_rate = 5e-5,
             device = "cuda:0",
             nsplines = 8,
-            ntransforms = 8,
-            hidden_features = [512, 512, 512],
-            root_dir = "test_1mass_cheb16_3d_3det_nowindowpost_morelin_batch2048"
+            ntransforms = 6,
+            hidden_features = [128,128,128],
+            root_dir = "test_2mass_cheb18_3d_3det_hannwindow_batch1024_lr5e-5_smallnetwork"
         )
     else:
         with open(os.path.abspath(args.config), "r") as f:

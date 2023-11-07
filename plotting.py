@@ -56,6 +56,8 @@ def plot_reconstructions(
     recon_strain, 
     source_strain, 
     source_data, 
+    source_energy,
+    recon_energy,
     fname:str = None):
     """_summary_
 
@@ -70,13 +72,55 @@ def plot_reconstructions(
     Returns:
         _type_: _description_
     """
-    fig, ax = plt.subplots(nrows = 3)
+    fig, ax = plt.subplots(nrows = 4)
     for i in range(len(detectors)):
         ax[i].plot(times, recon_strain[i], label="recon")
         ax[i].plot(times, source_strain[i], label="source")
         ax[i].plot(times, source_data[i], label="source data")
         ax[i].legend()
         ax[i].set_ylabel(f"{detectors[i]} Strain")
+
+
+    ax[3].plot(times, recon_energy)
+    ax[3].plot(times, source_energy)
+
+    if fname is not None:
+        fig.savefig(fname)
+    
+    return fig
+
+def plot_sampled_reconstructions(
+    times, 
+    detectors, 
+    recon_strain, 
+    source_strain, 
+    fname:str = None):
+    """_summary_
+
+    Args:
+        times (_type_): timestamps of samples
+        detectors (_type_): _list of detectors used
+        recon_strain (_type_): reconstructed strain (n_samples, n_detectors, n_timesamples)
+        source_strain (_type_): strain (n_detectors, n_timesamples)
+        save_image (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        _type_: _description_
+    """
+
+    lower, med, upper = np.quantile(recon_strain, [0.1, 0.5, 0.9], axis = 0)
+
+    fig, ax = plt.subplots(nrows = 4)
+    for i in range(len(detectors)):
+        ax[i].fill_between(times, lower[i], upper[i], label="90% confidence", alpha=0.5, color=f"C{i}")
+        ax[i].plot(times, med[i], color=f"C{i}", label="median")
+        ax[i].plot(times, source_strain[i], label="source", color="k")
+        ax[i].legend()
+        ax[i].set_ylabel(f"{detectors[i]} Strain")
+
+
+    #ax[3].plot(times, recon_energy)
+    #ax[3].plot(times, source_energy)
 
     if fname is not None:
         fig.savefig(fname)
