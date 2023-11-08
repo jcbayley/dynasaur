@@ -113,6 +113,10 @@ def window_coeffs(times, coeffs, window_coeffs, poly_type="chebyshev"):
     win_co_z_acc = polynomial_dict[poly_type]["multiply"](co_z_acc, window_coeffs)
 
     # fix bug when object not moving in z axes (repeat 0 for n coeffs)
+    if len(win_co_x_acc) == 1:
+        win_co_x_acc = np.repeat(win_co_x_acc[0], len(win_co_y_acc))
+    if len(win_co_y_acc) == 1:
+        win_co_y_acc = np.repeat(win_co_y_acc[0], len(win_co_z_acc))
     if len(win_co_z_acc) == 1:
         win_co_z_acc = np.repeat(win_co_z_acc[0], len(win_co_y_acc))
     # integrate the windowed acceleration twice to get position back
@@ -123,7 +127,6 @@ def window_coeffs(times, coeffs, window_coeffs, poly_type="chebyshev"):
     win_co_x = chebint2(times, win_co_x_acc)
     win_co_y = chebint2(times, win_co_y_acc)
     win_co_z = chebint2(times, win_co_z_acc)
-
     
     coarr = np.array([win_co_x, win_co_y, win_co_z]).T
     return coarr
@@ -188,12 +191,8 @@ def compute_second_mass_moment(masses, coeffs, remove_trace = False, poly_type="
     n_masses, n_dimensions, n_coeffs = np.shape(coeffs) 
     #using lists as I do not know the number of coeficcients after multiplying
     # find out what the shape will be with a quick test
-    new_coeff_shape = n_coeffs
-    for i in range(n_dimensions):
-        tshape = np.shape(polynomial_dict[poly_type]["multiply"](coeffs[0, 0], coeffs[0, 0]))[-1]
-        if tshape > new_coeff_shape:
-            new_coeff_shape = tshape
 
+    new_coeff_shape = n_coeffs
     second_mass_moment = np.zeros((n_dimensions, n_dimensions, new_coeff_shape))
 
     for i in range(n_dimensions):
@@ -201,7 +200,11 @@ def compute_second_mass_moment(masses, coeffs, remove_trace = False, poly_type="
         for j in range(n_dimensions):
             #second_mass_moment[i].append([])
             for mass_ind in range(len(masses)):
-                second_mass_moment[i,j] += masses[mass_ind]*polynomial_dict[poly_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
+                mult = masses[mass_ind]*polynomial_dict[poly_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
+                if len(mult) > new_coeff_shape:
+                    second_mass_moment.resize((n_dimensions, n_dimensions, len(mult)), refcheck=False)
+    
+                second_mass_moment[i,j] += masses[mass_ind]*mult
                 """
                 temp_moment = masses[mass_ind]*polynomial_dict[poly_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
                 if len(second_mass_moment[i][j]) == 0:
