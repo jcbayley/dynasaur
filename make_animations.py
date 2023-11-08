@@ -165,9 +165,10 @@ def make_3d_distribution(
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
+    print(np.shape(timeseries))
     ax.set_xlim([np.min(timeseries[:,:,0,:]),np.max(timeseries[:,:,0,:])])
     ax.set_ylim([np.min(timeseries[:,:,1,:]),np.max(timeseries[:,:,1,:])])
-    ax.set_ylim([np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])])
+    ax.set_zlim([np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])])
 
 
     # Create particles as lines
