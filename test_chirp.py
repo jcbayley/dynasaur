@@ -44,6 +44,7 @@ def generate_m1m2_pos(times, m1, m2, tc, orientation="xy"):
     r1 = r*sm2
     r2 = r*sm1
     theta = 2*np.pi*f*times
+
     if orientation == "xy":
         m1pos = np.vstack([-r1*np.cos(theta), -r1*np.sin(theta), np.zeros(np.shape(theta))])
         m2pos = np.vstack([r2*np.cos(theta), r2*np.sin(theta), np.zeros(np.shape(theta))])
@@ -55,6 +56,7 @@ def generate_m1m2_pos(times, m1, m2, tc, orientation="xy"):
         m2pos = np.vstack([np.zeros(np.shape(theta)), r2*np.cos(theta), r2*np.sin(theta)])
     else:
         raise Exception(f"No orientation {orientation}")
+
 
     positions = np.array([m1pos,m2pos])
 
@@ -137,6 +139,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=Fa
     """
   
     n_masses, n_dimensions, n_cheby = np.shape(positions)
+
     if not window:
         cheb_dynamics = np.zeros((n_masses, n_dimensions, chebyshev_order))
     else:
@@ -161,6 +164,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=Fa
             cheb_dynamics.append(temp_dyn2.T)
         else:
             cheb_dynamics[mind] = temp_dyn.T
+
 
     cheb_dynamics = np.array(cheb_dynamics)
 
@@ -395,7 +399,8 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_o
 def run_chirp_test(config, mass1=5000, mass2=5000):
 
     
-    plot_out = os.path.join(config["root_dir"], f"test_chirp_m1-{mass1}_m2-{mass2}_t12")
+    plot_out = os.path.join(config["root_dir"], f"test_chirp_m1-{mass1}_m2-{mass2}_edge2")
+
     if not os.path.isdir(plot_out):
         os.makedirs(plot_out)
 
@@ -473,7 +478,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
 
     input_data = pre_model(torch.from_numpy(np.array([data])).to(torch.float32))
 
-    nsamples = 50
+    nsamples = 200
     n_animate_samples = 50
     multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
 

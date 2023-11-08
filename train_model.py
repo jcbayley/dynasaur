@@ -650,26 +650,26 @@ if __name__ == "__main__":
 
     if args.config == "none":
         config = dict(
-            n_data = 200000,
+            n_data = 1000000,
             n_test_data = 10,
             batch_size = 1024,
-            chebyshev_order = 16,
+            chebyshev_order = 20,
             n_masses = 2,
             n_dimensions = 3,
             detectors=["H1", "L1", "V1"],
-            conv_layers = [(3, 64, 16, 2), (64, 32, 4, 2), ],
-            linear_layers = [256, 256],
+            conv_layers = [(3, 64, 16, 1), (64, 64, 16, 2), (64, 64, 16, 2), (64, 32, 4, 1), ],
+            linear_layers = [512, 512, 256],
             sample_rate = 256,
             n_epochs = 4000,
-            window="hann",
+            window=False,
             poly_type="chebyshev",
             return_windowed_coeffs=False,
             learning_rate = 5e-5,
             device = "cuda:0",
             nsplines = 8,
-            ntransforms = 6,
-            hidden_features = [128,128,128],
-            root_dir = "test_2mass_cheb18_3d_3det_hannwindow_batch1024_lr5e-5_smallnetwork"
+            ntransforms = 8,
+            hidden_features = [256,256,256],
+            root_dir = "test_2mass_cheb16_3d_3det_hannwindow_batch1024_lr5e-5_smallnetwork"
         )
     else:
         with open(os.path.abspath(args.config), "r") as f:
