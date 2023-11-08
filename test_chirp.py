@@ -15,7 +15,8 @@ import copy
 
 
 def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_order=10, window=False, poly_type="chebyshev", root_dir="./"):
-
+    """ Get inspiral signal
+    """
     #chebyshev_order = 30
     G = 6.6e-11
     c = 3e8
@@ -35,14 +36,18 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_o
     theta = 2*np.pi*f*times
     m1pos = np.vstack([-r1*np.cos(theta), -r1*np.sin(theta), np.zeros(np.shape(theta))])
     m2pos = np.vstack([r2*np.cos(theta), r2*np.sin(theta), np.zeros(np.shape(theta))])
+    
+    #m1pos = np.vstack([-r1*np.cos(theta), np.zeros(np.shape(theta)), -r1*np.sin(theta)])
+    #m2pos = np.vstack([r2*np.cos(theta), np.zeros(np.shape(theta)), r2*np.sin(theta)])
+
+    #m1pos = np.vstack([np.zeros(np.shape(theta)), -r1*np.cos(theta), -r1*np.sin(theta)])
+    #m2pos = np.vstack([np.zeros(np.shape(theta)), r2*np.cos(theta), r2*np.sin(theta)])
 
     positions = np.array([m1pos,m2pos])
 
-    positions = 3*positions/np.max(positions)
+    positions = positions/np.max(positions)
 
     norm_masses = np.array([m1, m2])/np.sum([m1,m2])
-
-    #window="hann"
 
     chebyorder = chebyshev_order
     if not window:
@@ -68,6 +73,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_o
             cheb_dynamics.append(temp_dyn.T)
         else:
             cheb_dynamics[mind] = temp_dyn.T
+
 
     cheb_dynamics = np.array(cheb_dynamics)
     #coeffs = np.array([data_generation.generate_random_coefficients(chebyorder, 3) for _ in range(2)])
@@ -126,7 +132,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_o
 def run_chirp_test(config, mass1=5000, mass2=5000):
 
     
-    plot_out = os.path.join(config["root_dir"], f"test_chirp_m1-{mass1}_m2-{mass2}")
+    plot_out = os.path.join(config["root_dir"], f"test_chirp_m1-{mass1}_m2-{mass2}_edge2")
     if not os.path.isdir(plot_out):
         os.makedirs(plot_out)
 
@@ -173,7 +179,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
 
     input_data = pre_model(torch.from_numpy(np.array([data])).to(torch.float32))
 
-    nsamples = 50
+    nsamples = 200
     n_animate_samples = 50
     multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
 

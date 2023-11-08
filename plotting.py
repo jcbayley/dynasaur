@@ -181,11 +181,16 @@ def plot_mass_distributions(
 
     n_samples, n_masses = np.shape(recon_masses)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(ncols=n_masses + 1)
 
     for j in range(n_masses):
-        massdiff = recon_masses[:,j] - source_masses[j]
-        ax.hist(massdiff, bins=20, alpha=0.6)
+        ax[j].hist(recon_masses[:,j], bins=20, alpha=0.6)
+        ax[j].axvline(source_masses[j], color="r")
+        ax[j].set_xlabel(f"Mass_{j}")
+
+    ax[-1].hist(np.sum(recon_masses, axis=1), bins=20, alpha=0.6)
+    ax[-1].axvline(np.sum(source_masses), color="r")
+    ax[-1].set_xlabel("Total Mass")
 
     if fname is not None:
         fig.savefig(fname)
