@@ -4,6 +4,7 @@ from zuko.transforms import (
     MonotonicRQSTransform,
     RotationTransform,
     SigmoidTransform,
+    SoftclipTransform
 )
 from zuko.flows import (
     Flow,
@@ -11,6 +12,7 @@ from zuko.flows import (
     MaskedAutoregressiveTransform,
     NeuralAutoregressiveTransform,
     Unconditional,
+    LazyTransform,
 )
 from zuko.distributions import DiagNormal
 import numpy as np
@@ -27,7 +29,6 @@ from data_generation import (
 import torch
 import torch.nn as nn
 import os
-
 
 
 def create_models(config, device):
@@ -72,18 +73,24 @@ def create_models(config, device):
             torch.flipud(torch.arange(n_features)),
         ]
         transforms = [
-            MaskedAutoregressiveTransform(
+            Unconditional(lambda: SoftclipTransform(1.0).inv),
+        ]
+
+        for i in range(config["ntransforms"]):
+            transforms.append(MaskedAutoregressiveTransform(
                 features=n_features,
                 context=n_context,
                 order=torch.randperm(features) if randperm else orders[i % 2],
                 univariate=MonotonicRQSTransform,
                 shapes=[(bins,), (bins,), (bins - 1,)],
                 hidden_features=config["hidden_features"]
+                )
             )
-            for i in range(config["ntransforms"])
-        ]
+        
+        #transforms.append(
+        #    Unconditional(lambda: SoftclipTransform(1.0).inv)
+        #)
 
-        transforms.append(Unconditional(lambda: SigmoidTransform().inv)) 
         
         base = Unconditional(
             DiagNormal,
@@ -132,6 +139,9 @@ def load_models(config, device):
     pre_model.load_state_dict(weights["pre_model_state_dict"])
 
     model.load_state_dict(weights["model_state_dict"])
+
+    if "norm_factor" in weights:
+        pre_model.norm_factor = weights["norm_factor"]
 
     return pre_model, model
 
