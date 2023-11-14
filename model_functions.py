@@ -14,6 +14,19 @@ from zuko.flows import (
 )
 from zuko.distributions import DiagNormal
 import numpy as np
+from data_generation import (
+    generate_data, 
+    generate_strain_coefficients, 
+    compute_strain_from_coeffs, 
+    window_coeffs, 
+    perform_window, 
+    compute_hTT_coeffs,
+    polynomial_dict, 
+    compute_energy_loss
+)
+import torch
+import torch.nn as nn
+import os
 
 
 
@@ -109,7 +122,7 @@ def load_models(config, device):
     n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["sample_rate"]*2
 
-    pre_model, model = create_model(config, device)
+    pre_model, model = create_models(config, device)
 
     pre_model.to(device)
     model.to(device)
