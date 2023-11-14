@@ -18,15 +18,14 @@ import numpy as np
 
 
 def create_models(config, device):
-    """create a convolutional to linear model with n_context outputs
+    """create a convolutional to linear model with n_context outputs and a 
+    flow model taking in n_context parameters and layers defined in config file
 
     Args:
-        conv_layers (_type_): convolutional layers [(input_channels, output_channels, filter_size, max_pool_size), (), ...]
-        linear_layers (_type_): fully connected layers [layer1_size, layer2_size, ...]
-        n_context (_type_): number of context inputs to flow (output size of this network)
-
+        config: config file containing model parameters
+        device: which device to put the model on
     Returns:
-        _type_: _description_
+        tuple of models: (pre_model, model)
     """
 
     times, labels, strain, cshape, positions = generate_data(2, config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
@@ -52,7 +51,7 @@ def create_models(config, device):
 
     # Flow creation
 
-    if config["custom_flow"] == "test":
+    if config["custom_flow"]:
         bins = config["nsplines"]
         randperm = False
         orders = [
@@ -71,7 +70,7 @@ def create_models(config, device):
             for i in range(config["ntransforms"])
         ]
 
-        transforms.append(Unconditional(lambda: SigmoidTransform().inv))  # y = logit(x)
+        transforms.append(Unconditional(lambda: SigmoidTransform().inv)) 
         
         base = Unconditional(
             DiagNormal,
@@ -124,7 +123,13 @@ def load_models(config, device):
     return pre_model, model
 
 
-def get_dynamics(coeffmass_samples, times, n_masses, chebyshev_order, n_dimensions, poly_type="chebyshev"):
+def get_dynamics(
+    coeffmass_samples, 
+    times, 
+    n_masses, 
+    chebyshev_order, 
+    n_dimensions, 
+    poly_type="chebyshev"):
     """get the dynamics of the system from polynomial cooefficients and masses
 
     Args:
