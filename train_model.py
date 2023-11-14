@@ -1,5 +1,35 @@
 import zuko
-from data_generation import generate_data, generate_strain_coefficients, compute_strain_from_coeffs, window_coeffs, perform_window, compute_hTT_coeffs,polynomial_dict, compute_energy_loss
+from zuko.transforms import (
+    AffineTransform,
+    MonotonicRQSTransform,
+    RotationTransform,
+    SigmoidTransform,
+)
+from zuko.flows import (
+    Flow,
+    GeneralCouplingTransform,
+    MaskedAutoregressiveTransform,
+    NeuralAutoregressiveTransform,
+    Unconditional,
+)
+from zuko.distributions import DiagNormal
+from data_generation import (
+    generate_data, 
+    generate_strain_coefficients, 
+    compute_strain_from_coeffs, 
+    window_coeffs, 
+    perform_window, 
+    compute_hTT_coeffs,
+    polynomial_dict, 
+    compute_energy_loss
+)
+from model_functions import (
+    load_model,
+    create_model,
+    get_dynamics,
+    get_strain_from_samples
+)
+
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
@@ -48,60 +78,7 @@ def train_epoch(dataloader: torch.utils.data.DataLoader, model: torch.nn.Module,
 
     return train_loss/len(dataloader)
 
-def create_model(conv_layers, linear_layers, n_context):
-    """create a convolutional to linear model with n_context outputs
 
-    Args:
-        conv_layers (_type_): convolutional layers [(input_channels, output_channels, filter_size, max_pool_size), (), ...]
-        linear_layers (_type_): fully connected layers [layer1_size, layer2_size, ...]
-        n_context (_type_): number of context inputs to flow (output size of this network)
-
-    Returns:
-        _type_: _description_
-    """
-    pre_model = nn.Sequential()
-
-    for lind, layer in enumerate(conv_layers):
-        pre_model.add_module(f"conv_{lind}", nn.Conv1d(layer[0], layer[1], layer[2], padding="same"))
-        pre_model.add_module(f"relu_{lind}", nn.ReLU())
-        if layer[3] > 1:
-            pre_model.add_module(f"maxpool_{lind}", nn.MaxPool1d(layer[3]))
-
-    pre_model.add_module("flatten", nn.Flatten())
-    
-    for lind, layer in enumerate(linear_layers):
-        pre_model.add_module(f"lin_{lind}", nn.LazyLinear(layer))
-
-    pre_model.add_module("output", nn.LazyLinear(n_context))
-
-    return pre_model
-
-def load_models(config, device):
-    """Load in models from config
-
-    Args:
-        config (_type_): config dictionary
-        device (_type_): which device to put the models on
-
-    Returns:
-        tuple: pre_model, model
-    """
-    times, labels, strain, cshape, positions = generate_data(2, config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
-
-    n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["sample_rate"]*2
-
-    pre_model = create_model(config["conv_layers"], config["linear_layers"], n_context).to(device)
-
-    model = zuko.flows.spline.NSF(n_features, context=n_context, transforms=config["ntransforms"], bins=config["nsplines"], hidden_features=config["hidden_features"]).to(device)
-    
-    weights = torch.load(os.path.join(config["root_dir"],"test_model.pt"), map_location=device)
-
-    pre_model.load_state_dict(weights["pre_model_state_dict"])
-
-    model.load_state_dict(weights["model_state_dict"])
-
-    return pre_model, model
 
 def normalise_data(strain, norm_factor = None):
     """normalise the data to the maximum strain in all data
@@ -188,11 +165,10 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         pre_model, model = load_models(config, device=config["device"])
         strain, norm_factor = normalise_data(strain, pre_model.norm_factor)
     else:   
-        pre_model = create_model(config["conv_layers"], config["linear_layers"], n_context)
+        pre_model, model = create_model(config, device=config["device"])
 
         pre_model.to(config["device"])
-        
-        model = zuko.flows.spline.NSF(n_features, context=n_context, transforms=config["ntransforms"], bins=config["nsplines"], hidden_features=config["hidden_features"]).to(config["device"])
+        model.to(config["device"])
         
         strain, norm_factor = normalise_data(strain, None)
         pre_model.norm_factor = norm_factor
@@ -244,29 +220,6 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     print("Completed Training")
 
 
-def get_dynamics(coeffmass_samples, times, n_masses, chebyshev_order, n_dimensions, poly_type="chebyshev"):
-    """get the dynamics of the system from polynomial cooefficients and masses
-
-    Args:
-        coeffmass_samples (_type_): samples of the coefficients and masses
-        times (_type_): times when to evaluate the polynomial
-        n_masses (_type_): how many masses 
-        chebyshev_order (_type_): order of the polynomimal
-        n_dimensions (_type_): how many dimensions 
-
-    Returns:
-        tuple: (coefficients, masses, timeseries)
-    """
-    #print("msshape", np.shape(coeffmass_samples))
-    masses = coeffmass_samples[-n_masses:]
-    coeffs = coeffmass_samples[:-n_masses].reshape(n_masses,chebyshev_order, n_dimensions)
-
-    tseries = np.zeros((n_masses, n_dimensions, len(times)))
-    for mass_index in range(n_masses):
-        for dim_index in range(n_dimensions):
-            tseries[mass_index, dim_index] = polynomial_dict[poly_type]["val"](times, coeffs[mass_index, :, dim_index])
-
-    return coeffs, masses, tseries
 
 def test_model_1d(model, dataloader, times, n_masses, chebyshev_order, n_dimensions, root_dir, device, poly_type="chebyshev"):
 
@@ -374,69 +327,6 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
 
             make_2d_distribution(plot_out, batch, m_recon_tseries, m_recon_masses, source_tseries, source_masses)
 
-def get_strain_from_samples(
-    times, 
-    recon_masses, 
-    source_masses,
-    recon_coeffs, 
-    source_coeffs, 
-    detectors=["H1"],
-    return_windowed_coeffs=False, 
-    window=False, 
-    poly_type="chebyshev"):
-    """_summary_
-
-    Args:
-        times (_type_): _description_
-        recon_masses (_type_): _description_
-        source_masses (_type_): _description_
-        recon_coeffs (_type_): _description_
-        source_coeffs (_type_): _description_
-        detectors (list, optional): _description_. Defaults to ["H1"].
-        return_windowed_coeffs (bool, optional): _description_. Defaults to False.
-        window (bool, optional): _description_. Defaults to False.
-        poly_type (str, optional): _description_. Defaults to "chebyshev".
-
-    Returns:
-        _type_: _description_
-    """
-    # if there is a window and I and not predicting the windowed coefficients
-    n_masses, n_coeffs, n_dimensions = np.shape(recon_coeffs)
-    if not return_windowed_coeffs and window != False:
-        n_recon_coeffs = []
-        n_source_coeffs = []
-        # for each mass perform the window on the xyz positions (acceleration)
-        for mass in range(n_masses):
-            temp_recon, win_coeffs = perform_window(times, recon_coeffs[mass], window, poly_type=poly_type)
-            n_recon_coeffs.append(temp_recon)
-            if source_coeffs is not None:
-                temp_source, win_coeffs = perform_window(times, source_coeffs[mass], window, poly_type=poly_type)
-                n_source_coeffs.append(temp_source)
-            
-
-        
-        # update the coefficients with the windowed version
-        recon_coeffs = np.array(n_recon_coeffs)
-        if source_coeffs is not None:
-            source_coeffs = np.array(n_source_coeffs)
-
-    recon_strain_coeffs = compute_hTT_coeffs(recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
-    if source_coeffs is not None:
-        source_strain_coeffs = compute_hTT_coeffs(source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
-
-    recon_energy = compute_energy_loss(times, recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
-    source_energy = []
-    if source_coeffs is not None:
-        source_energy = compute_energy_loss(times, source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
-
-    recon_strain = []
-    source_strain = []
-    for detector in detectors:
-        recon_strain.append(compute_strain_from_coeffs(times, recon_strain_coeffs, detector=detector, poly_type=poly_type))
-        if source_coeffs is not None:
-            source_strain.append(compute_strain_from_coeffs(times, source_strain_coeffs, detector=detector, poly_type=poly_type))
-
-    return recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs
 
 def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, detectors, window, root_dir, device, return_windowed_coeffs=True, poly_type="chebyshev"):
     """test a 3d model sampling from the flow and producing possible trajectories
@@ -633,11 +523,6 @@ def test_model_3d(model, pre_model, dataloader, times, n_masses, chebyshev_order
                 source_tseries, 
                 source_masses)
 
-def project_to_line_of_sight(coeffs):
-    pass
-
-
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -650,7 +535,7 @@ if __name__ == "__main__":
 
     if args.config == "none":
         config = dict(
-            n_data = 1000000,
+            n_data = 800000,
             n_test_data = 10,
             batch_size = 1024,
             chebyshev_order = 20,
@@ -661,15 +546,16 @@ if __name__ == "__main__":
             linear_layers = [512, 512, 256],
             sample_rate = 256,
             n_epochs = 4000,
-            window=False,
+            window="hann",
             poly_type="chebyshev",
+            custom_flow=False,
             return_windowed_coeffs=False,
             learning_rate = 5e-5,
             device = "cuda:0",
             nsplines = 8,
             ntransforms = 8,
             hidden_features = [256,256,256],
-            root_dir = "test_2mass_cheb16_3d_3det_hannwindow_batch1024_lr5e-5_smallnetwork"
+            root_dir = "test_2mass_cheb16_3d_3det_hannwindow_batch1024_lr5e-5"
         )
     else:
         with open(os.path.abspath(args.config), "r") as f:
@@ -678,6 +564,9 @@ if __name__ == "__main__":
     continue_train = args.continuetrain
     train_model = args.train
     test_model = args.test
+
+    if "custom_flow" not in config.keys():
+        config["custom_flow"] = False
 
     if train_model:
         run_training(config, continue_train=continue_train)
