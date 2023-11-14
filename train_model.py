@@ -24,8 +24,8 @@ from data_generation import (
     compute_energy_loss
 )
 from model_functions import (
-    load_model,
-    create_model,
+    load_models,
+    create_models,
     get_dynamics,
     get_strain_from_samples
 )

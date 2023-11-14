@@ -17,7 +17,7 @@ import numpy as np
 
 
 
-def create_model(config, device):
+def create_models(config, device):
     """create a convolutional to linear model with n_context outputs
 
     Args:
