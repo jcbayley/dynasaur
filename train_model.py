@@ -21,13 +21,15 @@ from data_generation import (
     perform_window, 
     compute_hTT_coeffs,
     polynomial_dict, 
-    compute_energy_loss
+    compute_energy_loss,
+    load_data
 )
 from model_functions import (
     load_models,
     create_models,
     get_dynamics,
-    get_strain_from_samples
+    get_strain_from_samples,
+    normalise_data
 )
 
 from torch.utils.data import TensorDataset, DataLoader, random_split
@@ -80,21 +82,6 @@ def train_epoch(dataloader: torch.utils.data.DataLoader, model: torch.nn.Module,
 
 
 
-def normalise_data(strain, norm_factor = None):
-    """normalise the data to the maximum strain in all data
-
-    Args:
-        strain (_type_): strain array
-
-    Returns:
-        _type_: normalised strain
-    """
-    if norm_factor is None:
-        norm_factor = np.max(strain)
-    
-    return strain/norm_factor, norm_factor
-
-
 def run_testing(config:dict) -> None:
     """ run testing (loads saved model and runs testing scripts)
 
@@ -103,7 +90,15 @@ def run_testing(config:dict) -> None:
     """
     pre_model, model = load_models(config, config["device"])
 
-    times, labels, strain, cshape, positions = generate_data(config["n_test_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
+    times, labels, strain, cshape, positions = generate_data(
+        config["n_test_data"], 
+        config["chebyshev_order"], 
+        config["n_masses"], 
+        config["sample_rate"], 
+        n_dimensions=config["n_dimensions"], 
+        detectors=config["detectors"], 
+        window=config["window"], 
+        return_windowed_coeffs=config["return_windowed_coeffs"])
 
     try:
         strain, norm_factor = normalise_data(strain, pre_model.norm_factor)
@@ -121,11 +116,40 @@ def run_testing(config:dict) -> None:
 
 
     if config["n_dimensions"] == 1:
-        test_model_1d(model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
+        test_model_1d(
+            model, 
+            test_loader, 
+            times, 
+            config["n_masses"], 
+            config["chebyshev_order"], 
+            config["n_dimensions"], 
+            config["root_dir"], 
+            config["device"])
     elif config["n_dimensions"] == 2:
-        test_model_2d(model, pre_model, test_loader, times, config["n_masses"], config["chebyshev_order"], config["n_dimensions"], config["root_dir"], config["device"])
+        test_model_2d(
+            model, 
+            pre_model, 
+            test_loader, 
+            times, 
+            config["n_masses"], 
+            config["chebyshev_order"], 
+            config["n_dimensions"], 
+            config["root_dir"], 
+            config["device"])
     elif config["n_dimensions"] == 3:
-        test_model_3d(model, pre_model, test_loader, times, config["n_masses"], acc_chebyshev_order, config["n_dimensions"], config["detectors"], config["window"], config["root_dir"], config["device"], config["return_windowed_coeffs"])
+        test_model_3d(
+            model, 
+            pre_model, 
+            test_loader, 
+            times, 
+            config["n_masses"], 
+            acc_chebyshev_order, 
+            config["n_dimensions"], 
+            config["detectors"], 
+            config["window"], 
+            config["root_dir"], 
+            config["device"], 
+            config["return_windowed_coeffs"])
     
 
 def run_training(config: dict, continue_train:bool = False) -> None:
@@ -141,10 +165,32 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     with open(os.path.join(config["root_dir"], "config.json"),"w") as f:
         json.dump(config, f)
 
-    times, labels, strain, cshape, positions = generate_data(config["n_data"], config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
+    if config["load_data"]:
+        print("loading data ........")
+        times, labels, strain, cshape, positions = load_data(
+            data_dir = config["data_dir"], 
+            chebyshev_order = config["chebyshev_order"],
+            n_masses = config["n_masses"],
+            sample_rate = config["sample_rate"],
+            n_dimensions = config["n_dimensions"],
+            detectors = config["detectors"],
+            window = config["window"],
+            return_windowed_coeffs = config["return_windowed_coeffs"]
+            )
 
+        config["n_data"] = len(labels)
+    else:
+        print("making data ........")
+        times, labels, strain, cshape, positions = generate_data(
+            config["n_data"], 
+            config["chebyshev_order"], 
+            config["n_masses"], 
+            config["sample_rate"], 
+            n_dimensions=config["n_dimensions"], 
+            detectors=config["detectors"], 
+            window=config["window"], 
+            return_windowed_coeffs=config["return_windowed_coeffs"])
 
-    plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 
     acc_chebyshev_order = cshape
 
@@ -169,6 +215,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         strain, norm_factor = normalise_data(strain, None)
         pre_model.norm_factor = norm_factor
 
+    plotting.plot_data(times, positions, strain, 10, config["root_dir"])
+
     dataset = TensorDataset(torch.Tensor(labels), torch.Tensor(strain))
 
     train_size = int(0.9*config["n_data"])
@@ -182,8 +230,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     if continue_train:
         with open(os.path.join(config["root_dir"], "train_losses.txt"), "r") as f:
             losses = np.loadtxt(f)
-        train_losses = losses[0]
-        val_losses = losses[1]
+        train_losses = list(losses[0])
+        val_losses = list(losses[1])
         start_epoch = len(train_losses)
     else:
         train_losses = []
@@ -428,7 +476,7 @@ def test_model_3d(
                 recon_tseries, 
                 fname = os.path.join(plot_out,f"z_projection_{batch}.png"))
 
-
+            """
             animations.make_3d_animation(
                 plot_out, 
                 batch, 
@@ -436,18 +484,36 @@ def test_model_3d(
                 recon_masses, 
                 source_tseries, 
                 source_masses)
+            """
 
             nsamples = 500
             n_animate_samples = 50
             multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
 
             #print("multishape", multi_coeffmass_samples.shape)
-            m_recon_tseries, m_recon_masses = np.zeros((nsamples, n_masses, n_dimensions, len(times))), np.zeros((nsamples, n_masses))
+            m_recon_masses = np.zeros((nsamples, n_masses))
+            m_recon_tseries = np.zeros((nsamples, n_masses, n_dimensions, len(times)))
+            m_recon_strain = np.zeros((nsamples, len(config["detectors"]), len(times)))
+            #m_recon_energy = np.zeros((nsamples, len(times)))
             for i in range(nsamples):
                 #print(np.shape(multi_coeffmass_samples[i]))
                 t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
                 m_recon_tseries[i] = t_time
                 m_recon_masses[i] = t_mass
+
+                temp_recon_strain, temp_recon_energy, _, _, temp_m_recon_coeffs, _ = get_strain_from_samples(
+                    times, 
+                    t_mass,
+                    None,
+                    t_co, 
+                    None, 
+                    detectors=["H1","L1","V1"],
+                    return_windowed_coeffs=config["return_windowed_coeffs"], 
+                    window=config["window"], 
+                    poly_type=config["poly_type"])
+
+                m_recon_strain[i] = temp_recon_strain
+                #m_recon_energy[i] = temp_recon_energy
             
             if n_masses == 2:
                 print(np.shape(m_recon_masses))
@@ -483,6 +549,14 @@ def test_model_3d(
                 source_tseries, 
                 m_recon_tseries, 
                 fname=os.path.join(plot_out,f"separations_{batch}.png"))
+
+            print("source_Strain", np.shape(source_strain))
+            plotting.plot_sampled_reconstructions(
+                times, 
+                config["detectors"], 
+                m_recon_strain, 
+                source_strain, 
+                fname = os.path.join(plot_out,f"recon_strain_dist_{batch}.png"))
 
             plotting.plot_mass_distributions(
                 m_recon_masses,
@@ -533,11 +607,11 @@ if __name__ == "__main__":
             n_masses = 2,
             n_dimensions = 3,
             detectors=["H1", "L1", "V1"],
-            conv_layers = [(3, 16, 16, 1), (16, 16, 16, 2), (16, 16, 16, 2) ],
+            conv_layers = [(3, 32, 16, 1), (32, 16, 16, 2), (16, 16, 16, 2) ],
             linear_layers = [256, 256, 256],
             sample_rate = 64,
-            n_epochs = 400,
-            window="hann",
+            n_epochs = 4000,
+            window="none",
             poly_type="chebyshev",
             custom_flow=True,
             return_windowed_coeffs=False,
@@ -546,7 +620,7 @@ if __name__ == "__main__":
             nsplines = 8,
             ntransforms = 8,
             hidden_features = [256,256,256],
-            root_dir = "customflow_test_2mass_cheb6_3d_3det_hannwindow_batch1024_lr5e-5"
+            root_dir = "customflow_test_2mass_cheb6_3d_3det_nowindow_batch1024_lr5e-5"
         )
     else:
         with open(os.path.abspath(args.config), "r") as f:
@@ -558,6 +632,10 @@ if __name__ == "__main__":
 
     if "custom_flow" not in config.keys():
         config["custom_flow"] = False
+    if config["window"] == False:
+        config["window"] = "none"
+    if "data_dir" not in config.keys():
+        config["data_dir"] = "./data"
 
     if train_model:
         run_training(config, continue_train=continue_train)

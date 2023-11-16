@@ -4,11 +4,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import os
-from data_generation import generate_data, compute_hTT_coeffs, compute_strain_from_coeffs, perform_window, polynomial_dict, compute_energy_loss
+from data_generation import (
+    generate_data, 
+    compute_hTT_coeffs, 
+    compute_strain_from_coeffs, 
+    perform_window, 
+    polynomial_dict, 
+    compute_energy_loss
+)
 import data_generation
 import make_animations as animations
 import plotting
-from train_model import get_dynamics, create_model, load_models, get_strain_from_samples
+from model_functions import (
+    get_dynamics,
+    create_models,
+    load_models, 
+    get_strain_from_samples,
+    normalise_data
+)
 import zuko
 import argparse
 import copy
@@ -124,7 +137,7 @@ def generate_m1m2_pos_1d(times, m1, m2, tc, orientation="xy"):
 
     return norm_masses, positions
 
-def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=False, poly_type="chebyshev"):
+def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="none", poly_type="chebyshev"):
     """fit the 3d positions with a polynomial
 
     Args:
@@ -140,7 +153,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=Fa
   
     n_masses, n_dimensions, n_cheby = np.shape(positions)
 
-    if not window:
+    if window == "none" or not window:
         cheb_dynamics = np.zeros((n_masses, n_dimensions, chebyshev_order))
     else:
         cheb_dynamics = []
@@ -153,7 +166,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=Fa
                 positions[mind, dimind], 
                 chebyshev_order-1)
 
-        if window:
+        if window != "none":
             temp_dyn2, win_coeffs = perform_window(
                 times, 
                 temp_dyn, 
@@ -194,7 +207,7 @@ def get_waveform(times, norm_masses, cheb_dynamics, detectors, poly_type="chebys
     
     return strain_timeseries, energy
 
-def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, window=False, poly_type="chebyshev", root_dir="./"):
+def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, window="none", poly_type="chebyshev", root_dir="./"):
 
     orientations = ["xy", "yx", "yy", "offz"]
     positions = {}
@@ -270,7 +283,7 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
                 None, 
                 None)
     
-def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window=False, poly_type="chebyshev", root_dir="./"):
+def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="none", poly_type="chebyshev", root_dir="./"):
 
     orientations = ["twomass", "onemass", "othermass"]
     positions = {}
@@ -359,7 +372,7 @@ def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window=Fals
                 None)
     
 
-def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_order=10, window=False, poly_type="chebyshev", root_dir="./"):
+def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_order=10, window="none", poly_type="chebyshev", root_dir="./"):
 
     norm_masses, positions = generate_m1m2_pos(times, m1, m2, tc)
 
@@ -406,13 +419,14 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
 
     poly_type = "chebyshev"
     
-    #pre_model, model = load_models(config, device="cpu")
+    pre_model, model = load_models(config, device="cpu")
     
     times = np.linspace(-1,1,config["sample_rate"])
 
     chebyshev_order = config["chebyshev_order"]
     #m1,m2 = 2000,500
     m1,m2 = mass1, mass2
+    """
     test_different_orientations(
         times, 
         m1, 
@@ -436,6 +450,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         root_dir=plot_out)
     
     sys.exit()
+    """
     dynamics, cheb_dynamics, all_dynamics, data, energy = chirp_positions(
         times, 
         m1, 
@@ -445,7 +460,9 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         chebyshev_order=chebyshev_order, 
         window=config["window"], 
         root_dir=plot_out)
-    
+
+    data, norm_factor = normalise_data(data, pre_model.norm_factor)    
+    print("normfactor", norm_factor)
 
     n_masses = 2
     n_dimensions = 3

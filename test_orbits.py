@@ -136,7 +136,7 @@ def generate_m1m2_pos_1d(times, m1, m2, tc, orientation="xy"):
 
     return norm_masses, positions
 
-def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=False, poly_type="chebyshev"):
+def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="none", poly_type="chebyshev"):
     """fit the 3d positions with a polynomial
 
     Args:
@@ -152,7 +152,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=Fa
   
     n_masses, n_dimensions, n_cheby = np.shape(positions)
 
-    if not window:
+    if not window or window == "none":
         cheb_dynamics = np.zeros((n_masses, n_dimensions, chebyshev_order))
     else:
         cheb_dynamics = []
@@ -165,7 +165,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window=Fa
                 positions[mind, dimind], 
                 chebyshev_order-1)
 
-        if window:
+        if window != "none":
             temp_dyn2, win_coeffs = perform_window(
                 times, 
                 temp_dyn, 
@@ -206,7 +206,7 @@ def get_waveform(times, norm_masses, cheb_dynamics, detectors, poly_type="chebys
     
     return strain_timeseries, energy
 
-def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, window=False, poly_type="chebyshev", root_dir="./"):
+def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, window="none", poly_type="chebyshev", root_dir="./"):
 
     orientations = ["xyz", "x-yz", "-x-yz", "xzy", "offz"]
     #orientations = ["x00", "0y0", "00z",]
@@ -286,7 +286,7 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
                 None, 
                 None)
     
-def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window=False, poly_type="chebyshev", root_dir="./"):
+def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="none", poly_type="chebyshev", root_dir="./"):
 
     orientations = ["twomass", "onemass", "othermass"]
     positions = {}
@@ -376,7 +376,7 @@ def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window=Fals
                 None)
     
 
-def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_order=10, window=False, poly_type="chebyshev", root_dir="./"):
+def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_order=10, window="none", poly_type="chebyshev", root_dir="./"):
 
     norm_masses, positions = generate_m1m2_pos(times, m1, m2, tc)
 

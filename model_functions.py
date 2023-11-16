@@ -42,7 +42,15 @@ def create_models(config, device):
         tuple of models: (pre_model, model)
     """
 
-    times, labels, strain, cshape, positions = generate_data(2, config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
+    times, labels, strain, cshape, positions = generate_data(
+        2, 
+        config["chebyshev_order"], 
+        config["n_masses"], 
+        config["sample_rate"], 
+        n_dimensions=config["n_dimensions"], 
+        detectors=config["detectors"], 
+        window=config["window"], 
+        return_windowed_coeffs=config["return_windowed_coeffs"])
 
     n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["sample_rate"]*2
@@ -73,7 +81,7 @@ def create_models(config, device):
             torch.flipud(torch.arange(n_features)),
         ]
         transforms = [
-            Unconditional(lambda: SoftclipTransform(1.0).inv),
+            Unconditional(lambda: SigmoidTransform().inv),
         ]
 
         for i in range(config["ntransforms"]):
@@ -124,7 +132,15 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, labels, strain, cshape, positions = generate_data(2, config["chebyshev_order"], config["n_masses"], config["sample_rate"], n_dimensions=config["n_dimensions"], detectors=config["detectors"], window=config["window"], return_windowed_coeffs=config["return_windowed_coeffs"])
+    times, labels, strain, cshape, positions = generate_data(
+        2, 
+        config["chebyshev_order"], 
+        config["n_masses"], 
+        config["sample_rate"], 
+        n_dimensions=config["n_dimensions"], 
+        detectors=config["detectors"], 
+        window=config["window"], 
+        return_windowed_coeffs=config["return_windowed_coeffs"])
 
     n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["sample_rate"]*2
@@ -142,6 +158,8 @@ def load_models(config, device):
 
     if "norm_factor" in weights:
         pre_model.norm_factor = weights["norm_factor"]
+    else:
+        pre_model.norm_factor = 1.0
 
     return pre_model, model
 
@@ -184,7 +202,7 @@ def get_strain_from_samples(
     source_coeffs, 
     detectors=["H1"],
     return_windowed_coeffs=False, 
-    window=False, 
+    window="none", 
     poly_type="chebyshev"):
     """_summary_
 
@@ -204,7 +222,7 @@ def get_strain_from_samples(
     """
     # if there is a window and I and not predicting the windowed coefficients
     n_masses, n_coeffs, n_dimensions = np.shape(recon_coeffs)
-    if not return_windowed_coeffs and window != False:
+    if not return_windowed_coeffs and window != "none":
         n_recon_coeffs = []
         n_source_coeffs = []
         # for each mass perform the window on the xyz positions (acceleration)
@@ -239,3 +257,18 @@ def get_strain_from_samples(
             source_strain.append(compute_strain_from_coeffs(times, source_strain_coeffs, detector=detector, poly_type=poly_type))
 
     return recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs
+
+
+def normalise_data(strain, norm_factor = None):
+    """normalise the data to the maximum strain in all data
+
+    Args:
+        strain (_type_): strain array
+
+    Returns:
+        _type_: normalised strain
+    """
+    if norm_factor is None:
+        norm_factor = np.max(strain)
+    
+    return np.array(strain)/norm_factor, norm_factor
