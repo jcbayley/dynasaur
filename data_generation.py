@@ -3,6 +3,10 @@ import lal
 import lalpulsar 
 import matplotlib.pyplot as plt
 import scipy.signal as signal
+import fourier_basis_functions
+import argparse
+import h5py
+import os
 
 polynomial_dict = {
     "chebyshev":{
@@ -14,6 +18,16 @@ polynomial_dict = {
         "integrate": np.polynomial.chebyshev.chebint,
         "fit": np.polynomial.chebyshev.chebfit,
         "val": np.polynomial.chebyshev.chebval,
+    },
+    "fourier":{
+        "multiply": fourier_basis_functions.multiply,
+        "power": fourier_basis_functions.power,
+        "subtract": fourier_basis_functions.subtract,
+        "add": fourier_basis_functions.add,
+        "derivative": fourier_basis_functions.derivative,
+        "integrate": fourier_basis_functions.integrate,
+        "fit": fourier_basis_functions.fit,
+        "val": fourier_basis_functions.val,
     }
 }
 
@@ -139,7 +153,7 @@ def perform_window(times, coeffs, window, order=6, poly_type="chebyshev"):
         coeffs (_type_): _description_
         window (_type_): _description_
     """
-    if window is not None or window != False:
+    if window != "none":
         if window == "tukey":
             win_coeffs = fit_cheby_to_tukey(times, alpha=0.5, order=order, poly_type=poly_type)
         elif window == "hann":
@@ -465,7 +479,7 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 1, 
     detectors=["H1"], 
-    window=False, 
+    window="none", 
     return_windowed_coeffs=True, 
     poly_type="chebyshev") -> np.array:
     """_summary_
@@ -488,7 +502,7 @@ def generate_data(
 
     random_coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
 
-    if window != False and window != None:
+    if window != False and window != None or window != "none":
         coeffs, win_coeffs = perform_window(times, random_coeffs, window, poly_type=poly_type)
     else:
         coeffs = random_coeffs
@@ -514,7 +528,7 @@ def generate_data(
 
             random_coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
             # if windowing applied create coeffs which are windowed else just use the random coeffs
-            if window:
+            if window != "none":
                 coeffs = window_coeffs(times, random_coeffs, win_coeffs, poly_type=poly_type)
             else:
                 coeffs = random_coeffs
@@ -553,66 +567,189 @@ def generate_data(
 
     return times, flattened_coeffs_mass, strain_timeseries, acc_chebyshev_order, positions
 
+
+def get_data_path(
+    chebyshev_order: int = 8,
+    poly_type: str = "chebyshev",
+    n_masses: int = 2,
+    sample_rate: int = 128,
+    n_dimensions: int = 3,
+    detectors: list = ["H1", "L1", "V1"],
+    window: str = "none",
+    return_windowed_coeffs = False
+    ):
+
+    path = f"data_{poly_type}{chebyshev_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
+
+    return path
+
+def save_data(
+    data_dir: str, 
+    data_split: int = 100000,
+    n_examples: int = 10000,
+    chebyshev_order: int = 8,
+    n_masses: int = 2,
+    sample_rate: int = 128,
+    n_dimensions: int = 3,
+    detectors: list = ["H1", "L1", "V1"],
+    window: str = "none",
+    return_windowed_coeffs = False,
+    poly_type: str = "chebyshev"
+    ):
+
+
+    data_path = get_data_path(
+        chebyshev_order = chebyshev_order,
+        poly_type = poly_type,
+        n_masses = n_masses,
+        sample_rate = sample_rate,
+        n_dimensions = n_dimensions,
+        detectors = detectors,
+        window = window,
+        return_windowed_coeffs = False)
+
+    data_dir = os.path.join(data_dir, data_path)
+
+    if not os.path.isdir(data_dir):
+        os.makedirs(data_dir)
+
+    times, labels, strain, cshape, positions = generate_data(
+        2, 
+        chebyshev_order, 
+        n_masses, 
+        sample_rate, 
+        n_dimensions=n_dimensions, 
+        detectors=detectors, 
+        window=window, 
+        return_windowed_coeffs=return_windowed_coeffs,
+        poly_type=poly_type)
+
+
+    if n_examples < data_split:
+        nsplits = 1
+        data_split = n_examples
+    else:
+        nsplits = np.floor(n_examples/data_split).astype(int)
+
+    with h5py.File(os.path.join(data_dir, "metadata.hdf5"), "w") as f:
+        f.create_dataset("times", data=np.array(times))
+        f.create_dataset("poly_order", data=np.array(cshape))
+
+    for split_ind in range(nsplits):
+
+        times, t_labels, t_strain, cshape, t_positions = generate_data(
+            data_split, 
+            chebyshev_order, 
+            n_masses, 
+            sample_rate, 
+            n_dimensions=n_dimensions, 
+            detectors=detectors, 
+            window=window, 
+            return_windowed_coeffs=return_windowed_coeffs)
+
+        #t_label = np.array(labels)[split_ind*data_split : (split_ind + 1)*data_split]
+        #t_positions = np.array(positions)[split_ind*data_split : (split_ind + 1)*data_split]
+        #t_strain = np.array(strain)[split_ind*data_split : (split_ind + 1)*data_split]
+
+        data_size = len(t_strain)
+
+        with h5py.File(os.path.join(data_dir, f"data_{split_ind}_{data_size}.hdf5"), "w") as f:
+            f.create_dataset("labels", data=np.array(t_labels))
+            f.create_dataset("strain", data=np.array(t_strain))
+            f.create_dataset("positions", data=np.array(t_positions))
+
+    
+def load_data(
+    data_dir: str, 
+    chebyshev_order: int = 8,
+    n_masses: int = 2,
+    sample_rate: int = 128,
+    n_dimensions: int = 3,
+    detectors: list = ["H1", "L1", "V1"],
+    window = False,
+    return_windowed_coeffs = False,
+    poly_type = "chebyshev"
+    ):
+
+    data_path = get_data_path(
+        chebyshev_order = chebyshev_order,
+        poly_type = poly_type,
+        n_masses = n_masses,
+        sample_rate = sample_rate,
+        n_dimensions = n_dimensions,
+        detectors = detectors,
+        window = window,
+        return_windowed_coeffs = False)
+
+    data_dir = os.path.join(data_dir, data_path)
+
+    with h5py.File(os.path.join(data_dir, "metadata.hdf5"), "r") as f:
+        times = np.array(f["times"])
+        cshape = np.array(f["poly_order"])
+        poly_type = str(f["poly_type"])
+
+    labels = []
+    strain = []
+    positions = []
+
+    for fname in os.listdir(data_dir):
+        if fname == "metadata.hdf5":
+            with h5py.File(os.path.join(data_dir, fname), "r") as f:
+                times = np.array(f["times"])
+                cshape = np.array(f["poly_order"])
+        else:
+            with h5py.File(os.path.join(data_dir, fname), "r") as f:
+                labels.append(np.array(f["labels"]))
+                strain.append(np.array(f["strain"]))
+                positions.append(np.array(f["positions"]))
+
+
+    return times, np.concatenate(labels, axis=0), np.concatenate(strain, axis=0), cshape, np.concatenate(positions, axis=0)
+
 if __name__ == "__main__":
 
 
-    # TESTING code
-    n_masses = 2
-    chebyshev_order = 8
-    n_dimensions = 3
-    sample_rate = 32
-    times = np.arange(-1,1,2/sample_rate)
-    masses = generate_masses(n_masses)
-    window = "tukey"
+    parser = argparse.ArgumentParser()
 
-    #np.random.seed(123)
+    parser.add_argument("-c", "--config", type=str, required=False, default="none")
+    parser.add_argument("-s", "--datadir", type=str, required=False, default="none")
+    parser.add_argument("-ds", "--datasplit", type=int, required=False, default=100000)
+    parser.add_argument("-ne", "--nexamples", type=int, required=False, default=100000)
+    parser.add_argument("-po", "--polyorder", type=int, required=False, default=6)
+    parser.add_argument("-nm", "--nmasses", type=int, required=False, default=2)
+    parser.add_argument("-sr", "--samplerate", type=int, required=False, default=128)
+    parser.add_argument("-nd", "--ndimensions", type=int, required=False, default=3)
+    parser.add_argument("-ndt", "--ndetectors", type=int, required=False, default=3)
+    parser.add_argument("-w", "--window", type=str, required=False, default="none")
+    parser.add_argument("-rws", "--returnwindowedcoeffs", type=bool, required=False, default=False)
 
-    if window == "tukey":
-        win_coeffs = fit_cheby_to_tukey(times, alpha=0.1, order=30)
-    elif window == "hann":
-        win_coeffs = fit_cheby_to_hann(times, order=6)
+    args = parser.parse_args()
 
-    coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
-    if window:
-        coeffs = window_coeffs(times, coeffs, win_coeffs)
+    dets = ["H1", "L1", "V1"]
 
-    acc_chebyshev_order = np.shape(coeffs)[0]
-    
+    save_data(
+        data_dir = args.datadir, 
+        data_split = args.datasplit,
+        n_examples = args.nexamples,
+        chebyshev_order = args.polyorder,
+        n_masses = args.nmasses,
+        sample_rate = args.samplerate,
+        n_dimensions = args.ndimensions,
+        detectors = dets[:int(args.ndetectors)],
+        window = args.window,
+        return_windowed_coeffs = args.returnwindowedcoeffs
+        )
 
-    all_dynamics = np.zeros(acc_chebyshev_order*n_dimensions)
-    flattened_coeffs_mass = np.zeros((acc_chebyshev_order*n_masses*n_dimensions + n_masses))
-    sep_dynamics = np.zeros((n_masses, acc_chebyshev_order, n_dimensions))
-    flattened_coeffs_mass[-n_masses:] = masses
+    """
+    data = load_data(
+        data_dir = args.savedir, 
+        chebyshev_order = args.polyorder,
+        n_masses = args.nmasses,
+        sample_rate = args.samplerate,
+        n_dimensions = args.ndimensions,
+        detectors = dets[:int(args.ndetectors)],
+        window = args.window,
+        return_windowed_coeffs = args.returnwindowedcoeffs
+        )
+    """
 
-    for mass_index in range(n_masses):
-
-        coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
-        if window:
-            coeffs = window_coeffs(times, coeffs, win_coeffs)
-        flat_coeffs = np.ravel(coeffs)
-
-        sep_dynamics[mass_index] = coeffs
-        flattened_coeffs_mass[acc_chebyshev_order*mass_index*n_dimensions:acc_chebyshev_order*n_dimensions*(mass_index+1)] = flat_coeffs
-        all_dynamics += masses[mass_index]*flat_coeffs
-
-    temp_strain_timeseries = generate_3d_derivative(all_dynamics.reshape(acc_chebyshev_order, n_dimensions), times)
-    
-    alldyn = all_dynamics.reshape(acc_chebyshev_order, n_dimensions)
-
-    fig, ax = plt.subplots(nrows = n_dimensions)
-    for dim in range(n_dimensions):
-        for ms in range(n_masses):
-            dyn = polynomial_dict[poly_type]["val"](times, sep_dynamics[ms,:,dim])
-            ax[dim].plot(times, dyn)
-
-    fig.savefig("test_dyn.png")
-    print(temp_strain_timeseries[0,0] + temp_strain_timeseries[1,1])
-    print(temp_strain_timeseries[0,1] - temp_strain_timeseries[1,0])
-    hplus = temp_strain_timeseries[0,0]
-    hcross = temp_strain_timeseries[0,1]
-    print(temp_strain_timeseries[:,:,0])
-
-    fig, ax = plt.subplots()
-    ax.plot(hplus)
-    fig.savefig("testplot.png")
-    

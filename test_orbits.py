@@ -4,24 +4,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import os
-from data_generation import (
-    generate_data, 
-    compute_hTT_coeffs, 
-    compute_strain_from_coeffs, 
-    perform_window, 
-    polynomial_dict, 
-    compute_energy_loss
-)
+from data_generation import generate_data, compute_hTT_coeffs, compute_strain_from_coeffs, perform_window, polynomial_dict, compute_energy_loss
 import data_generation
 import make_animations as animations
 import plotting
-from model_functions import (
-    get_dynamics,
-    create_models,
-    load_models, 
-    get_strain_from_samples,
-    normalise_data
-)
+from train_model import get_dynamics, create_model, load_models, get_strain_from_samples
 import zuko
 import argparse
 import copy
@@ -100,17 +87,29 @@ def generate_m1m2_pos_1d(times, m1, m2, tc, orientation="xy"):
     z = np.zeros(len(times))
 
 
-    if orientation == "xy":
+    if orientation == "xyz":
         m1pos = np.vstack([x,y,z])
         #m2pos = np.vstack([x,y,z])
-    elif orientation == "yx":
+    elif orientation == "x-yz":
         m1pos = np.vstack([x,-y,z])
         #m2pos = np.vstack([x,y,z])
-    elif orientation == "yy":
+    elif orientation == "-x-yz":
         m1pos = np.vstack([-x,-y,z])
         #m2pos = np.vstack([x,y,z])
-    elif orientation == "yz":
+    elif orientation == "xzy":
         m1pos = np.vstack([x,z,y])
+        #m2pos = np.vstack([x,y,z])
+    elif orientation == "offz":
+        m1pos = np.vstack([x,y,z+0.2])
+        #m2pos = np.vstack([x,y,z])
+    elif orientation == "x00":
+        m1pos = np.vstack([x,z,z])
+        #m2pos = np.vstack([x,y,z])
+    elif orientation == "0y0":
+        m1pos = np.vstack([z,x,z])
+        #m2pos = np.vstack([x,y,z])
+    elif orientation == "00z":
+        m1pos = np.vstack([z,z,x])
         #m2pos = np.vstack([x,y,z])
     elif orientation == "offz":
         m1pos = np.vstack([x,y,z+0.2])
@@ -153,7 +152,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="n
   
     n_masses, n_dimensions, n_cheby = np.shape(positions)
 
-    if window == "none" or not window:
+    if not window or window == "none":
         cheb_dynamics = np.zeros((n_masses, n_dimensions, chebyshev_order))
     else:
         cheb_dynamics = []
@@ -209,7 +208,8 @@ def get_waveform(times, norm_masses, cheb_dynamics, detectors, poly_type="chebys
 
 def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, window="none", poly_type="chebyshev", root_dir="./"):
 
-    orientations = ["xy", "yx", "yy", "offz"]
+    orientations = ["xyz", "x-yz", "-x-yz", "xzy", "offz"]
+    #orientations = ["x00", "0y0", "00z",]
     positions = {}
     strain_timeseries = {}
     energy = {}
@@ -249,12 +249,13 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
             poly_type=poly_type)
 
     fig, ax = plt.subplots(nrows = len(detectors) + 1)
-    
-    for orient in orientations:
+    lss = ["-", "--", "-.", ":", "--"]
+    for oind, orient in enumerate(orientations):
         for detind in range(len(detectors)):
-            ax[detind].plot(strain_timeseries[orient][detind])
+            ax[detind].plot(strain_timeseries[orient][detind], label=f"or: {orient}", ls=lss[oind])
 
-    fig.savefig(os.path.join(root_dir, "orient_strain.png"))
+            ax[detind].legend(loc="upper left")
+    fig.savefig(os.path.join(root_dir, "orient_strain_2.png"))
 
     fig, ax = plt.subplots(nrows = 3, ncols=len(orientations))
     sind = 0
@@ -262,11 +263,12 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
         print(np.shape(dynamics[orient]))
         print(np.shape(positions[orient]))
         for dimind in range(3):
-            ax[dimind, i].plot(dynamics[orient][0][dimind], color=f"C{sind}")
+            ax[dimind, i].plot(dynamics[orient][0][dimind], color=f"C{sind}", label=f"or: {orient}")
             ax[dimind, i].plot(positions[orient][0][dimind], color="k")
+            ax[dimind, i].legend(loc="upper left")
             sind += 1
 
-    fig.savefig(os.path.join(root_dir, "orient_positions.png"))
+    fig.savefig(os.path.join(root_dir, "orient_positions_2.png"))
 
     m_recon_tseries = np.array([
         dynamics[orient] for orient in orientations
@@ -274,6 +276,7 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
     m_recon_masses = np.array([
         norm_masses[orient] for orient in orientations
     ])
+
 
     animations.make_3d_distribution(
                 root_dir, 
@@ -332,11 +335,11 @@ def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="non
 
     fig, ax = plt.subplots(nrows = len(detectors) + 1)
     
-    lss = ["-", "--", "-."]
+    lss = ["-", "--", "-.", ":"]
     for oind,orient in enumerate(orientations):
         for detind in range(len(detectors)):
-            ax[detind].plot(strain_timeseries[orient][detind], ls=lss[oind])
-
+            ax[detind].plot(strain_timeseries[orient][detind], ls=lss[oind], label=f"or: {orient}")
+            ax[detind].legend(loc="upper left")
     smmed = np.sum([strain_timeseries[orient][0] for orient in ["onemass", "othermass"]], axis=0)
     print(np.shape(smmed))
     ax[3].plot(times, smmed)
@@ -350,8 +353,9 @@ def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="non
         print("posshape", np.shape(positions[orient]))
         for dimind in range(3):
             for massind in range(len(positions[orient])):
-                ax[dimind, i].plot(dynamics[orient][massind][dimind], color=f"C{sind}")
+                ax[dimind, i].plot(dynamics[orient][massind][dimind], color=f"C{sind}", label=f"or: {orient}")
                 ax[dimind, i].plot(positions[orient][massind][dimind], color="k")
+                ax[dimind, i].legend(loc="upper left")
                 sind += 1
 
     fig.savefig(os.path.join(root_dir, "orient_positions_1.png"))
@@ -412,21 +416,20 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_o
 def run_chirp_test(config, mass1=5000, mass2=5000):
 
     
-    plot_out = os.path.join(config["root_dir"], f"test_chirp_m1-{mass1}_m2-{mass2}_edge2")
+    plot_out = os.path.join(config["root_dir"], f"orbit_test")
 
     if not os.path.isdir(plot_out):
         os.makedirs(plot_out)
 
     poly_type = "chebyshev"
     
-    pre_model, model = load_models(config, device="cpu")
+    #pre_model, model = load_models(config, device="cpu")
     
     times = np.linspace(-1,1,config["sample_rate"])
 
     chebyshev_order = config["chebyshev_order"]
     #m1,m2 = 2000,500
     m1,m2 = mass1, mass2
-    """
     test_different_orientations(
         times, 
         m1, 
@@ -449,151 +452,6 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         poly_type=config["poly_type"], 
         root_dir=plot_out)
     
-    sys.exit()
-    """
-    dynamics, cheb_dynamics, all_dynamics, data, energy = chirp_positions(
-        times, 
-        m1, 
-        m2, 
-        1.1, 
-        detectors=config["detectors"], 
-        chebyshev_order=chebyshev_order, 
-        window=config["window"], 
-        root_dir=plot_out)
-
-    data, norm_factor = normalise_data(data, pre_model.norm_factor)    
-    print("normfactor", norm_factor)
-
-    n_masses = 2
-    n_dimensions = 3
-   
-    animations.make_3d_animation(plot_out, 100, all_dynamics, 0.01*np.array([m1,m2]), None, None)
-
-    
-    reconstructx = np.polynomial.chebyshev.chebval(times, cheb_dynamics[0][0])
-    reconstructy = np.polynomial.chebyshev.chebval(times, cheb_dynamics[0][1])
-    reconstructz = np.polynomial.chebyshev.chebval(times, cheb_dynamics[0][2])
-
-    fig, ax = plt.subplots(nrows=3)
-    ax[0].plot(dynamics[0,0])
-    ax[0].plot(reconstructx)
-    ax[1].plot(dynamics[0,1])
-    ax[1].plot(reconstructy)
-    ax[2].plot(dynamics[0,2])
-    ax[2].plot(reconstructz)
-    fig.savefig(os.path.join(plot_out, "test_move.png"))
-
-    fig, ax = plt.subplots(nrows=2)
-    fct = 1
-    ax[0].plot(times[fct:-fct], data[0][fct:-fct])
-    ax[1].plot(times, energy)
-    fig.savefig(os.path.join(plot_out,"test_chirp.png"))
-
-    source_tseries = all_dynamics
-    source_masses = np.array([m1,m2])/np.sum([m1, m2])
-    batch = 0
-
-    input_data = pre_model(torch.from_numpy(np.array([data])).to(torch.float32))
-
-    nsamples = 200
-    n_animate_samples = 50
-    multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
-
-    m_recon_tseries, m_recon_masses = np.zeros((nsamples, n_masses, n_dimensions, len(times))), np.zeros((nsamples, n_masses))
-    m_recon_strain = np.zeros((nsamples, 3, len(times)))
-    for i in range(nsamples):
-        #print(np.shape(multi_coeffmass_samples[i]))
-        t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
-        m_recon_tseries[i] = t_time
-        m_recon_masses[i] = t_mass
-
-        recon_strain, recon_energy, source_strain, source_energy, m_recon_coeffs, source_coeffs = get_strain_from_samples(
-            times, 
-            t_mass,
-            None,
-            t_co, 
-            None, 
-            detectors=["H1","L1","V1"],
-            return_windowed_coeffs=config["return_windowed_coeffs"], 
-            window=config["window"], 
-            poly_type=config["poly_type"])
-
-        m_recon_strain[i] = recon_strain
-
-    if n_masses == 2:
-        neginds = m_recon_masses[:,0] - m_recon_masses[:,1] < 0
-
-        new_recon_tseries = copy.copy(m_recon_tseries)
-        new_recon_tseries[neginds, 0] = m_recon_tseries[neginds, 1]
-        new_recon_tseries[neginds, 1] = m_recon_tseries[neginds, 0]
-
-        new_recon_masses = copy.copy(m_recon_masses)
-        new_recon_masses[neginds, 0] = m_recon_masses[neginds, 1]
-        new_recon_masses[neginds, 1] = m_recon_masses[neginds, 0]
-
-        m_recon_masses = new_recon_masses
-        m_recon_tseries = new_recon_tseries
-
-
-        if source_masses[0] - source_masses[1] < 0:
-            new_source_tseries = copy.copy(source_tseries)
-            new_source_tseries[0] = source_tseries[1]
-            new_source_tseries[1] = source_tseries[0]
-
-            new_source_masses = copy.copy(source_masses)
-            new_source_masses[0] = source_masses[1]
-            new_source_masses[1] = source_masses[0]
-
-            source_masses = new_source_masses
-            source_tseries = new_source_tseries
-
-    plotting.plot_sampled_reconstructions(
-                times, 
-                config["detectors"], 
-                m_recon_strain, 
-                data, 
-                fname = os.path.join(plot_out,f"recon_strain_dist_{batch}.png"))
-
-    plotting.plot_sample_separations(
-                times, 
-                source_tseries, 
-                m_recon_tseries, 
-                fname=os.path.join(plot_out,f"separations_{batch}.png"))
-
-
-    plotting.plot_mass_distributions(
-                m_recon_masses,
-                source_masses,
-                fname=os.path.join(plot_out,f"massdistributions_{batch}.png"))
-
-            
-    animations.line_of_sight_animation(
-                m_recon_tseries, 
-                m_recon_masses, 
-                source_tseries, 
-                source_masses, 
-                os.path.join(plot_out,f"2d_massdist_{batch}.gif"))
-
-    print("source", np.shape(source_tseries), np.shape(source_masses))
-
-    animations.make_3d_distribution(
-                plot_out, 
-                batch, 
-                m_recon_tseries[:n_animate_samples], 
-                m_recon_masses[:n_animate_samples], 
-                source_tseries, 
-                source_masses)
-
-    animations.make_3d_distribution_zproj(
-                plot_out, 
-                batch, 
-                m_recon_tseries, 
-                m_recon_masses, 
-                source_tseries, 
-                source_masses)
-
-
-
     
 
 if __name__ == "__main__":
