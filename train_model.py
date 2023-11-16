@@ -163,7 +163,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         os.makedirs(config["root_dir"])
 
     with open(os.path.join(config["root_dir"], "config.json"),"w") as f:
-        json.dump(config, f)
+        configstring = json.dumps(config, indent=4)
+        f.write(configstring)
 
     if config["load_data"]:
         print("loading data ........")
@@ -175,7 +176,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             n_dimensions = config["n_dimensions"],
             detectors = config["detectors"],
             window = config["window"],
-            return_windowed_coeffs = config["return_windowed_coeffs"]
+            return_windowed_coeffs = config["return_windowed_coeffs"],
+            poly_type = config["poly_type"]
             )
 
         config["n_data"] = len(labels)
@@ -189,7 +191,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             n_dimensions=config["n_dimensions"], 
             detectors=config["detectors"], 
             window=config["window"], 
-            return_windowed_coeffs=config["return_windowed_coeffs"])
+            return_windowed_coeffs=config["return_windowed_coeffs"],
+            poly_type = config["poly_type"])
 
 
     acc_chebyshev_order = cshape

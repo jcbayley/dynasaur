@@ -3,6 +3,7 @@ import lal
 import lalpulsar 
 import matplotlib.pyplot as plt
 import scipy.signal as signal
+import fourier_basis_functions
 import argparse
 import h5py
 import os
@@ -17,6 +18,16 @@ polynomial_dict = {
         "integrate": np.polynomial.chebyshev.chebint,
         "fit": np.polynomial.chebyshev.chebfit,
         "val": np.polynomial.chebyshev.chebval,
+    },
+    "fourier":{
+        "multiply": fourier_basis_functions.multiply,
+        "power": fourier_basis_functions.power,
+        "subtract": fourier_basis_functions.subtract,
+        "add": fourier_basis_functions.add,
+        "derivative": fourier_basis_functions.derivative,
+        "integrate": fourier_basis_functions.integrate,
+        "fit": fourier_basis_functions.fit,
+        "val": fourier_basis_functions.val,
     }
 }
 
@@ -559,6 +570,7 @@ def generate_data(
 
 def get_data_path(
     chebyshev_order: int = 8,
+    poly_type: str = "chebyshev",
     n_masses: int = 2,
     sample_rate: int = 128,
     n_dimensions: int = 3,
@@ -567,7 +579,7 @@ def get_data_path(
     return_windowed_coeffs = False
     ):
 
-    path = f"data_poly{chebyshev_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
+    path = f"data_{poly_type}{chebyshev_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
 
     return path
 
@@ -581,12 +593,14 @@ def save_data(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
-    return_windowed_coeffs = False
+    return_windowed_coeffs = False,
+    poly_type: str = "chebyshev"
     ):
 
 
     data_path = get_data_path(
         chebyshev_order = chebyshev_order,
+        poly_type = poly_type,
         n_masses = n_masses,
         sample_rate = sample_rate,
         n_dimensions = n_dimensions,
@@ -607,7 +621,8 @@ def save_data(
         n_dimensions=n_dimensions, 
         detectors=detectors, 
         window=window, 
-        return_windowed_coeffs=return_windowed_coeffs)
+        return_windowed_coeffs=return_windowed_coeffs,
+        poly_type=poly_type)
 
 
     if n_examples < data_split:
@@ -652,11 +667,13 @@ def load_data(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window = False,
-    return_windowed_coeffs = False
+    return_windowed_coeffs = False,
+    poly_type = "chebyshev"
     ):
 
     data_path = get_data_path(
         chebyshev_order = chebyshev_order,
+        poly_type = poly_type,
         n_masses = n_masses,
         sample_rate = sample_rate,
         n_dimensions = n_dimensions,
@@ -669,6 +686,7 @@ def load_data(
     with h5py.File(os.path.join(data_dir, "metadata.hdf5"), "r") as f:
         times = np.array(f["times"])
         cshape = np.array(f["poly_order"])
+        poly_type = str(f["poly_type"])
 
     labels = []
     strain = []
