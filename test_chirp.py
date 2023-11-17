@@ -9,7 +9,7 @@ from data_generation import (
     compute_hTT_coeffs, 
     compute_strain_from_coeffs, 
     perform_window, 
-    polynomial_dict, 
+    basis, 
     compute_energy_loss
 )
 import data_generation
@@ -40,7 +40,7 @@ def generate_m1m2_pos(times, m1, m2, tc, orientation="xy"):
         array: array of the normalised masses
         array: array of the positions of each mass
     """
-    #chebyshev_order = 30
+    #basis_order = 30
     G = 6.6e-11
     c = 3e8
     M_sun = 1.9e30
@@ -92,7 +92,7 @@ def generate_m1m2_pos_1d(times, m1, m2, tc, orientation="xy"):
         array: array of the normalised masses
         array: array of the positions of each mass
     """
-    #chebyshev_order = 30
+    #basis_order = 30
 
     ph_offset = 0
     x = np.sin(2*np.pi*times*1 + ph_offset)
@@ -137,15 +137,15 @@ def generate_m1m2_pos_1d(times, m1, m2, tc, orientation="xy"):
 
     return norm_masses, positions
 
-def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="none", poly_type="chebyshev"):
+def fit_positions_with_polynomial(times, positions, basis_order=8, window="none", basis_type="chebyshev"):
     """fit the 3d positions with a polynomial
 
     Args:
         times (_type_): _description_
         positions (_type_): _description_
-        chebyshev_order (int, optional): _description_. Defaults to 8.
+        basis_order (int, optional): _description_. Defaults to 8.
         window (bool, optional): _description_. Defaults to False.
-        poly_type (str, optional): _description_. Defaults to "chebyshev".
+        basis_type (str, optional): _description_. Defaults to "chebyshev".
 
     Returns:
         _type_: _description_
@@ -154,25 +154,25 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="n
     n_masses, n_dimensions, n_cheby = np.shape(positions)
 
     if window == "none" or not window:
-        cheb_dynamics = np.zeros((n_masses, n_dimensions, chebyshev_order))
+        cheb_dynamics = np.zeros((n_masses, n_dimensions, basis_order))
     else:
         cheb_dynamics = []
 
     for mind in range(n_masses):
-        temp_dyn = np.zeros((chebyshev_order, n_dimensions))
+        temp_dyn = np.zeros((basis_order, n_dimensions))
         for dimind in range(3):
-            temp_dyn[:,dimind] = polynomial_dict[poly_type]["fit"](
+            temp_dyn[:,dimind] = basis[basis_type]["fit"](
                 times, 
                 positions[mind, dimind], 
-                chebyshev_order-1)
+                basis_order-1)
 
         if window != "none":
             temp_dyn2, win_coeffs = perform_window(
                 times, 
                 temp_dyn, 
                 window, 
-                order=chebyshev_order, 
-                poly_type=poly_type)
+                order=basis_order, 
+                basis_type=basis_type)
             print(np.shape(temp_dyn), np.shape(temp_dyn2))
             cheb_dynamics.append(temp_dyn2.T)
         else:
@@ -183,31 +183,31 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="n
 
     return cheb_dynamics
 
-def get_ts_dynamics(times, cheb_dynamics, poly_type="chebyshev"):
+def get_ts_dynamics(times, cheb_dynamics, basis_type="chebyshev"):
 
     n_masses, n_dimensions, n_coeffs = np.shape(cheb_dynamics)
     timeseries_dynamics = np.zeros((n_masses,n_dimensions,len(times)))
     for i in range(n_masses):
         for j in range(n_dimensions):
-            timeseries_dynamics[i,j] = polynomial_dict[poly_type]["val"](times, cheb_dynamics[i,j])
+            timeseries_dynamics[i,j] = basis[basis_type]["val"](times, cheb_dynamics[i,j])
         
     return timeseries_dynamics
 
-def get_waveform(times, norm_masses, cheb_dynamics, detectors, poly_type="chebyshev"):
+def get_waveform(times, norm_masses, cheb_dynamics, detectors, basis_type="chebyshev"):
 
-    strain_coeffs = compute_hTT_coeffs(norm_masses, cheb_dynamics, poly_type=poly_type)
+    strain_coeffs = compute_hTT_coeffs(norm_masses, cheb_dynamics, basis_type=basis_type)
 
-    energy = compute_energy_loss(times, norm_masses, cheb_dynamics, poly_type=poly_type)
+    energy = compute_energy_loss(times, norm_masses, cheb_dynamics, basis_type=basis_type)
 
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):
-        strain = compute_strain_from_coeffs(times, strain_coeffs, detector=detector, poly_type=poly_type)
-        #strain = compute_strain(temp_strain_timeseries, detector, poly_type=poly_type)
+        strain = compute_strain_from_coeffs(times, strain_coeffs, detector=detector, basis_type=basis_type)
+        #strain = compute_strain(temp_strain_timeseries, detector, basis_type=basis_type)
         strain_timeseries[dind] = strain
     
     return strain_timeseries, energy
 
-def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, window="none", poly_type="chebyshev", root_dir="./"):
+def test_different_orientations(times, m1, m2, tc, basis_order, detectors, window="none", basis_type="chebyshev", root_dir="./"):
 
     orientations = ["xy", "yx", "yy", "offz"]
     positions = {}
@@ -230,14 +230,14 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
         cheb_dynamics[orient] = fit_positions_with_polynomial(
             times, 
             positions[orient], 
-            chebyshev_order=chebyshev_order, 
+            basis_order=basis_order, 
             window=window, 
-            poly_type=poly_type)
+            basis_type=basis_type)
         
         dynamics[orient] = get_ts_dynamics(
             times, 
             cheb_dynamics[orient], 
-            poly_type=poly_type)
+            basis_type=basis_type)
         
         print(np.shape(cheb_dynamics[orient]))
 
@@ -246,7 +246,7 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
             norm_masses[orient], 
             cheb_dynamics[orient], 
             detectors, 
-            poly_type=poly_type)
+            basis_type=basis_type)
 
     fig, ax = plt.subplots(nrows = len(detectors) + 1)
     
@@ -283,7 +283,7 @@ def test_different_orientations(times, m1, m2, tc, chebyshev_order, detectors, w
                 None, 
                 None)
     
-def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="none", poly_type="chebyshev", root_dir="./"):
+def test_1and2_masses(times, m1, m2, tc, basis_order, detectors, window="none", basis_type="chebyshev", root_dir="./"):
 
     orientations = ["twomass", "onemass", "othermass"]
     positions = {}
@@ -312,14 +312,14 @@ def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="non
         cheb_dynamics[orient] = fit_positions_with_polynomial(
             times, 
             positions[orient], 
-            chebyshev_order=chebyshev_order, 
+            basis_order=basis_order, 
             window=window, 
-            poly_type=poly_type)
+            basis_type=basis_type)
         
         dynamics[orient] = get_ts_dynamics(
             times, 
             cheb_dynamics[orient], 
-            poly_type=poly_type)
+            basis_type=basis_type)
         
         print(np.shape(cheb_dynamics[orient]))
 
@@ -328,7 +328,7 @@ def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="non
             norm_masses[orient], 
             cheb_dynamics[orient], 
             detectors, 
-            poly_type=poly_type)
+            basis_type=basis_type)
 
     fig, ax = plt.subplots(nrows = len(detectors) + 1)
     
@@ -372,16 +372,16 @@ def test_1and2_masses(times, m1, m2, tc, chebyshev_order, detectors, window="non
                 None)
     
 
-def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_order=10, window="none", poly_type="chebyshev", root_dir="./"):
+def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], basis_order=10, window="none", basis_type="chebyshev", root_dir="./"):
 
     norm_masses, positions = generate_m1m2_pos(times, m1, m2, tc)
 
     cheb_dynamics = fit_positions_with_polynomial(
         times, 
         positions, 
-        chebyshev_order=chebyshev_order, 
+        basis_order=basis_order, 
         window=window, 
-        poly_type=poly_type)
+        basis_type=basis_type)
 
 
     print("masses",norm_masses)
@@ -389,7 +389,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_o
     # change to mass, dim, order
     #cheb_dynamics = np.transpose(coeffs, (0,2,1))
 
-    timeseries_dynamics = get_ts_dynamics(times, cheb_dynamics, poly_type=poly_type)
+    timeseries_dynamics = get_ts_dynamics(times, cheb_dynamics, basis_type=basis_type)
 
     fig, ax = plt.subplots(nrows=3)
     ax[0].plot(times, timeseries_dynamics[0,0])
@@ -398,7 +398,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], chebyshev_o
     fig.savefig(os.path.join(root_dir, "chirp_positions.png"))
 
 
-    strain_timeseries, energy = get_waveform(times, norm_masses, cheb_dynamics, detectors, poly_type="chebyshev")
+    strain_timeseries, energy = get_waveform(times, norm_masses, cheb_dynamics, detectors, basis_type="chebyshev")
 
     fig, ax = plt.subplots(nrows=3)
     ax[0].plot(times, strain_timeseries[0])
@@ -417,13 +417,13 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     if not os.path.isdir(plot_out):
         os.makedirs(plot_out)
 
-    poly_type = "chebyshev"
+    basis_type = "chebyshev"
     
     pre_model, model = load_models(config, device="cpu")
     
     times = np.linspace(-1,1,config["sample_rate"])
 
-    chebyshev_order = config["chebyshev_order"]
+    basis_order = config["basis_order"]
     #m1,m2 = 2000,500
     m1,m2 = mass1, mass2
     """
@@ -432,10 +432,10 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         m1, 
         m2, 
         1.1, 
-        chebyshev_order, 
+        basis_order, 
         config["detectors"], 
         window=config["window"],
-        poly_type=config["poly_type"], 
+        basis_type=config["basis_type"], 
         root_dir=plot_out)
     
     test_1and2_masses(
@@ -443,10 +443,10 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         m1, 
         m2, 
         1.1, 
-        chebyshev_order, 
+        basis_order, 
         config["detectors"], 
         window=config["window"],
-        poly_type=config["poly_type"], 
+        basis_type=config["basis_type"], 
         root_dir=plot_out)
     
     sys.exit()
@@ -457,7 +457,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         m2, 
         1.1, 
         detectors=config["detectors"], 
-        chebyshev_order=chebyshev_order, 
+        basis_order=basis_order, 
         window=config["window"], 
         root_dir=plot_out)
 
@@ -503,7 +503,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     m_recon_strain = np.zeros((nsamples, 3, len(times)))
     for i in range(nsamples):
         #print(np.shape(multi_coeffmass_samples[i]))
-        t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
+        t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, basis_order, n_dimensions, basis_type=basis_type)
         m_recon_tseries[i] = t_time
         m_recon_masses[i] = t_mass
 
@@ -516,7 +516,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
             detectors=["H1","L1","V1"],
             return_windowed_coeffs=config["return_windowed_coeffs"], 
             window=config["window"], 
-            poly_type=config["poly_type"])
+            basis_type=config["basis_type"])
 
         m_recon_strain[i] = recon_strain
 

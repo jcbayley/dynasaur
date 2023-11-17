@@ -7,8 +7,9 @@ import fourier_basis_functions
 import argparse
 import h5py
 import os
+import torch
 
-polynomial_dict = {
+basis = {
     "chebyshev":{
         "multiply": np.polynomial.chebyshev.chebmul,
         "power": np.polynomial.chebyshev.chebpow,
@@ -18,6 +19,7 @@ polynomial_dict = {
         "integrate": np.polynomial.chebyshev.chebint,
         "fit": np.polynomial.chebyshev.chebfit,
         "val": np.polynomial.chebyshev.chebval,
+        "dtype": np.float64
     },
     "fourier":{
         "multiply": fourier_basis_functions.multiply,
@@ -28,10 +30,14 @@ polynomial_dict = {
         "integrate": fourier_basis_functions.integrate,
         "fit": fourier_basis_functions.fit,
         "val": fourier_basis_functions.val,
+        "dtype": complex
     }
 }
 
-def generate_random_coefficients(order: int, n_dimensions: int = 1) -> tuple:
+def generate_random_coefficients(
+    order: int, 
+    n_dimensions: int = 1, 
+    basis_type:str = "chebyshev") -> tuple:
     """_summary_
 
     Args:
@@ -41,14 +47,21 @@ def generate_random_coefficients(order: int, n_dimensions: int = 1) -> tuple:
         tuple: _description_
     """
 
-    coefficients = np.zeros((order,n_dimensions))
-
-    for i in range(order):
-        coefficients[i] = 2 * np.random.rand(n_dimensions) - 1
+    if basis_type == "chebyshev":
+        coefficients = np.zeros((order,n_dimensions))
+        for i in range(order):
+            coefficients[i] = 2 * np.random.rand(n_dimensions) - 1
+    elif basis_type == "fourier":
+        if order % 2 != 0:
+            raise Exception(f"Please specify an order that is divisible by 2 for fourier basis, currently {order}")
+        halforder = int(order/2) + 1
+        coefficients = np.zeros((halforder,n_dimensions), dtype=basis[basis_type]["dtype"])
+        for i in range(halforder):
+            coefficients[i] = np.exp(-0.25*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
 
     return coefficients
 
-def generate_strain_coefficients(coeffs: np.array, poly_type="chebyshev") -> np.array:
+def generate_strain_coefficients(coeffs: np.array, basis_type="chebyshev") -> np.array:
     """
 
     Args:
@@ -58,23 +71,23 @@ def generate_strain_coefficients(coeffs: np.array, poly_type="chebyshev") -> np.
         np.array: _description_
     """
 
-    squares_chebyshev = polynomial_dict[poly_type]["power"](coeffs, 2)
-    diff_chebyshev = polynomial_dict[poly_type]["derivative"](squares_chebyshev, m=2)
+    squares_chebyshev = basis[basis_type]["power"](coeffs, 2)
+    diff_chebyshev = basis[basis_type]["derivative"](squares_chebyshev, m=2)
 
     return diff_chebyshev
 
-def fit_cheby_to_hann(times, order=6, poly_type="chebyshev"):
+def fit_cheby_to_hann(times, order=6, basis_type="chebyshev"):
     hwin = np.hanning(len(times))
-    hann_cheb = polynomial_dict[poly_type]["fit"](times, hwin, order)
+    hann_cheb = basis[basis_type]["fit"](times, hwin, order)
     return hann_cheb
 
-def fit_cheby_to_tukey(times, alpha=0.5, order=6, poly_type="chebyshev"):
+def fit_cheby_to_tukey(times, alpha=0.5, order=6, basis_type="chebyshev"):
     hwin = signal.windows.tukey(len(times), alpha=alpha)
-    tuk_cheb = polynomial_dict[poly_type]["fit"](times, hwin, order)
+    tuk_cheb = basis[basis_type]["fit"](times, hwin, order)
     return tuk_cheb
 
 
-def chebint2(times, coeffs, poly_type="chebyshev", sub_mean=True):
+def chebint2(times, coeffs, basis_type="chebyshev", sub_mean=True):
     """compute the second integral correcting for offsets in the integrated values
 
     Args:
@@ -85,31 +98,31 @@ def chebint2(times, coeffs, poly_type="chebyshev", sub_mean=True):
         _type_: _description_
     """
     if sub_mean:
-        win_co_vel = polynomial_dict[poly_type]["integrate"](coeffs, m=1)
+        win_co_vel = basis[basis_type]["integrate"](coeffs, m=1)
         # compute the values and subtract the mean from the first coefficient
         # this is so that there is not a velocity offset
-        win_vel = polynomial_dict[poly_type]["val"](times, win_co_vel)
+        win_vel = basis[basis_type]["val"](times, win_co_vel)
         win_co_vel[0] -= np.mean(win_vel)
 
         # now find the position
-        win_co_pos = polynomial_dict[poly_type]["integrate"](win_co_vel, m=1)
+        win_co_pos = basis[basis_type]["integrate"](win_co_vel, m=1)
         # compute the values and subtract the mean from the first coefficient
         # this is so that there is not a position offset
-        win_pos = polynomial_dict[poly_type]["val"](times, win_co_pos)
+        win_pos = basis[basis_type]["val"](times, win_co_pos)
         win_co_pos[0] -= np.mean(win_pos)
     else:
-        win_co_pos = polynomial_dict[poly_type]["integrate"](coeffs, m=2)
+        win_co_pos = basis[basis_type]["integrate"](coeffs, m=2)
 
     return win_co_pos
 
-def window_coeffs(times, coeffs, window_coeffs, poly_type="chebyshev"):
+def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev"):
     """window coefficients
 
     Args:
         times (_type_): array time timestamps
         coeffs (_type_): _description_
         window_coeffs (_type_): _description_
-        poly_type (str, optional): _description_. Defaults to "chebyshev".
+        basis_type (str, optional): _description_. Defaults to "chebyshev".
 
     Returns:
         _type_: _description_
@@ -117,14 +130,14 @@ def window_coeffs(times, coeffs, window_coeffs, poly_type="chebyshev"):
     #hann_coeffs = np.array([ 3.47821791e-01,  1.52306260e-16, -4.85560481e-01, -5.11827799e-17, 1.51255010e-01,  2.65316279e-17, -1.48207898e-02])
 
     # find the acceleration components for each dimension
-    co_x_acc = polynomial_dict[poly_type]["derivative"](coeffs[:,0], m=2)
-    co_y_acc = polynomial_dict[poly_type]["derivative"](coeffs[:,1], m=2)
-    co_z_acc = polynomial_dict[poly_type]["derivative"](coeffs[:,2], m=2)
+    co_x_acc = basis[basis_type]["derivative"](coeffs[:,0], m=2)
+    co_y_acc = basis[basis_type]["derivative"](coeffs[:,1], m=2)
+    co_z_acc = basis[basis_type]["derivative"](coeffs[:,2], m=2)
 
     # window each dimension in acceleration according to hann window
-    win_co_x_acc = polynomial_dict[poly_type]["multiply"](co_x_acc, window_coeffs)
-    win_co_y_acc = polynomial_dict[poly_type]["multiply"](co_y_acc, window_coeffs)
-    win_co_z_acc = polynomial_dict[poly_type]["multiply"](co_z_acc, window_coeffs)
+    win_co_x_acc = basis[basis_type]["multiply"](co_x_acc, window_coeffs)
+    win_co_y_acc = basis[basis_type]["multiply"](co_y_acc, window_coeffs)
+    win_co_z_acc = basis[basis_type]["multiply"](co_z_acc, window_coeffs)
 
     # fix bug when object not moving in z axes (repeat 0 for n coeffs)
     if len(win_co_x_acc) == 1:
@@ -134,9 +147,9 @@ def window_coeffs(times, coeffs, window_coeffs, poly_type="chebyshev"):
     if len(win_co_z_acc) == 1:
         win_co_z_acc = np.repeat(win_co_z_acc[0], len(win_co_y_acc))
     # integrate the windowed acceleration twice to get position back
-    #win_co_x = polynomial_dict[poly_type]["integrate"](win_co_x_acc, m=2)
-    #win_co_y = polynomial_dict[poly_type]["integrate"](win_co_y_acc, m=2)
-    #win_co_z = polynomial_dict[poly_type]["integrate"](win_co_z_acc, m=2)
+    #win_co_x = basis[basis_type]["integrate"](win_co_x_acc, m=2)
+    #win_co_y = basis[basis_type]["integrate"](win_co_y_acc, m=2)
+    #win_co_z = basis[basis_type]["integrate"](win_co_z_acc, m=2)
 
     win_co_x = chebint2(times, win_co_x_acc)
     win_co_y = chebint2(times, win_co_y_acc)
@@ -145,7 +158,7 @@ def window_coeffs(times, coeffs, window_coeffs, poly_type="chebyshev"):
     coarr = np.array([win_co_x, win_co_y, win_co_z]).T
     return coarr
 
-def perform_window(times, coeffs, window, order=6, poly_type="chebyshev"):
+def perform_window(times, coeffs, window, order=6, basis_type="chebyshev"):
     """_summary_
 
     Args:
@@ -155,9 +168,9 @@ def perform_window(times, coeffs, window, order=6, poly_type="chebyshev"):
     """
     if window != "none":
         if window == "tukey":
-            win_coeffs = fit_cheby_to_tukey(times, alpha=0.5, order=order, poly_type=poly_type)
+            win_coeffs = fit_cheby_to_tukey(times, alpha=0.5, order=order, basis_type=basis_type)
         elif window == "hann":
-            win_coeffs = fit_cheby_to_hann(times, order=order, poly_type=poly_type)
+            win_coeffs = fit_cheby_to_hann(times, order=order, basis_type=basis_type)
         else:
             raise Exception(f"Window {window} does not Exist")
 
@@ -168,7 +181,7 @@ def perform_window(times, coeffs, window, order=6, poly_type="chebyshev"):
 
     return coeffs, win_coeffs
 
-def subtract_trace(coeffs, poly_type="chebyshev"):
+def subtract_trace(coeffs, basis_type="chebyshev"):
     """subtract the trace from a 3d tensor
 
     Args:
@@ -179,19 +192,23 @@ def subtract_trace(coeffs, poly_type="chebyshev"):
     """
     # sum diagonal to compute trace
     n_dimensions, n_dimensions, n_coeffs = np.shape(coeffs)
-    trace = polynomial_dict[poly_type]["add"](
-        polynomial_dict[poly_type]["add"](
+    trace = basis[basis_type]["add"](
+        basis[basis_type]["add"](
             coeffs[0,0], 
             coeffs[1,1]), 
         coeffs[2,2])
     # divide by three the subtract from diagonals
-    factor = polynomial_dict[poly_type]["multiply"](trace, 1./3)
+    factor = basis[basis_type]["multiply"](trace, 1./3)
     for i in range(n_dimensions):
-        coeffs[i,i] = polynomial_dict[poly_type]["subtract"](coeffs[i,i], factor)
+        coeffs[i,i] = basis[basis_type]["subtract"](coeffs[i,i], factor)
 
     return coeffs
 
-def compute_second_mass_moment(masses, coeffs, remove_trace = False, poly_type="chebyshev"):
+def compute_second_mass_moment(
+    masses, 
+    coeffs, 
+    remove_trace = False, 
+    basis_type="chebyshev"):
     """Performs integral over density in x+i,x_j
 
        As we are using point masses, this is just a sum over the 
@@ -207,20 +224,21 @@ def compute_second_mass_moment(masses, coeffs, remove_trace = False, poly_type="
     # find out what the shape will be with a quick test
 
     new_coeff_shape = n_coeffs
-    second_mass_moment = np.zeros((n_dimensions, n_dimensions, new_coeff_shape))
+    
+    second_mass_moment = np.zeros((n_dimensions, n_dimensions, new_coeff_shape), dtype=basis[basis_type]["dtype"])
 
     for i in range(n_dimensions):
         #second_mass_moment.append([])
         for j in range(n_dimensions):
             #second_mass_moment[i].append([])
             for mass_ind in range(len(masses)):
-                mult = masses[mass_ind]*polynomial_dict[poly_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
+                mult = masses[mass_ind]*basis[basis_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
                 if len(mult) > new_coeff_shape:
                     second_mass_moment.resize((n_dimensions, n_dimensions, len(mult)), refcheck=False)
     
-                second_mass_moment[i,j] += masses[mass_ind]*mult
+                second_mass_moment[i,j] += basis[basis_type]["multiply"](mult, masses[mass_ind])
                 """
-                temp_moment = masses[mass_ind]*polynomial_dict[poly_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
+                temp_moment = masses[mass_ind]*basis[basis_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
                 if len(second_mass_moment[i][j]) == 0:
                     second_mass_moment[i][j] = temp_moment
                 else:
@@ -229,12 +247,12 @@ def compute_second_mass_moment(masses, coeffs, remove_trace = False, poly_type="
     second_mass_moment = np.array(second_mass_moment)
 
     if remove_trace:
-        second_mass_moment = subtract_trace(second_mass_moment, poly_type=poly_type)
+        second_mass_moment = subtract_trace(second_mass_moment, basis_type=basis_type)
 
     return second_mass_moment
 
 
-def compute_derivative_of_mass_moment(coeffs, order=2, poly_type="chebyshev"):
+def compute_derivative_of_mass_moment(coeffs, order=2, basis_type="chebyshev"):
     """compute the second derivative of the second mass moment tensor
 
     Args:
@@ -248,7 +266,7 @@ def compute_derivative_of_mass_moment(coeffs, order=2, poly_type="chebyshev"):
 
     for i in range(n_dimensions):
         for j in range(n_dimensions):
-            Iprime2_coeffs[i][j] = polynomial_dict[poly_type]["derivative"](coeffs[i][j], m=2)
+            Iprime2_coeffs[i][j] = basis[basis_type]["derivative"](coeffs[i][j], m=2)
 
     return np.array(Iprime2_coeffs)
 
@@ -278,7 +296,7 @@ def compute_projection_tensor(r=1, x=0, y=0, z=1):
     ])
     return P
 
-def project_and_remove_trace(projection_tensor, coeffs, poly_type="chebyshev"):
+def project_and_remove_trace(projection_tensor, coeffs, basis_type="chebyshev"):
     """project the tensor into the Transverse and subtract trace
       this is a slow way to do it !! speed it up!!
     Args:
@@ -287,7 +305,7 @@ def project_and_remove_trace(projection_tensor, coeffs, poly_type="chebyshev"):
     """
 
     n_dimensions, n_dimensions, n_coeffs = np.shape(coeffs)
-    Iprime2 = subtract_trace(coeffs, poly_type=poly_type)
+    Iprime2 = subtract_trace(coeffs, basis_type=basis_type)
 
     # compute the TT gauge strain tensor as projection tensor
     # see https://arxiv.org/pdf/gr-qc/0501041.pdf
@@ -296,31 +314,31 @@ def project_and_remove_trace(projection_tensor, coeffs, poly_type="chebyshev"):
 
     # pre estimate the max num of coefficients
 
-    temp_mult = polynomial_dict[poly_type]["multiply"](
-        polynomial_dict[poly_type]["multiply"](
+    temp_mult = basis[basis_type]["multiply"](
+        basis[basis_type]["multiply"](
             Iprime2[0,0], 
             projection_tensor[0,0]),
         projection_tensor[0,0])
 
-    h_TT = np.zeros((n_dimensions, n_dimensions, len(temp_mult)))
+    h_TT = np.zeros((n_dimensions, n_dimensions, len(temp_mult)), dtype=basis[basis_type]["dtype"])
 
     for i in range(3):
         #h_TT.append([])
         for j in range(3):
             #h_TT[i].append([])
-            fact1 = np.zeros(len(temp_mult))
-            fact2 = np.zeros(len(temp_mult))
+            fact1 = np.zeros(len(temp_mult), dtype=basis[basis_type]["dtype"])
+            fact2 = np.zeros(len(temp_mult), dtype=basis[basis_type]["dtype"])
             for k in range(3):
                 for l in range(3):
 
-                    t_fact1 = polynomial_dict[poly_type]["multiply"](
-                        polynomial_dict[poly_type]["multiply"](
+                    t_fact1 = basis[basis_type]["multiply"](
+                        basis[basis_type]["multiply"](
                             Iprime2[k,l], 
                             projection_tensor[k,l]),
                         projection_tensor[i,j])
 
-                    t_fact2 = polynomial_dict[poly_type]["multiply"](
-                        polynomial_dict[poly_type]["multiply"](
+                    t_fact2 = basis[basis_type]["multiply"](
+                        basis[basis_type]["multiply"](
                             Iprime2[k,l], 
                             projection_tensor[i,k]),
                         projection_tensor[j,l])
@@ -352,47 +370,46 @@ def project_and_remove_trace(projection_tensor, coeffs, poly_type="chebyshev"):
             """
     return np.array(h_TT)
 
-def compute_hTT_coeffs(masses, coeffs, poly_type="chebyshev"):
+def compute_hTT_coeffs(masses, coeffs, basis_type="chebyshev"):
     """compute the htt coefficients for polynomial
 
     Args:
         masses (_type_): _description_
         coeffs (_type_): _description_
-        poly_type (str, optional): _description_. Defaults to "chebyshev".
+        basis_type (str, optional): _description_. Defaults to "chebyshev".
 
     Returns:
         _type_: _description_
     """
-    second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, poly_type=poly_type)
-    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=2, poly_type=poly_type)
+    second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, basis_type=basis_type)
+    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=2, basis_type=basis_type)
     projection_tensor = compute_projection_tensor()
-    
-    hTT = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, poly_type=poly_type)
+    hTT = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, basis_type=basis_type)
 
     return hTT
 
-def compute_energy_loss(times, masses, coeffs, poly_type="chebyshev"):
+def compute_energy_loss(times, masses, coeffs, basis_type="chebyshev"):
     """compute the energy as a function of time
 
     Args:
         masses (_type_): _description_
         coeffs (_type_): _description_
-        poly_type (str, optional): _description_. Defaults to "chebyshev".
+        basis_type (str, optional): _description_. Defaults to "chebyshev".
 
     Returns:
         _type_: _description_
     """
-    second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, poly_type=poly_type)
-    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=3, poly_type=poly_type)
+    second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, basis_type=basis_type)
+    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=3, basis_type=basis_type)
     projection_tensor = compute_projection_tensor()
     
-    Ider3 = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, poly_type=poly_type)
+    Ider3 = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, basis_type=basis_type)
 
     n_dimensions, n_dimensions, n_coeffs = np.shape(Ider3)
     Ider3_timeseries = np.zeros((n_dimensions, n_dimensions, len(times)))
     for i in range(n_dimensions):
         for j in range(n_dimensions):
-            Ider3_timeseries[i,j] = polynomial_dict[poly_type]["val"](times, Ider3[i,j])
+            Ider3_timeseries[i,j] = basis[basis_type]["val"](times, Ider3[i,j])
 
   
     energy = np.sum(Ider3_timeseries**2, axis = (0,1))
@@ -450,7 +467,7 @@ def compute_strain(pols, detector="H1"):
     strain = aplus*hplus + across*hcross
     return strain
 
-def compute_strain_from_coeffs(times, pols, detector="H1", poly_type="chebyshev"):
+def compute_strain_from_coeffs(times, pols, detector="H1", basis_type="chebyshev"):
     """convert a set of coefficienct of hTT to a timeseries, theen compute the strain from hplus and hcross
 
 
@@ -466,7 +483,7 @@ def compute_strain_from_coeffs(times, pols, detector="H1", poly_type="chebyshev"
     hTT_timeseries = np.zeros((n_dimensions, n_dimensions, len(times)))
     for i in range(n_dimensions):
         for j in range(n_dimensions):
-            hTT_timeseries[i,j] = polynomial_dict[poly_type]["val"](times, pols[i,j])
+            hTT_timeseries[i,j] = basis[basis_type]["val"](times, pols[i,j])
 
     strain = compute_strain(hTT_timeseries, detector=detector)
 
@@ -474,14 +491,14 @@ def compute_strain_from_coeffs(times, pols, detector="H1", poly_type="chebyshev"
 
 def generate_data(
     n_data: int, 
-    chebyshev_order: int, 
+    basis_order: int, 
     n_masses:int, 
     sample_rate: int, 
     n_dimensions: int = 1, 
     detectors=["H1"], 
     window="none", 
     return_windowed_coeffs=True, 
-    poly_type="chebyshev") -> np.array:
+    basis_type="chebyshev") -> np.array:
     """_summary_
 
     Args:
@@ -494,42 +511,60 @@ def generate_data(
         np.array: _description_
     """
 
+    if basis_type == "fourier":
+        dtype = complex
+    else:
+        dtype = np.float64
+
     ntimeseries = [0, 1, 3, 6, 10]
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
 
     times = np.arange(-1,1,2/sample_rate)
 
-    random_coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
+    random_coeffs = generate_random_coefficients(
+        basis_order, 
+        n_dimensions,
+        basis_type=basis_type)
 
     if window != False and window != None or window != "none":
-        coeffs, win_coeffs = perform_window(times, random_coeffs, window, poly_type=poly_type)
+        coeffs, win_coeffs = perform_window(times, random_coeffs, window, basis_type=basis_type)
     else:
         coeffs = random_coeffs
 
 
     if return_windowed_coeffs:  
-        win_chebyshev_order = np.shape(coeffs)[0]
-        acc_chebyshev_order = np.shape(coeffs)[0]
+        win_basis_order = np.shape(coeffs)[0]
+        acc_basis_order = np.shape(coeffs)[0]
     else:
-        win_chebyshev_order = np.shape(coeffs)[0]
-        acc_chebyshev_order = chebyshev_order
-    
-    flattened_coeffs_mass = np.zeros((n_data, acc_chebyshev_order*n_masses*n_dimensions + n_masses))
+        win_basis_order = np.shape(coeffs)[0]
+        acc_basis_order = basis_order
+
+        if basis_type == "fourier":
+            # plus 2 as plus 1 in the real and imaginary in coeff gen
+            # this is so can get back to order is 1/2 n_samples
+            acc_basis_order += 2
+
+    output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses), dtype=dtype)
     positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
+    all_dynamics = np.zeros((n_data, n_masses, n_dimensions, win_basis_order), dtype=dtype)
 
     for data_index in range(n_data):
 
         masses = generate_masses(n_masses)
 
-        all_dynamics = np.zeros((n_masses, n_dimensions, win_chebyshev_order))
-        flattened_coeffs_mass[data_index, -n_masses:] = masses
+        #all_dynamics = np.zeros((n_masses, n_dimensions, win_basis_order), dtype=dtype)
+        output_coeffs_mass[data_index, -n_masses:] = masses
         for mass_index in range(n_masses):
 
-            random_coeffs = generate_random_coefficients(chebyshev_order, n_dimensions)
+            random_coeffs = generate_random_coefficients(
+                basis_order, 
+                n_dimensions,
+                basis_type = basis_type)
+
             # if windowing applied create coeffs which are windowed else just use the random coeffs
             if window != "none":
-                coeffs = window_coeffs(times, random_coeffs, win_coeffs, poly_type=poly_type)
+                coeffs = window_coeffs(times, random_coeffs, win_coeffs, basis_type=basis_type)
             else:
                 coeffs = random_coeffs
 
@@ -542,35 +577,40 @@ def generate_data(
             flat_coeffs = np.ravel(coeffs)
 
             if return_windowed_coeffs:
-                flattened_coeffs_mass[data_index, acc_chebyshev_order*mass_index*n_dimensions:acc_chebyshev_order*n_dimensions*(mass_index+1)] = flat_coeffs
-                all_dynamics[mass_index] = coeffs.T
+                if basis_type == "fourier":
+                    flat_coeffs = torch.view_as_real(torch.from_numpy(flat_coeffs)).flatten()
+                output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = flat_coeffs
+                all_dynamics[data_index, mass_index] = coeffs.T
             else:
-                flattened_coeffs_mass[data_index, acc_chebyshev_order*mass_index*n_dimensions:acc_chebyshev_order*n_dimensions*(mass_index+1)] = random_flat_coeffs
-                all_dynamics[mass_index] = coeffs.T
+                if basis_type == "fourier":
+                    random_flat_coeffs = torch.view_as_real(torch.from_numpy(random_flat_coeffs)).flatten()
+                output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = random_flat_coeffs
+                all_dynamics[data_index, mass_index] = coeffs.T
 
-            positions[data_index, mass_index] = polynomial_dict[poly_type]["val"](times, coeffs)
+            positions[data_index, mass_index] = basis[basis_type]["val"](times, coeffs)
 
         if n_dimensions == 1:
-            strain_coeffs = generate_strain_coefficients(all_dynamics)
-            strain_timeseries[data_index] = polynomial_dict[poly_type]["val"](times, strain_coeffs)
+            strain_coeffs = generate_strain_coefficients(all_dynamics[data_index])
+            strain_timeseries[data_index] = basis[basis_type]["val"](times, strain_coeffs)
         elif n_dimensions == 2:
-            temp_strain_timeseries = generate_2d_derivative(all_dynamics.reshape(chebyshev_order, n_dimensions), times)
+            temp_strain_timeseries = generate_2d_derivative(all_dynamics[data_index].reshape(basis_order, n_dimensions), times)
             hplus = temp_strain_timeseries[0,0]
             hcross = temp_strain_timeseries[0,1]
             strain_timeseries[data_index][0] = hplus + hcross
         elif n_dimensions == 3:
-            temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics, poly_type=poly_type)
+            temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics[data_index], basis_type=basis_type)
 
             for dind, detector in enumerate(detectors):
-                strain_timeseries[data_index][dind] = compute_strain_from_coeffs(times, temp_strain_timeseries, detector, poly_type=poly_type)
+                strain_timeseries[data_index][dind] = compute_strain_from_coeffs(times, temp_strain_timeseries, detector, basis_type=basis_type)
 
 
-    return times, flattened_coeffs_mass, strain_timeseries, acc_chebyshev_order, positions
+
+    return times, output_coeffs_mass, strain_timeseries, acc_basis_order, positions, all_dynamics
 
 
 def get_data_path(
-    chebyshev_order: int = 8,
-    poly_type: str = "chebyshev",
+    basis_order: int = 8,
+    basis_type: str = "chebyshev",
     n_masses: int = 2,
     sample_rate: int = 128,
     n_dimensions: int = 3,
@@ -579,7 +619,7 @@ def get_data_path(
     return_windowed_coeffs = False
     ):
 
-    path = f"data_{poly_type}{chebyshev_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
+    path = f"data_{basis_type}{basis_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
 
     return path
 
@@ -587,20 +627,20 @@ def save_data(
     data_dir: str, 
     data_split: int = 100000,
     n_examples: int = 10000,
-    chebyshev_order: int = 8,
+    basis_order: int = 8,
     n_masses: int = 2,
     sample_rate: int = 128,
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
     return_windowed_coeffs = False,
-    poly_type: str = "chebyshev"
+    basis_type: str = "chebyshev"
     ):
 
 
     data_path = get_data_path(
-        chebyshev_order = chebyshev_order,
-        poly_type = poly_type,
+        basis_order = basis_order,
+        basis_type = basis_type,
         n_masses = n_masses,
         sample_rate = sample_rate,
         n_dimensions = n_dimensions,
@@ -615,14 +655,14 @@ def save_data(
 
     times, labels, strain, cshape, positions = generate_data(
         2, 
-        chebyshev_order, 
+        basis_order, 
         n_masses, 
         sample_rate, 
         n_dimensions=n_dimensions, 
         detectors=detectors, 
         window=window, 
         return_windowed_coeffs=return_windowed_coeffs,
-        poly_type=poly_type)
+        basis_type=basis_type)
 
 
     if n_examples < data_split:
@@ -639,7 +679,7 @@ def save_data(
 
         times, t_labels, t_strain, cshape, t_positions = generate_data(
             data_split, 
-            chebyshev_order, 
+            basis_order, 
             n_masses, 
             sample_rate, 
             n_dimensions=n_dimensions, 
@@ -661,19 +701,19 @@ def save_data(
     
 def load_data(
     data_dir: str, 
-    chebyshev_order: int = 8,
+    basis_order: int = 8,
     n_masses: int = 2,
     sample_rate: int = 128,
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window = False,
     return_windowed_coeffs = False,
-    poly_type = "chebyshev"
+    basis_type = "chebyshev"
     ):
 
     data_path = get_data_path(
-        chebyshev_order = chebyshev_order,
-        poly_type = poly_type,
+        basis_order = basis_order,
+        basis_type = basis_type,
         n_masses = n_masses,
         sample_rate = sample_rate,
         n_dimensions = n_dimensions,
@@ -686,7 +726,7 @@ def load_data(
     with h5py.File(os.path.join(data_dir, "metadata.hdf5"), "r") as f:
         times = np.array(f["times"])
         cshape = np.array(f["poly_order"])
-        poly_type = str(f["poly_type"])
+        #basis_type = str(f["basis_type"])
 
     labels = []
     strain = []
@@ -731,7 +771,7 @@ if __name__ == "__main__":
         data_dir = args.datadir, 
         data_split = args.datasplit,
         n_examples = args.nexamples,
-        chebyshev_order = args.polyorder,
+        basis_order = args.polyorder,
         n_masses = args.nmasses,
         sample_rate = args.samplerate,
         n_dimensions = args.ndimensions,
@@ -743,7 +783,7 @@ if __name__ == "__main__":
     """
     data = load_data(
         data_dir = args.savedir, 
-        chebyshev_order = args.polyorder,
+        basis_order = args.polyorder,
         n_masses = args.nmasses,
         sample_rate = args.samplerate,
         n_dimensions = args.ndimensions,
