@@ -20,7 +20,7 @@ from data_generation import (
     window_coeffs, 
     perform_window, 
     compute_hTT_coeffs,
-    polynomial_dict, 
+    basis, 
     compute_energy_loss,
     load_data
 )
@@ -29,7 +29,8 @@ from model_functions import (
     create_models,
     get_dynamics,
     get_strain_from_samples,
-    normalise_data
+    normalise_data,
+    samples_to_positions_masses
 )
 
 from torch.utils.data import TensorDataset, DataLoader, random_split
@@ -46,7 +47,13 @@ import json
 import argparse
 import copy
 
-def train_epoch(dataloader: torch.utils.data.DataLoader, model: torch.nn.Module, pre_model: torch.nn.Module, optimiser: torch.optim, device:str = "cpu", train:bool = True) -> float:
+def train_epoch(
+    dataloader: torch.utils.data.DataLoader, 
+    model: torch.nn.Module, 
+    pre_model: torch.nn.Module, 
+    optimiser: torch.optim, 
+    device:str = "cpu", 
+    train:bool = True) -> float:
     """train one epoch for data
 
     Args:
@@ -90,15 +97,16 @@ def run_testing(config:dict) -> None:
     """
     pre_model, model = load_models(config, config["device"])
 
-    times, labels, strain, cshape, positions = generate_data(
+    times, labels, strain, cshape, positions, all_dynamics = generate_data(
         config["n_test_data"], 
-        config["chebyshev_order"], 
+        config["basis_order"], 
         config["n_masses"], 
         config["sample_rate"], 
         n_dimensions=config["n_dimensions"], 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"])
+        return_windowed_coeffs=config["return_windowed_coeffs"],
+        basis_type=config["basis_type"])
 
     try:
         strain, norm_factor = normalise_data(strain, pre_model.norm_factor)
@@ -106,10 +114,16 @@ def run_testing(config:dict) -> None:
         print("WARNING: Normalising to different value")
         strain, norm_factor = normalise_data(strain, None)
 
-    acc_chebyshev_order = cshape
+    acc_basis_order = cshape
 
-    n_features = acc_chebyshev_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+
     n_context = config["sample_rate"]*2
+
+    if config["basis_type"] == "fourier":
+        labels = torch.flatten(torch.view_as_real(torch.from_numpy(labels)), start_dim=1)
+    else:
+        labels = torch.Tensor(labels)
 
     dataset = TensorDataset(torch.Tensor(labels), torch.Tensor(strain))
     test_loader = DataLoader(dataset, batch_size=1)
@@ -121,10 +135,10 @@ def run_testing(config:dict) -> None:
             test_loader, 
             times, 
             config["n_masses"], 
-            config["chebyshev_order"], 
+            config["basis_order"], 
             config["n_dimensions"], 
             config["root_dir"], 
-            config["device"])
+            config["device"],)
     elif config["n_dimensions"] == 2:
         test_model_2d(
             model, 
@@ -132,7 +146,7 @@ def run_testing(config:dict) -> None:
             test_loader, 
             times, 
             config["n_masses"], 
-            config["chebyshev_order"], 
+            config["basis_order"], 
             config["n_dimensions"], 
             config["root_dir"], 
             config["device"])
@@ -143,13 +157,14 @@ def run_testing(config:dict) -> None:
             test_loader, 
             times, 
             config["n_masses"], 
-            acc_chebyshev_order, 
+            acc_basis_order, 
             config["n_dimensions"], 
             config["detectors"], 
             config["window"], 
             config["root_dir"], 
             config["device"], 
-            config["return_windowed_coeffs"])
+            config["return_windowed_coeffs"],
+            basis_type=config["basis_type"])
     
 
 def run_training(config: dict, continue_train:bool = False) -> None:
@@ -170,36 +185,35 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         print("loading data ........")
         times, labels, strain, cshape, positions = load_data(
             data_dir = config["data_dir"], 
-            chebyshev_order = config["chebyshev_order"],
+            basis_order = config["basis_order"],
             n_masses = config["n_masses"],
             sample_rate = config["sample_rate"],
             n_dimensions = config["n_dimensions"],
             detectors = config["detectors"],
             window = config["window"],
             return_windowed_coeffs = config["return_windowed_coeffs"],
-            poly_type = config["poly_type"]
+            basis_type = config["basis_type"]
             )
 
         config["n_data"] = len(labels)
     else:
         print("making data ........")
-        times, labels, strain, cshape, positions = generate_data(
+        times, labels, strain, cshape, positions, all_dynamics = generate_data(
             config["n_data"], 
-            config["chebyshev_order"], 
+            config["basis_order"], 
             config["n_masses"], 
             config["sample_rate"], 
             n_dimensions=config["n_dimensions"], 
             detectors=config["detectors"], 
             window=config["window"], 
             return_windowed_coeffs=config["return_windowed_coeffs"],
-            poly_type = config["poly_type"])
+            basis_type = config["basis_type"])
 
+    acc_basis_order = cshape
 
-    acc_chebyshev_order = cshape
-
-    n_features = acc_chebyshev_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["sample_rate"]*2
-    print("init", n_features, n_context)
+    
+    n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    n_context = 2*config["sample_rate"]
 
     fig, ax = plt.subplots()
     ax.plot(strain[0])
@@ -220,7 +234,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 
-    dataset = TensorDataset(torch.Tensor(labels), torch.Tensor(strain))
+    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain))
 
     train_size = int(0.9*config["n_data"])
     #test_size = 10
@@ -277,7 +291,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
 
 
-def test_model_1d(model, dataloader, times, n_masses, chebyshev_order, n_dimensions, root_dir, device, poly_type="chebyshev"):
+def test_model_1d(model, dataloader, times, n_masses, basis_order, n_dimensions, root_dir, device, basis_type="chebyshev"):
 
     plot_out = os.path.join(root_dir, "testout")
     if not os.path.isdir(plot_out):
@@ -289,8 +303,8 @@ def test_model_1d(model, dataloader, times, n_masses, chebyshev_order, n_dimensi
             label, data = label.to(device), data.to(device)
             coeffmass_samples = model(data.flatten(start_dim=1)).sample().cpu().numpy()
 
-            source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
-            recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
+            source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, basis_order, n_dimensions, basis_type=basis_type)
+            recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, basis_order, n_dimensions, basis_type=basis_type)
 
             fig, ax = plt.subplots(nrows = 4)
             for mass_index in range(n_masses):
@@ -315,7 +329,7 @@ def test_model_1d(model, dataloader, times, n_masses, chebyshev_order, n_dimensi
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
 
-def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order, n_dimensions, root_dir, device):
+def test_model_2d(model, pre_model, dataloader, times, n_masses, basis_order, n_dimensions, root_dir, device):
     """_summary_
 
     Args:
@@ -324,7 +338,7 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
         dataloader (_type_): _description_
         times (_type_): _description_
         n_masses (_type_): _description_
-        chebyshev_order (_type_): _description_
+        basis_order (_type_): _description_
         n_dimensions (_type_): _description_
         root_dir (_type_): _description_
         device (_type_): _description_
@@ -341,8 +355,8 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
             coeffmass_samples = model(input_data).sample().cpu().numpy()
 
             print(np.shape(coeffmass_samples[0]))
-            source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, chebyshev_order, n_dimensions)
-            recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, chebyshev_order, n_dimensions)
+            source_coeffs, source_masses, source_tseries = get_dynamics(label[0].cpu().numpy(), times, n_masses, basis_order, n_dimensions)
+            recon_coeffs, recon_masses, recon_tseries = get_dynamics(coeffmass_samples[0], times, n_masses, basis_order, n_dimensions)
 
             fig, ax = plt.subplots(nrows = 4)
             for mass_index in range(n_masses):
@@ -377,7 +391,7 @@ def test_model_2d(model, pre_model, dataloader, times, n_masses, chebyshev_order
             m_recon_tseries, m_recon_masses = np.zeros((nsamples, n_masses, n_dimensions, len(times))), np.zeros((nsamples, n_masses))
             for i in range(nsamples):
                 #print(np.shape(multi_coeffmass_samples[i]))
-                t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, chebyshev_order, n_dimensions)
+                t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, basis_order, n_dimensions)
                 m_recon_tseries[i] = t_time
                 m_recon_masses[i] = t_mass
 
@@ -390,14 +404,14 @@ def test_model_3d(
     dataloader, 
     times, 
     n_masses, 
-    chebyshev_order, 
+    basis_order, 
     n_dimensions, 
     detectors, 
     window, 
     root_dir, 
     device, 
     return_windowed_coeffs=True, 
-    poly_type="chebyshev"):
+    basis_type="chebyshev"):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -408,7 +422,7 @@ def test_model_3d(
         dataloader (_type_): _description_
         times (_type_): _description_
         n_masses (_type_): _description_
-        chebyshev_order (_type_): _description_
+        basis_order (_type_): _description_
         n_dimensions (_type_): _description_
         root_dir (_type_): _description_
         device (_type_): _description_
@@ -423,23 +437,40 @@ def test_model_3d(
             label, data = label.to(device), data.to(device)
             input_data = pre_model(data)
           
-            coeffmass_samples = model(input_data).sample().cpu().numpy()
+            coeffmass_samples = model(input_data).sample().cpu()
 
+            print(np.shape(coeffmass_samples))
+            mass_samples, coeff_samples = samples_to_positions_masses(
+                coeffmass_samples, 
+                n_masses,
+                config["basis_order"],
+                config["n_dimensions"],
+                config["basis_type"])
+
+            t_mass, t_coeff = samples_to_positions_masses(
+                coeffmass_samples, 
+                n_masses,
+                config["basis_order"],
+                config["n_dimensions"],
+                config["basis_type"])
+ 
             source_coeffs, source_masses, source_tseries = get_dynamics(
-                label[0].cpu().numpy(), 
+                t_coeff[0],
+                t_mass[0], 
                 times, 
                 n_masses, 
-                chebyshev_order, 
+                basis_order, 
                 n_dimensions, 
-                poly_type=poly_type)
+                basis_type=basis_type)
 
             recon_coeffs, recon_masses, recon_tseries = get_dynamics(
-                coeffmass_samples[0], 
+                coeff_samples[0], 
+                mass_samples[0],
                 times, 
                 n_masses, 
-                chebyshev_order, 
+                basis_order, 
                 n_dimensions, 
-                poly_type=poly_type)
+                basis_type=basis_type)
         
             
             recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs = get_strain_from_samples(
@@ -451,7 +482,7 @@ def test_model_3d(
                 detectors=detectors,
                 return_windowed_coeffs=return_windowed_coeffs, 
                 window=window, 
-                poly_type=poly_type)
+                basis_type=basis_type)
 
             recon_strain, _ = normalise_data(recon_strain, pre_model.norm_factor)
             source_strain, _ = normalise_data(source_strain, pre_model.norm_factor)
@@ -491,7 +522,14 @@ def test_model_3d(
 
             nsamples = 500
             n_animate_samples = 50
-            multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
+            multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu()
+
+            multi_mass_samples, multi_coeff_samples = samples_to_positions_masses(
+                multi_coeffmass_samples[:,0], 
+                n_masses,
+                config["basis_order"],
+                config["n_dimensions"],
+                config["basis_type"])
 
             #print("multishape", multi_coeffmass_samples.shape)
             m_recon_masses = np.zeros((nsamples, n_masses))
@@ -500,7 +538,14 @@ def test_model_3d(
             #m_recon_energy = np.zeros((nsamples, len(times)))
             for i in range(nsamples):
                 #print(np.shape(multi_coeffmass_samples[i]))
-                t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, chebyshev_order, n_dimensions, poly_type=poly_type)
+                t_co, t_mass, t_time = get_dynamics(
+                    multi_coeff_samples[i], 
+                    multi_mass_samples[i],
+                    times, 
+                    n_masses, 
+                    basis_order, 
+                    n_dimensions, 
+                    basis_type=basis_type)
                 m_recon_tseries[i] = t_time
                 m_recon_masses[i] = t_mass
 
@@ -513,7 +558,7 @@ def test_model_3d(
                     detectors=["H1","L1","V1"],
                     return_windowed_coeffs=config["return_windowed_coeffs"], 
                     window=config["window"], 
-                    poly_type=config["poly_type"])
+                    basis_type=config["basis_type"])
 
                 m_recon_strain[i] = temp_recon_strain
                 #m_recon_energy[i] = temp_recon_energy
@@ -606,7 +651,7 @@ if __name__ == "__main__":
             n_data = 500000,
             n_test_data = 10,
             batch_size = 1024,
-            chebyshev_order = 6,
+            basis_order = 6,
             n_masses = 2,
             n_dimensions = 3,
             detectors=["H1", "L1", "V1"],
@@ -615,7 +660,7 @@ if __name__ == "__main__":
             sample_rate = 64,
             n_epochs = 4000,
             window="none",
-            poly_type="chebyshev",
+            basis_type="chebyshev",
             custom_flow=True,
             return_windowed_coeffs=False,
             learning_rate = 5e-5,

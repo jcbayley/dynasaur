@@ -23,7 +23,7 @@ from data_generation import (
     window_coeffs, 
     perform_window, 
     compute_hTT_coeffs,
-    polynomial_dict, 
+    basis, 
     compute_energy_loss
 )
 import torch
@@ -42,18 +42,20 @@ def create_models(config, device):
         tuple of models: (pre_model, model)
     """
 
-    times, labels, strain, cshape, positions = generate_data(
+    times, labels, strain, cshape, positions, all_dynamics = generate_data(
         2, 
-        config["chebyshev_order"], 
+        config["basis_order"], 
         config["n_masses"], 
         config["sample_rate"], 
         n_dimensions=config["n_dimensions"], 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"])
+        return_windowed_coeffs=config["return_windowed_coeffs"],
+        basis_type=config["basis_type"])
+
 
     n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["sample_rate"]*2
+    n_context = 2*config["sample_rate"]
 
     # pre processing creation
     pre_model = nn.Sequential()
@@ -132,9 +134,9 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, labels, strain, cshape, positions = generate_data(
+    times, labels, strain, cshape, positions, all_dynamics = generate_data(
         2, 
-        config["chebyshev_order"], 
+        config["basis_order"], 
         config["n_masses"], 
         config["sample_rate"], 
         n_dimensions=config["n_dimensions"], 
@@ -142,8 +144,12 @@ def load_models(config, device):
         window=config["window"], 
         return_windowed_coeffs=config["return_windowed_coeffs"])
 
-    n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["sample_rate"]*2
+    if config["basis_type"] == "fourier":
+        n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    else:
+        n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+
+    n_context = 2*config["sample_rate"]
 
     pre_model, model = create_models(config, device)
 
@@ -163,36 +169,65 @@ def load_models(config, device):
 
     return pre_model, model
 
+def samples_to_positions_masses(
+    coeffmass_samples, 
+    n_masses,
+    basis_order,
+    n_dimensions,
+    basis_type):
+    """conver outputs samples from flow into coefficients and masses
+
+    Args:
+        coeffmass_samples (_type_): _description_
+        n_masses (_type_): _description_
+        basis_order (_type_): _description_
+        n_dimensions (_type_): _description_
+        basis_type (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    masses = coeffmass_samples[:, -n_masses:].numpy()
+    if basis_type == "fourier":
+        sshape = np.shape(coeffmass_samples[:, :-n_masses])
+        coeffs = coeffmass_samples[:, :-n_masses].reshape(sshape[0], int(sshape[1]/2), 2)
+        coeffs = torch.view_as_complex(coeffs).numpy()
+        # plus 1 on basis order as increased coeffs to return same ts samples
+        # also divide half as half basis size when complex number
+        coeffs = coeffs.reshape(sshape[0], n_masses, int(0.5*basis_order+1), n_dimensions)
+    else:
+        coeffs = coeffmass_samples[:,:-n_masses].reshape(-1,n_masses,basis_order, n_dimensions)
+
+    return masses, coeffs
 
 def get_dynamics(
-    coeffmass_samples, 
+    coeff_samples, 
+    mass_samples,
     times, 
     n_masses, 
-    chebyshev_order, 
+    basis_order, 
     n_dimensions, 
-    poly_type="chebyshev"):
+    basis_type="chebyshev"):
     """get the dynamics of the system from polynomial cooefficients and masses
 
     Args:
         coeffmass_samples (_type_): samples of the coefficients and masses
         times (_type_): times when to evaluate the polynomial
         n_masses (_type_): how many masses 
-        chebyshev_order (_type_): order of the polynomimal
+        basis_order (_type_): order of the polynomimal
         n_dimensions (_type_): how many dimensions 
 
     Returns:
         tuple: (coefficients, masses, timeseries)
     """
     #print("msshape", np.shape(coeffmass_samples))
-    masses = coeffmass_samples[-n_masses:]
-    coeffs = coeffmass_samples[:-n_masses].reshape(n_masses,chebyshev_order, n_dimensions)
 
     tseries = np.zeros((n_masses, n_dimensions, len(times)))
     for mass_index in range(n_masses):
         for dim_index in range(n_dimensions):
-            tseries[mass_index, dim_index] = polynomial_dict[poly_type]["val"](times, coeffs[mass_index, :, dim_index])
+            tseries[mass_index, dim_index] = basis[basis_type]["val"](times, coeff_samples[mass_index, :, dim_index])
 
-    return coeffs, masses, tseries
+    return coeff_samples, mass_samples, tseries
 
 def get_strain_from_samples(
     times, 
@@ -203,7 +238,7 @@ def get_strain_from_samples(
     detectors=["H1"],
     return_windowed_coeffs=False, 
     window="none", 
-    poly_type="chebyshev"):
+    basis_type="chebyshev"):
     """_summary_
 
     Args:
@@ -215,22 +250,23 @@ def get_strain_from_samples(
         detectors (list, optional): _description_. Defaults to ["H1"].
         return_windowed_coeffs (bool, optional): _description_. Defaults to False.
         window (bool, optional): _description_. Defaults to False.
-        poly_type (str, optional): _description_. Defaults to "chebyshev".
+        basis_type (str, optional): _description_. Defaults to "chebyshev".
 
     Returns:
         _type_: _description_
     """
     # if there is a window and I and not predicting the windowed coefficients
+   
     n_masses, n_coeffs, n_dimensions = np.shape(recon_coeffs)
     if not return_windowed_coeffs and window != "none":
         n_recon_coeffs = []
         n_source_coeffs = []
         # for each mass perform the window on the xyz positions (acceleration)
         for mass in range(n_masses):
-            temp_recon, win_coeffs = perform_window(times, recon_coeffs[mass], window, poly_type=poly_type)
+            temp_recon, win_coeffs = perform_window(times, recon_coeffs[mass], window, basis_type=basis_type)
             n_recon_coeffs.append(temp_recon)
             if source_coeffs is not None:
-                temp_source, win_coeffs = perform_window(times, source_coeffs[mass], window, poly_type=poly_type)
+                temp_source, win_coeffs = perform_window(times, source_coeffs[mass], window, basis_type=basis_type)
                 n_source_coeffs.append(temp_source)
             
 
@@ -240,21 +276,21 @@ def get_strain_from_samples(
         if source_coeffs is not None:
             source_coeffs = np.array(n_source_coeffs)
 
-    recon_strain_coeffs = compute_hTT_coeffs(recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
+    recon_strain_coeffs = compute_hTT_coeffs(recon_masses, np.transpose(recon_coeffs, (0,2,1)), basis_type=basis_type)
     if source_coeffs is not None:
-        source_strain_coeffs = compute_hTT_coeffs(source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
+        source_strain_coeffs = compute_hTT_coeffs(source_masses, np.transpose(source_coeffs, (0,2,1)), basis_type=basis_type)
 
-    recon_energy = compute_energy_loss(times, recon_masses, np.transpose(recon_coeffs, (0,2,1)), poly_type=poly_type)
+    recon_energy = compute_energy_loss(times, recon_masses, np.transpose(recon_coeffs, (0,2,1)), basis_type=basis_type)
     source_energy = []
     if source_coeffs is not None:
-        source_energy = compute_energy_loss(times, source_masses, np.transpose(source_coeffs, (0,2,1)), poly_type=poly_type)
+        source_energy = compute_energy_loss(times, source_masses, np.transpose(source_coeffs, (0,2,1)), basis_type=basis_type)
 
     recon_strain = []
     source_strain = []
     for detector in detectors:
-        recon_strain.append(compute_strain_from_coeffs(times, recon_strain_coeffs, detector=detector, poly_type=poly_type))
+        recon_strain.append(compute_strain_from_coeffs(times, recon_strain_coeffs, detector=detector, basis_type=basis_type))
         if source_coeffs is not None:
-            source_strain.append(compute_strain_from_coeffs(times, source_strain_coeffs, detector=detector, poly_type=poly_type))
+            source_strain.append(compute_strain_from_coeffs(times, source_strain_coeffs, detector=detector, basis_type=basis_type))
 
     return recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs
 
