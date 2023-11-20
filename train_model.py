@@ -106,7 +106,9 @@ def run_testing(config:dict) -> None:
         detectors=config["detectors"], 
         window=config["window"], 
         return_windowed_coeffs=config["return_windowed_coeffs"],
-        basis_type=config["basis_type"])
+        basis_type=config["basis_type"],
+        data_type = config["data_type"]
+        )
 
     try:
         strain, norm_factor = normalise_data(strain, pre_model.norm_factor)
@@ -114,18 +116,52 @@ def run_testing(config:dict) -> None:
         print("WARNING: Normalising to different value")
         strain, norm_factor = normalise_data(strain, None)
 
+    
+    """
+    t_mass, t_coeff = samples_to_positions_masses(
+                torch.from_numpy(labels[:1]), 
+                config["n_masses"],
+                config["basis_order"]+2,
+                config["n_dimensions"],
+                config["basis_type"])
+
+    print(np.min(t_coeff), np.max(t_coeff))
+ 
+    source_coeffs, source_masses, source_tseries = get_dynamics(
+                t_coeff[0],
+                t_mass[0], 
+                times, 
+                config["n_masses"], 
+                config["basis_order"]+2, 
+                config["n_dimensions"], 
+                basis_type=config["basis_type"])
+
+
+    fig, ax = plt.subplots(nrows=3)
+    ax[0].plot(positions[0, :, 0].T, color="k", label="truth")
+    ax[1].plot(positions[0, :, 1].T, color="k")
+    ax[2].plot(positions[0, :, 2].T, color="k")
+
+    ax[0].plot(source_tseries[:, 0].T, ls="--", color="r", label="remake")
+    ax[1].plot(source_tseries[:, 1].T, ls="--", color="r")
+    ax[2].plot(source_tseries[:, 2].T, ls="--", color="r")
+
+    fig.savefig(os.path.join(config["root_dir"], "test_pos0.png"))
+    """
+    
     acc_basis_order = cshape
 
     n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
 
     n_context = config["sample_rate"]*2
 
+    """
     if config["basis_type"] == "fourier":
         labels = torch.flatten(torch.view_as_real(torch.from_numpy(labels)), start_dim=1)
     else:
         labels = torch.Tensor(labels)
-
-    dataset = TensorDataset(torch.Tensor(labels), torch.Tensor(strain))
+    """
+    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain))
     test_loader = DataLoader(dataset, batch_size=1)
 
 
@@ -192,22 +228,24 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             detectors = config["detectors"],
             window = config["window"],
             return_windowed_coeffs = config["return_windowed_coeffs"],
-            basis_type = config["basis_type"]
+            basis_type = config["basis_type"],
+            data_type = config["data_type"]
             )
 
         config["n_data"] = len(labels)
     else:
         print("making data ........")
         times, labels, strain, cshape, positions, all_dynamics = generate_data(
-            config["n_data"], 
-            config["basis_order"], 
-            config["n_masses"], 
-            config["sample_rate"], 
+            n_data=config["n_data"], 
+            basis_order=config["basis_order"], 
+            n_masses=config["n_masses"], 
+            sample_rate=config["sample_rate"], 
             n_dimensions=config["n_dimensions"], 
             detectors=config["detectors"], 
             window=config["window"], 
             return_windowed_coeffs=config["return_windowed_coeffs"],
-            basis_type = config["basis_type"])
+            basis_type = config["basis_type"],
+            data_type = config["data_type"])
 
     acc_basis_order = cshape
 
@@ -439,20 +477,25 @@ def test_model_3d(
           
             coeffmass_samples = model(input_data).sample().cpu()
 
-            print(np.shape(coeffmass_samples))
             mass_samples, coeff_samples = samples_to_positions_masses(
                 coeffmass_samples, 
                 n_masses,
-                config["basis_order"],
-                config["n_dimensions"],
-                config["basis_type"])
+                basis_order,
+                n_dimensions,
+                basis_type)
+            #print("coeffsamp", np.shape(coeff_samples))
+            #print(coeff_samples[0, 0, :, 0])
+            #print(coeff_samples[0, 1, :, 0])
 
             t_mass, t_coeff = samples_to_positions_masses(
-                coeffmass_samples, 
+                label[:1].cpu(), 
                 n_masses,
-                config["basis_order"],
-                config["n_dimensions"],
-                config["basis_type"])
+                basis_order,
+                n_dimensions,
+                basis_type)
+
+            #print(np.shape(label), np.shape(coeffmass_samples))
+            #print(np.shape(coeff_samples), np.shape(t_coeff))
  
             source_coeffs, source_masses, source_tseries = get_dynamics(
                 t_coeff[0],
@@ -471,7 +514,13 @@ def test_model_3d(
                 basis_order, 
                 n_dimensions, 
                 basis_type=basis_type)
-        
+
+            fig, ax = plt.subplots()
+            ax.plot(source_tseries[0][0], color="k", label="truth")
+            #ax.plot(recon_tseries[0][0], ls="--", color="r", label="remake")
+            fig.savefig(os.path.join(root_dir, "test_pos2.png"))
+
+            #sys.exit()
             
             recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs = get_strain_from_samples(
                 times, 
@@ -524,12 +573,13 @@ def test_model_3d(
             n_animate_samples = 50
             multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu()
 
+            print(multi_coeffmass_samples.shape)
             multi_mass_samples, multi_coeff_samples = samples_to_positions_masses(
                 multi_coeffmass_samples[:,0], 
                 n_masses,
-                config["basis_order"],
-                config["n_dimensions"],
-                config["basis_type"])
+                basis_order,
+                n_dimensions,
+                basis_type)
 
             #print("multishape", multi_coeffmass_samples.shape)
             m_recon_masses = np.zeros((nsamples, n_masses))
@@ -559,6 +609,8 @@ def test_model_3d(
                     return_windowed_coeffs=config["return_windowed_coeffs"], 
                     window=config["window"], 
                     basis_type=config["basis_type"])
+
+                temp_recon_strain, _ = normalise_data(temp_recon_strain, pre_model.norm_factor)
 
                 m_recon_strain[i] = temp_recon_strain
                 #m_recon_energy[i] = temp_recon_energy

@@ -190,11 +190,12 @@ def samples_to_positions_masses(
     masses = coeffmass_samples[:, -n_masses:].numpy()
     if basis_type == "fourier":
         sshape = np.shape(coeffmass_samples[:, :-n_masses])
-        coeffs = coeffmass_samples[:, :-n_masses].reshape(sshape[0], int(sshape[1]/2), 2)
+        coeffs = coeffmass_samples[:, :-n_masses].reshape(sshape[0], n_masses, n_dimensions, int(basis_order/2), 2)
         coeffs = torch.view_as_complex(coeffs).numpy()
         # plus 1 on basis order as increased coeffs to return same ts samples
         # also divide half as half basis size when complex number
-        coeffs = coeffs.reshape(sshape[0], n_masses, int(0.5*basis_order+1), n_dimensions)
+        coeffs = np.transpose(coeffs, (0,1,3,2))
+        #coeffs = coeffs.reshape(sshape[0], n_masses, int(0.5*basis_order+1), n_dimensions)
     else:
         coeffs = coeffmass_samples[:,:-n_masses].reshape(-1,n_masses,basis_order, n_dimensions)
 
