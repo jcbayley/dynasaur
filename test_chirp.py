@@ -17,6 +17,7 @@ import make_animations as animations
 import plotting
 from model_functions import (
     get_dynamics,
+    samples_to_positions_masses,
     create_models,
     load_models, 
     get_strain_from_samples,
@@ -153,6 +154,9 @@ def fit_positions_with_polynomial(times, positions, basis_order=8, window="none"
   
     n_masses, n_dimensions, n_cheby = np.shape(positions)
 
+    if basis_type == "fourier":
+        basis_order += 2
+
     if window == "none" or not window:
         cheb_dynamics = np.zeros((n_masses, n_dimensions, basis_order))
     else:
@@ -161,10 +165,16 @@ def fit_positions_with_polynomial(times, positions, basis_order=8, window="none"
     for mind in range(n_masses):
         temp_dyn = np.zeros((basis_order, n_dimensions))
         for dimind in range(3):
-            temp_dyn[:,dimind] = basis[basis_type]["fit"](
+            dimfit = basis[basis_type]["fit"](
                 times, 
                 positions[mind, dimind], 
                 basis_order-1)
+            
+            if basis_type == "fourier":
+                dimfit = torch.view_as_real(torch.from_numpy(dimfit)).flatten()
+                temp_dyn[:,dimind] = dimfit
+            else:
+                temp_dyn[:,dimind] = dimfit
 
         if window != "none":
             temp_dyn2, win_coeffs = perform_window(
@@ -417,7 +427,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     if not os.path.isdir(plot_out):
         os.makedirs(plot_out)
 
-    basis_type = "chebyshev"
+    basis_type = config["basis_type"]
     
     pre_model, model = load_models(config, device="cpu")
     
@@ -459,7 +469,8 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         detectors=config["detectors"], 
         basis_order=basis_order, 
         window=config["window"], 
-        root_dir=plot_out)
+        root_dir=plot_out,
+        basis_type=basis_type)
 
     data, norm_factor = normalise_data(data, pre_model.norm_factor)    
     print("normfactor", norm_factor)
@@ -470,9 +481,9 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     animations.make_3d_animation(plot_out, 100, all_dynamics, 0.01*np.array([m1,m2]), None, None)
 
     
-    reconstructx = np.polynomial.chebyshev.chebval(times, cheb_dynamics[0][0])
-    reconstructy = np.polynomial.chebyshev.chebval(times, cheb_dynamics[0][1])
-    reconstructz = np.polynomial.chebyshev.chebval(times, cheb_dynamics[0][2])
+    reconstructx = basis[basis_type]["val"](times, cheb_dynamics[0][0])
+    reconstructy = basis[basis_type]["val"](times, cheb_dynamics[0][1])
+    reconstructz = basis[basis_type]["val"](times, cheb_dynamics[0][2])
 
     fig, ax = plt.subplots(nrows=3)
     ax[0].plot(dynamics[0,0])
@@ -497,17 +508,33 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
 
     nsamples = 200
     n_animate_samples = 50
-    multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
+    multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu()
 
     m_recon_tseries, m_recon_masses = np.zeros((nsamples, n_masses, n_dimensions, len(times))), np.zeros((nsamples, n_masses))
     m_recon_strain = np.zeros((nsamples, 3, len(times)))
+    multi_mass_samples, multi_coeff_samples = samples_to_positions_masses(
+                multi_coeffmass_samples[:,0], 
+                n_masses,
+                basis_order,
+                n_dimensions,
+                basis_type=basis_type)
+
     for i in range(nsamples):
-        #print(np.shape(multi_coeffmass_samples[i]))
-        t_co, t_mass, t_time = get_dynamics(multi_coeffmass_samples[i][0], times, n_masses, basis_order, n_dimensions, basis_type=basis_type)
+        t_co, t_mass, t_time = get_dynamics(
+            multi_coeff_samples[i],
+            multi_mass_samples[i], 
+            times, 
+            n_masses, 
+            basis_order, 
+            n_dimensions, 
+            basis_type=basis_type)
+
+        
         m_recon_tseries[i] = t_time
         m_recon_masses[i] = t_mass
 
-        recon_strain, recon_energy, source_strain, source_energy, m_recon_coeffs, source_coeffs = get_strain_from_samples(
+
+        temp_recon_strain, temp_recon_energy, _, _, temp_m_recon_coeffs, _ = get_strain_from_samples(
             times, 
             t_mass,
             None,
@@ -518,7 +545,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
             window=config["window"], 
             basis_type=config["basis_type"])
 
-        m_recon_strain[i] = recon_strain
+        m_recon_strain[i] = temp_recon_strain
 
     if n_masses == 2:
         neginds = m_recon_masses[:,0] - m_recon_masses[:,1] < 0

@@ -197,7 +197,7 @@ def make_3d_distribution(
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
 
-    writergif = animation.PillowWriter(fps=30) 
+    writergif = animation.PillowWriter(fps=int(0.5*n_frames)) 
     ani.save(os.path.join(root_dir, f"multi_animation_{index}.gif"), writer=writergif)
 
 def make_3d_distribution_zproj(
@@ -254,7 +254,7 @@ def make_3d_distribution_zproj(
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
 
-    writergif = animation.PillowWriter(fps=30) 
+    writergif = animation.PillowWriter(fps=int(0.5*n_frames)) 
     ani.save(os.path.join(root_dir, f"multi_animation_zproj{index}.gif"), writer=writergif)
 
 
@@ -307,6 +307,6 @@ def line_of_sight_animation(
 
     ani = animation.FuncAnimation(fig, update_plot, frames=nframes, interval=1)
 
-    writergif = animation.PillowWriter(fps=30) 
+    writergif = animation.PillowWriter(fps=int(0.5*nframes)) 
     ani.save(fname, writer=writergif)
 

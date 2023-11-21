@@ -8,6 +8,7 @@ import argparse
 import h5py
 import os
 import torch
+from newtonian_orbits import solve_ode
 
 basis = {
     "chebyshev":{
@@ -44,7 +45,7 @@ def generate_random_coefficients(
         order (int): _description_
 
     Returns:
-        tuple: _description_
+        tuple: (order, dimensions)
     """
 
     if basis_type == "chebyshev":
@@ -57,7 +58,7 @@ def generate_random_coefficients(
         halforder = int(order/2) + 1
         coefficients = np.zeros((halforder,n_dimensions), dtype=basis[basis_type]["dtype"])
         for i in range(halforder):
-            coefficients[i] = np.exp(-0.25*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
+            coefficients[i] = np.exp(-0.9*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
 
     return coefficients
 
@@ -489,7 +490,28 @@ def compute_strain_from_coeffs(times, pols, detector="H1", basis_type="chebyshev
 
     return strain
 
-def generate_data(
+def generate_outputs(
+    masses,
+    dynamics, 
+    basis_type="chebyshev"):
+
+    if n_dimensions == 1:
+        strain_coeffs = generate_strain_coefficients(all_dynamics[data_index])
+        strain_timeseries[data_index] = basis[basis_type]["val"](times, strain_coeffs)
+    elif n_dimensions == 2:
+        temp_strain_timeseries = generate_2d_derivative(all_dynamics[data_index].reshape(basis_order, n_dimensions), times)
+        hplus = temp_strain_timeseries[0,0]
+        hcross = temp_strain_timeseries[0,1]
+        strain_timeseries[data_index][0] = hplus + hcross
+    elif n_dimensions == 3:
+        temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics[data_index], basis_type=basis_type)
+
+        for dind, detector in enumerate(detectors):
+            strain_timeseries[data_index][dind] = compute_strain_from_coeffs(times, temp_strain_timeseries, detector, basis_type=basis_type)
+
+    return strain_timeseries
+
+def generate_random_data(
     n_data: int, 
     basis_order: int, 
     n_masses:int, 
@@ -545,7 +567,10 @@ def generate_data(
             # this is so can get back to order is 1/2 n_samples
             acc_basis_order += 2
 
-    output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses), dtype=dtype)
+    if basis_type == "fourier":
+        output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses))
+    else:
+        output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses))
     positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
     all_dynamics = np.zeros((n_data, n_masses, n_dimensions, win_basis_order), dtype=dtype)
 
@@ -554,7 +579,8 @@ def generate_data(
         masses = generate_masses(n_masses)
 
         #all_dynamics = np.zeros((n_masses, n_dimensions, win_basis_order), dtype=dtype)
-        output_coeffs_mass[data_index, -n_masses:] = masses
+        #output_coeffs_mass[data_index, -n_masses:] = masses
+        temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
         for mass_index in range(n_masses):
 
             random_coeffs = generate_random_coefficients(
@@ -578,15 +604,18 @@ def generate_data(
 
             if return_windowed_coeffs:
                 if basis_type == "fourier":
-                    flat_coeffs = torch.view_as_real(torch.from_numpy(flat_coeffs)).flatten()
-                output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = flat_coeffs
+                    flat_coeffs = torch.view_as_real(torch.from_numpy(flat_coeffs.T)).flatten(start_dim=1).T
+                temp_output_coeffs[mass_index] = random_flat_coeffs.T
+                #output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = flat_coeffs
                 all_dynamics[data_index, mass_index] = coeffs.T
             else:
                 if basis_type == "fourier":
-                    random_flat_coeffs = torch.view_as_real(torch.from_numpy(random_flat_coeffs)).flatten()
-                output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = random_flat_coeffs
+                    random_coeffs = torch.view_as_real(torch.from_numpy(random_coeffs.T)).flatten(start_dim=1).T
+                temp_output_coeffs[mass_index] = random_coeffs.T
+                #output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = random_flat_coeffs
                 all_dynamics[data_index, mass_index] = coeffs.T
 
+            output_coeffs_mass[data_index] = np.append(temp_output_coeffs.flatten(), masses)
             positions[data_index, mass_index] = basis[basis_type]["val"](times, coeffs)
 
         if n_dimensions == 1:
@@ -607,6 +636,148 @@ def generate_data(
 
     return times, output_coeffs_mass, strain_timeseries, acc_basis_order, positions, all_dynamics
 
+def generate_newton_data(
+    n_data: int, 
+    basis_order: int, 
+    n_masses:int, 
+    sample_rate: int, 
+    n_dimensions: int = 3, 
+    detectors=["H1"], 
+    window="none", 
+    return_windowed_coeffs=True, 
+    basis_type="chebyshev") -> np.array:
+    """_summary_
+
+    Args:
+        n_data (int): number of data samples to generate
+        n_order (int): order of polynomials 
+        n_masses (int): number of masses in system
+        sample_rate (int): sample rate of data
+
+    Returns:
+        np.array: _description_
+    """
+
+    if basis_type == "fourier":
+        dtype = complex
+    else:
+        dtype = np.float64
+
+    ntimeseries = [0, 1, 3, 6, 10]
+
+    strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
+
+    times = np.arange(-1,1,2/sample_rate)
+
+    times, coeffs, masses = solve_ode(
+        n_masses=n_masses, 
+        n_dimensions=n_dimensions, 
+        n_samples=len(times))
+
+    print(np.shape(coeffs))
+
+
+    if return_windowed_coeffs:  
+        win_basis_order = np.shape(coeffs)[0]
+        acc_basis_order = np.shape(coeffs)[0]
+    else:
+        win_basis_order = np.shape(coeffs)[0]
+        acc_basis_order = basis_order
+
+        if basis_type == "fourier":
+            # plus 2 as plus 1 in the real and imaginary in coeff gen
+            # this is so can get back to order is 1/2 n_samples
+            acc_basis_order += 2
+
+    output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses))
+    positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
+    if basis_type == "fourier":
+        all_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*acc_basis_order)), dtype=dtype)
+    else:
+        all_dynamics = np.zeros((n_data, n_masses, n_dimensions, acc_basis_order), dtype=dtype)
+
+    for data_index in range(n_data):
+
+        if data_index %2 == 0:
+            print(data_index)
+        times, temp_position, masses = solve_ode(
+            n_masses=n_masses, 
+            n_dimensions=n_dimensions, 
+            n_samples=len(times))
+        # position shape (n_samples, n_masses, n_dimensions)
+
+        temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
+        for mass_index in range(n_masses):
+            if basis_type=="fourier":
+                temp_dyn = basis[basis_type]["fit"](
+                    times,
+                    temp_position[:,mass_index,:].T,
+                    basis_order
+                    )
+            else:
+                temp_dyn = basis[basis_type]["fit"](
+                    times,
+                    temp_position[:,mass_index,:],
+                    basis_order-1
+                    ).T
+            all_dynamics[data_index, mass_index] = temp_dyn
+
+            if basis_type == "fourier":
+                temp_dyn = torch.view_as_real(torch.from_numpy(temp_dyn))
+                tdshape = temp_dyn.shape
+                temp_dyn = temp_dyn.flatten(start_dim=1)#temp_dyn.reshape(tdshape[0], tdshape[1]*tdshape[2])
+           
+            temp_output_coeffs[mass_index] = temp_dyn
+
+        output_coeffs_mass[data_index] = np.append(temp_output_coeffs.flatten(), masses)
+
+        positions[data_index] = np.transpose(temp_position, (1, 2, 0))
+
+        if n_dimensions == 3:
+            temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics[data_index], basis_type=basis_type)
+
+            for dind, detector in enumerate(detectors):
+                strain_timeseries[data_index][dind] = compute_strain_from_coeffs(times, temp_strain_timeseries, detector, basis_type=basis_type)
+
+        else:
+            raise Exception("Only runs for three dimensional data")
+
+    return times, output_coeffs_mass, strain_timeseries, acc_basis_order, positions, all_dynamics
+
+def generate_data(
+    n_data: int, 
+    basis_order: int, 
+    n_masses:int, 
+    sample_rate: int, 
+    n_dimensions: int = 1, 
+    detectors=["H1"], 
+    window="none", 
+    return_windowed_coeffs=True, 
+    basis_type="chebyshev",
+    data_type = "random"):
+
+    if data_type == "random":
+        return generate_random_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                return_windowed_coeffs=return_windowed_coeffs, 
+                basis_type=basis_type)
+    elif data_type == "newton":
+        return generate_newton_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                return_windowed_coeffs=return_windowed_coeffs, 
+                basis_type=basis_type)
 
 def get_data_path(
     basis_order: int = 8,
@@ -616,10 +787,11 @@ def get_data_path(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
-    return_windowed_coeffs = False
+    return_windowed_coeffs = False,
+    data_type: str = "random"
     ):
 
-    path = f"data_{basis_type}{basis_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
+    path = f"data_{data_type}_{basis_type}{basis_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
 
     return path
 
@@ -634,7 +806,9 @@ def save_data(
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
     return_windowed_coeffs = False,
-    basis_type: str = "chebyshev"
+    basis_type: str = "chebyshev",
+    data_type: str = "random",
+    start_index: int = 0
     ):
 
 
@@ -646,14 +820,15 @@ def save_data(
         n_dimensions = n_dimensions,
         detectors = detectors,
         window = window,
-        return_windowed_coeffs = False)
+        return_windowed_coeffs = False,
+        data_type = data_type)
 
     data_dir = os.path.join(data_dir, data_path)
 
     if not os.path.isdir(data_dir):
         os.makedirs(data_dir)
 
-    times, labels, strain, cshape, positions = generate_data(
+    times, labels, strain, cshape, positions, all_d = generate_data(
         2, 
         basis_order, 
         n_masses, 
@@ -662,7 +837,8 @@ def save_data(
         detectors=detectors, 
         window=window, 
         return_windowed_coeffs=return_windowed_coeffs,
-        basis_type=basis_type)
+        basis_type=basis_type,
+        data_type=data_type)
 
 
     if n_examples < data_split:
@@ -677,7 +853,7 @@ def save_data(
 
     for split_ind in range(nsplits):
 
-        times, t_labels, t_strain, cshape, t_positions = generate_data(
+        times, t_labels, t_strain, cshape, t_positions, t_all_d = generate_data(
             data_split, 
             basis_order, 
             n_masses, 
@@ -685,15 +861,18 @@ def save_data(
             n_dimensions=n_dimensions, 
             detectors=detectors, 
             window=window, 
-            return_windowed_coeffs=return_windowed_coeffs)
+            return_windowed_coeffs=return_windowed_coeffs,
+            basis_type=basis_type,
+            data_type=data_type)
 
         #t_label = np.array(labels)[split_ind*data_split : (split_ind + 1)*data_split]
         #t_positions = np.array(positions)[split_ind*data_split : (split_ind + 1)*data_split]
         #t_strain = np.array(strain)[split_ind*data_split : (split_ind + 1)*data_split]
 
         data_size = len(t_strain)
+        t_split_ind = split_ind + start_index
 
-        with h5py.File(os.path.join(data_dir, f"data_{split_ind}_{data_size}.hdf5"), "w") as f:
+        with h5py.File(os.path.join(data_dir, f"data_{t_split_ind}_{data_size}.hdf5"), "w") as f:
             f.create_dataset("labels", data=np.array(t_labels))
             f.create_dataset("strain", data=np.array(t_strain))
             f.create_dataset("positions", data=np.array(t_positions))
@@ -708,7 +887,8 @@ def load_data(
     detectors: list = ["H1", "L1", "V1"],
     window = False,
     return_windowed_coeffs = False,
-    basis_type = "chebyshev"
+    basis_type = "chebyshev",
+    data_type: str = "random"
     ):
 
     data_path = get_data_path(
@@ -719,7 +899,8 @@ def load_data(
         n_dimensions = n_dimensions,
         detectors = detectors,
         window = window,
-        return_windowed_coeffs = False)
+        return_windowed_coeffs = False,
+        data_type=data_type)
 
     data_dir = os.path.join(data_dir, data_path)
 
@@ -755,13 +936,15 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--datadir", type=str, required=False, default="none")
     parser.add_argument("-ds", "--datasplit", type=int, required=False, default=100000)
     parser.add_argument("-ne", "--nexamples", type=int, required=False, default=100000)
-    parser.add_argument("-po", "--polyorder", type=int, required=False, default=6)
+    parser.add_argument("-bo", "--basisorder", type=int, required=False, default=6)
     parser.add_argument("-nm", "--nmasses", type=int, required=False, default=2)
     parser.add_argument("-sr", "--samplerate", type=int, required=False, default=128)
     parser.add_argument("-nd", "--ndimensions", type=int, required=False, default=3)
     parser.add_argument("-ndt", "--ndetectors", type=int, required=False, default=3)
     parser.add_argument("-w", "--window", type=str, required=False, default="none")
     parser.add_argument("-rws", "--returnwindowedcoeffs", type=bool, required=False, default=False)
+    parser.add_argument("-bt", "--basis-type", type=str, required=False, default="chebyshev")
+    parser.add_argument("-dt", "--data-type", type=str, required=False, default="random")
 
     args = parser.parse_args()
 
@@ -771,13 +954,15 @@ if __name__ == "__main__":
         data_dir = args.datadir, 
         data_split = args.datasplit,
         n_examples = args.nexamples,
-        basis_order = args.polyorder,
+        basis_order = args.basisorder,
         n_masses = args.nmasses,
         sample_rate = args.samplerate,
         n_dimensions = args.ndimensions,
         detectors = dets[:int(args.ndetectors)],
         window = args.window,
-        return_windowed_coeffs = args.returnwindowedcoeffs
+        return_windowed_coeffs = args.returnwindowedcoeffs,
+        basis_type = args.basis_type,
+        data_type = args.data_type
         )
 
     """
