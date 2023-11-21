@@ -106,7 +106,7 @@ def run_testing(config:dict) -> None:
         detectors=config["detectors"], 
         window=config["window"], 
         return_windowed_coeffs=config["return_windowed_coeffs"],
-        basis_type=config["basis_type"],
+        basis_type = config["basis_type"],
         data_type = config["data_type"]
         )
 
@@ -116,8 +116,8 @@ def run_testing(config:dict) -> None:
         print("WARNING: Normalising to different value")
         strain, norm_factor = normalise_data(strain, None)
 
-    
     """
+    print(labels)
     t_mass, t_coeff = samples_to_positions_masses(
                 torch.from_numpy(labels[:1]), 
                 config["n_masses"],
@@ -147,8 +147,9 @@ def run_testing(config:dict) -> None:
     ax[2].plot(source_tseries[:, 2].T, ls="--", color="r")
 
     fig.savefig(os.path.join(config["root_dir"], "test_pos0.png"))
-    """
     
+    sys.exit()
+    """
     acc_basis_order = cshape
 
     n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
@@ -515,13 +516,12 @@ def test_model_3d(
                 n_dimensions, 
                 basis_type=basis_type)
 
+            """
             fig, ax = plt.subplots()
             ax.plot(source_tseries[0][0], color="k", label="truth")
             #ax.plot(recon_tseries[0][0], ls="--", color="r", label="remake")
             fig.savefig(os.path.join(root_dir, "test_pos2.png"))
-
-            #sys.exit()
-            
+            """
             recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs = get_strain_from_samples(
                 times, 
                 recon_masses,

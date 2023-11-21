@@ -567,7 +567,10 @@ def generate_random_data(
             # this is so can get back to order is 1/2 n_samples
             acc_basis_order += 2
 
-    output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses), dtype=dtype)
+    if basis_type == "fourier":
+        output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses))
+    else:
+        output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses))
     positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
     all_dynamics = np.zeros((n_data, n_masses, n_dimensions, win_basis_order), dtype=dtype)
 
@@ -576,7 +579,8 @@ def generate_random_data(
         masses = generate_masses(n_masses)
 
         #all_dynamics = np.zeros((n_masses, n_dimensions, win_basis_order), dtype=dtype)
-        output_coeffs_mass[data_index, -n_masses:] = masses
+        #output_coeffs_mass[data_index, -n_masses:] = masses
+        temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
         for mass_index in range(n_masses):
 
             random_coeffs = generate_random_coefficients(
@@ -600,15 +604,18 @@ def generate_random_data(
 
             if return_windowed_coeffs:
                 if basis_type == "fourier":
-                    flat_coeffs = torch.view_as_real(torch.from_numpy(flat_coeffs)).flatten()
-                output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = flat_coeffs
+                    flat_coeffs = torch.view_as_real(torch.from_numpy(flat_coeffs.T)).flatten(start_dim=1).T
+                temp_output_coeffs[mass_index] = random_flat_coeffs.T
+                #output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = flat_coeffs
                 all_dynamics[data_index, mass_index] = coeffs.T
             else:
                 if basis_type == "fourier":
-                    random_flat_coeffs = torch.view_as_real(torch.from_numpy(random_flat_coeffs)).flatten()
-                output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = random_flat_coeffs
+                    random_coeffs = torch.view_as_real(torch.from_numpy(random_coeffs.T)).flatten(start_dim=1).T
+                temp_output_coeffs[mass_index] = random_coeffs.T
+                #output_coeffs_mass[data_index, acc_basis_order*mass_index*n_dimensions:acc_basis_order*n_dimensions*(mass_index+1)] = random_flat_coeffs
                 all_dynamics[data_index, mass_index] = coeffs.T
 
+            output_coeffs_mass[data_index] = np.append(temp_output_coeffs.flatten(), masses)
             positions[data_index, mass_index] = basis[basis_type]["val"](times, coeffs)
 
         if n_dimensions == 1:

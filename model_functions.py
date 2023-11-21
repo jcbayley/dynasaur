@@ -51,7 +51,8 @@ def create_models(config, device):
         detectors=config["detectors"], 
         window=config["window"], 
         return_windowed_coeffs=config["return_windowed_coeffs"],
-        basis_type=config["basis_type"])
+        basis_type=config["basis_type"],
+        data_type=config["data_type"])
 
 
     n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
@@ -142,7 +143,9 @@ def load_models(config, device):
         n_dimensions=config["n_dimensions"], 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"])
+        return_windowed_coeffs=config["return_windowed_coeffs"],
+        basis_type=config["basis_type"],
+        data_type=config["data_type"])
 
     if config["basis_type"] == "fourier":
         n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]

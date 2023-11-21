@@ -70,7 +70,7 @@ def newton_derivative_vect(
     masses, 
     factor=1, 
     n_dimensions=3, 
-    EPS=1e-13,
+    EPS=1e-11,
     second_scale=86400,
     mass_scale=1.989e30,
     distance_scale=1.4e11,
@@ -181,20 +181,24 @@ def solve_ode(
         rtol = 1e-5)
     
     if max(outputs.t) < max(times):
-        outputs.t = np.append(outputs.t, max(times))
+        outputs.t = np.append(outputs.t, max(times)+0.1)
         outputs.y = np.append(outputs.y.T, outputs.y[:, -1:].T, axis=0).T
 
+    # y is shape (ntimes, )
     positions = outputs.y[:, :]
     interp_positions = interpolate_positions(outputs.t, times, positions).T
     interp_positions = interp_positions.reshape(len(times), n_masses, 2*n_dimensions)[:,:,:3]
 
+    interp_positions = interp_positions - np.mean(interp_positions, axis=0)[None,:,:]
 
     return times, interp_positions, masses
 
 if __name__ == "__main__":
 
     
-    times, outputs, masses = solve_ode()
+    times, outputs, masses = solve_ode(
+        n_samples=512
+    )
 
     #print(outputs)
 
