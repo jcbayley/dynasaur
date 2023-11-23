@@ -16,7 +16,7 @@ from zuko.flows import (
 )
 from zuko.distributions import DiagNormal
 import numpy as np
-from data_generation import (
+from massdynamics.data_generation import (
     data_generation,
 )
 import torch
