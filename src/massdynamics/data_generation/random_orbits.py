@@ -1,7 +1,7 @@
 import numpy as np
 from massdynamics.basis_functions import basis
 import massdynamics.window_functions as window_functions
-from mass_dynamics.data_generation import (
+from massdynamics.data_generation import (
     data_generation,
     compute_waveform,
     data_processing
