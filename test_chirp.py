@@ -10,19 +10,21 @@ from data_generation import (
     compute_strain_from_coeffs, 
     perform_window, 
     basis, 
-    compute_energy_loss
+    compute_energy_loss,
+    get_time_dynamics,
+    get_waveform,
+    get_strain_from_samples,
+    normalise_data,
+    samples_to_positions_masses,
 )
 import data_generation
 import make_animations as animations
 import plotting
 from model_functions import (
-    get_dynamics,
-    samples_to_positions_masses,
     create_models,
     load_models, 
-    get_strain_from_samples,
-    normalise_data
 )
+
 import zuko
 import argparse
 import copy
@@ -132,13 +134,18 @@ def generate_m1m2_pos_1d(times, m1, m2, tc, orientation="xy"):
 
     positions = np.array([m1pos,])
 
-    positions = positions/np.max(positions)
+    positions = 0.5*positions/np.max(positions)
 
     norm_masses = np.array([m1,])/np.sum([m1,])
 
     return norm_masses, positions
 
-def fit_positions_with_polynomial(times, positions, basis_order=8, window="none", basis_type="chebyshev"):
+def fit_positions_with_polynomial(
+    times, 
+    positions, 
+    basis_order=8, 
+    window="none", 
+    basis_type="chebyshev"):
     """fit the 3d positions with a polynomial
 
     Args:
@@ -153,61 +160,59 @@ def fit_positions_with_polynomial(times, positions, basis_order=8, window="none"
     """
   
     n_masses, n_dimensions, n_cheby = np.shape(positions)
-
+    dtype = np.float64
     if basis_type == "fourier":
-        basis_order += 2
+        basis_order = int(basis_order/2 + 1)
+        dtype = complex
 
     if window == "none" or not window:
-        cheb_dynamics = np.zeros((n_masses, n_dimensions, basis_order))
+        basis_dynamics = np.zeros((n_masses, n_dimensions, basis_order), dtype=dtype)
     else:
-        cheb_dynamics = []
+        basis_dynamics = []
 
     for mind in range(n_masses):
-        temp_dyn = np.zeros((basis_order, n_dimensions))
+        # this way around as fit to second last dimensions
+        temp_dyn = np.zeros((n_dimensions, basis_order), dtype=dtype)
         for dimind in range(3):
             dimfit = basis[basis_type]["fit"](
                 times, 
                 positions[mind, dimind], 
                 basis_order-1)
-            
-            if basis_type == "fourier":
-                dimfit = torch.view_as_real(torch.from_numpy(dimfit)).flatten()
-                temp_dyn[:,dimind] = dimfit
-            else:
-                temp_dyn[:,dimind] = dimfit
 
+            temp_dyn[dimind] = dimfit
+            
         if window != "none":
             temp_dyn2, win_coeffs = perform_window(
                 times, 
-                temp_dyn, 
+                temp_dyn.T, 
                 window, 
                 order=basis_order, 
                 basis_type=basis_type)
-            print(np.shape(temp_dyn), np.shape(temp_dyn2))
-            cheb_dynamics.append(temp_dyn2.T)
+            basis_dynamics.append(temp_dyn2)
         else:
-            cheb_dynamics[mind] = temp_dyn.T
+            basis_dynamics[mind] = temp_dyn
 
 
-    cheb_dynamics = np.array(cheb_dynamics)
+    basis_dynamics = np.array(basis_dynamics, dtype=dtype)
 
-    return cheb_dynamics
+    return basis_dynamics
 
-def get_ts_dynamics(times, cheb_dynamics, basis_type="chebyshev"):
+"""
+def get_ts_dynamics(times, basis_dynamics, basis_type="chebyshev"):
 
-    n_masses, n_dimensions, n_coeffs = np.shape(cheb_dynamics)
+    n_masses, n_dimensions, n_coeffs = np.shape(basis_dynamics)
     timeseries_dynamics = np.zeros((n_masses,n_dimensions,len(times)))
     for i in range(n_masses):
         for j in range(n_dimensions):
-            timeseries_dynamics[i,j] = basis[basis_type]["val"](times, cheb_dynamics[i,j])
+            timeseries_dynamics[i,j] = basis[basis_type]["val"](times, basis_dynamics[i,j])
         
     return timeseries_dynamics
 
-def get_waveform(times, norm_masses, cheb_dynamics, detectors, basis_type="chebyshev"):
+def get_waveform(times, norm_masses, basis_dynamics, detectors, basis_type="chebyshev"):
 
-    strain_coeffs = compute_hTT_coeffs(norm_masses, cheb_dynamics, basis_type=basis_type)
+    strain_coeffs = compute_hTT_coeffs(norm_masses, basis_dynamics, basis_type=basis_type)
 
-    energy = compute_energy_loss(times, norm_masses, cheb_dynamics, basis_type=basis_type)
+    energy = compute_energy_loss(times, norm_masses, basis_dynamics, basis_type=basis_type)
 
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):
@@ -216,14 +221,14 @@ def get_waveform(times, norm_masses, cheb_dynamics, detectors, basis_type="cheby
         strain_timeseries[dind] = strain
     
     return strain_timeseries, energy
-
+"""
 def test_different_orientations(times, m1, m2, tc, basis_order, detectors, window="none", basis_type="chebyshev", root_dir="./"):
 
     orientations = ["xy", "yx", "yy", "offz"]
     positions = {}
     strain_timeseries = {}
     energy = {}
-    cheb_dynamics = {}
+    basis_dynamics = {}
     norm_masses = {}
     dynamics = {}
     for orient in orientations:
@@ -235,26 +240,25 @@ def test_different_orientations(times, m1, m2, tc, basis_order, detectors, windo
             tc, 
             orientation=orient)
 
-        #if orient == "xz":
-        #    norm_masses["xz"] = 1.5*norm_masses["xz"]
-        cheb_dynamics[orient] = fit_positions_with_polynomial(
+        
+        basis_dynamics[orient] = fit_positions_with_polynomial(
             times, 
             positions[orient], 
             basis_order=basis_order, 
             window=window, 
             basis_type=basis_type)
         
-        dynamics[orient] = get_ts_dynamics(
+        dynamics[orient] = get_time_dynamics(
             times, 
-            cheb_dynamics[orient], 
+            basis_dynamics[orient], 
             basis_type=basis_type)
         
-        print(np.shape(cheb_dynamics[orient]))
+        print(np.shape(basis_dynamics[orient]))
 
         strain_timeseries[orient], energy[orient] = get_waveform(
             times, 
             norm_masses[orient], 
-            cheb_dynamics[orient], 
+            basis_dynamics[orient], 
             detectors, 
             basis_type=basis_type)
 
@@ -299,7 +303,7 @@ def test_1and2_masses(times, m1, m2, tc, basis_order, detectors, window="none", 
     positions = {}
     strain_timeseries = {}
     energy = {}
-    cheb_dynamics = {}
+    basis_dynamics = {}
     norm_masses = {}
     dynamics = {}
     for orient in orientations:
@@ -319,7 +323,7 @@ def test_1and2_masses(times, m1, m2, tc, basis_order, detectors, window="none", 
             norm_masses[orient] = norm_masses[orient][1:]  
 
         print("shpo", np.shape(positions[orient]))
-        cheb_dynamics[orient] = fit_positions_with_polynomial(
+        basis_dynamics[orient] = fit_positions_with_polynomial(
             times, 
             positions[orient], 
             basis_order=basis_order, 
@@ -328,15 +332,13 @@ def test_1and2_masses(times, m1, m2, tc, basis_order, detectors, window="none", 
         
         dynamics[orient] = get_ts_dynamics(
             times, 
-            cheb_dynamics[orient], 
+            basis_dynamics[orient], 
             basis_type=basis_type)
-        
-        print(np.shape(cheb_dynamics[orient]))
 
         strain_timeseries[orient], energy[orient] = get_waveform(
             times, 
             norm_masses[orient], 
-            cheb_dynamics[orient], 
+            basis_dynamics[orient], 
             detectors, 
             basis_type=basis_type)
 
@@ -386,7 +388,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], basis_order
 
     norm_masses, positions = generate_m1m2_pos(times, m1, m2, tc)
 
-    cheb_dynamics = fit_positions_with_polynomial(
+    basis_dynamics = fit_positions_with_polynomial(
         times, 
         positions, 
         basis_order=basis_order, 
@@ -394,12 +396,22 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], basis_order
         basis_type=basis_type)
 
 
+    # test to bring values withing training range
+    print(np.max(basis_dynamics))
+    max_dyn = np.max(basis_dynamics)
+    norm_basis_dynamics = basis_dynamics/max_dyn
+
+
     print("masses",norm_masses)
 
     # change to mass, dim, order
-    #cheb_dynamics = np.transpose(coeffs, (0,2,1))
+    #basis_dynamics = np.transpose(coeffs, (0,2,1))
 
-    timeseries_dynamics = get_ts_dynamics(times, cheb_dynamics, basis_type=basis_type)
+    timeseries_dynamics = get_time_dynamics(
+        basis_dynamics, 
+        times, 
+        basis_type=basis_type
+        )
 
     fig, ax = plt.subplots(nrows=3)
     ax[0].plot(times, timeseries_dynamics[0,0])
@@ -408,7 +420,13 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], basis_order
     fig.savefig(os.path.join(root_dir, "chirp_positions.png"))
 
 
-    strain_timeseries, energy = get_waveform(times, norm_masses, cheb_dynamics, detectors, basis_type="chebyshev")
+    strain_timeseries, energy = get_waveform(
+        times, 
+        norm_masses, 
+        norm_basis_dynamics, 
+        detectors, 
+        basis_type=basis_type,
+        compute_energy=True)
 
     fig, ax = plt.subplots(nrows=3)
     ax[0].plot(times, strain_timeseries[0])
@@ -417,7 +435,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], basis_order
     fig.savefig(os.path.join(root_dir, "chirp_strain.png"))
 
 
-    return positions, cheb_dynamics, timeseries_dynamics, strain_timeseries, energy
+    return positions, norm_basis_dynamics, timeseries_dynamics, strain_timeseries, energy, max_dyn
 
 def run_chirp_test(config, mass1=5000, mass2=5000):
 
@@ -461,7 +479,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     
     sys.exit()
     """
-    dynamics, cheb_dynamics, all_dynamics, data, energy = chirp_positions(
+    dynamics, norm_basis_dynamics, all_dynamics, data, energy, max_dyn = chirp_positions(
         times, 
         m1, 
         m2, 
@@ -472,8 +490,21 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         root_dir=plot_out,
         basis_type=basis_type)
 
+    basis_dynamics = norm_basis_dynamics*max_dyn
+    print("basis_dynamics", norm_basis_dynamics)
+
+    fig, ax = plt.subplots()
+    ts = np.arange(int(basis_order/2 + 1))
+    ax.plot(ts, norm_basis_dynamics[:,0,:].T)
+    ax.plot(ts, norm_basis_dynamics[:,1,:].T)
+    ax.plot(ts, norm_basis_dynamics[:,2,:].T)
+    ax.fill_between(ts, np.exp(-config["fourier_weight"]*ts)*-1, np.exp(-config["fourier_weight"]*ts)*1, alpha = 0.5)
+    fig.savefig(os.path.join(plot_out, "basis_prior.png"))
+
     data, norm_factor = normalise_data(data, pre_model.norm_factor)    
     print("normfactor", norm_factor)
+
+    #data = data/100
 
     n_masses = 2
     n_dimensions = 3
@@ -481,9 +512,9 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     animations.make_3d_animation(plot_out, 100, all_dynamics, 0.01*np.array([m1,m2]), None, None)
 
     
-    reconstructx = basis[basis_type]["val"](times, cheb_dynamics[0][0])
-    reconstructy = basis[basis_type]["val"](times, cheb_dynamics[0][1])
-    reconstructz = basis[basis_type]["val"](times, cheb_dynamics[0][2])
+    reconstructx = basis[basis_type]["val"](times, basis_dynamics[0][0])
+    reconstructy = basis[basis_type]["val"](times, basis_dynamics[0][1])
+    reconstructz = basis[basis_type]["val"](times, basis_dynamics[0][2])
 
     fig, ax = plt.subplots(nrows=3)
     ax[0].plot(dynamics[0,0])
@@ -512,6 +543,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
 
     m_recon_tseries, m_recon_masses = np.zeros((nsamples, n_masses, n_dimensions, len(times))), np.zeros((nsamples, n_masses))
     m_recon_strain = np.zeros((nsamples, 3, len(times)))
+
     multi_mass_samples, multi_coeff_samples = samples_to_positions_masses(
                 multi_coeffmass_samples[:,0], 
                 n_masses,
@@ -520,13 +552,11 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
                 basis_type=basis_type)
 
     for i in range(nsamples):
-        t_co, t_mass, t_time = get_dynamics(
+        t_co = multi_coeff_samples[i]*max_dyn
+        t_mass = multi_mass_samples[i]
+        t_time = get_time_dynamics(
             multi_coeff_samples[i],
-            multi_mass_samples[i], 
-            times, 
-            n_masses, 
-            basis_order, 
-            n_dimensions, 
+            times,  
             basis_type=basis_type)
 
         
@@ -593,7 +623,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
                 source_masses,
                 fname=os.path.join(plot_out,f"massdistributions_{batch}.png"))
 
-            
+    print(np.max(m_recon_tseries), np.min(m_recon_tseries))
     animations.line_of_sight_animation(
                 m_recon_tseries, 
                 m_recon_masses, 

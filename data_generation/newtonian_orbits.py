@@ -4,6 +4,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import time
 import timeit
+from ..basis.basis import basis
 
 def newton_derivative(
     t, 
@@ -189,9 +190,123 @@ def solve_ode(
     interp_positions = interpolate_positions(outputs.t, times, positions).T
     interp_positions = interp_positions.reshape(len(times), n_masses, 2*n_dimensions)[:,:,:3]
 
-    interp_positions = interp_positions - np.mean(interp_positions, axis=0)[None,:,:]
+    interp_positions = interp_positions - np.mean(interp_positions, axis=(0, 1))[None,None,:]
 
     return times, interp_positions, masses
+
+
+def generate_newton_data(
+    n_data: int, 
+    basis_order: int, 
+    n_masses:int, 
+    sample_rate: int, 
+    n_dimensions: int = 3, 
+    detectors=["H1"], 
+    window="none", 
+    return_windowed_coeffs=True, 
+    basis_type="chebyshev",) -> np.array:
+    """_summary_
+
+    Args:
+        n_data (int): number of data samples to generate
+        n_order (int): order of polynomials 
+        n_masses (int): number of masses in system
+        sample_rate (int): sample rate of data
+
+    Returns:
+        np.array: _description_
+    """
+
+    if basis_type == "fourier":
+        dtype = complex
+    else:
+        dtype = np.float64
+
+    ntimeseries = [0, 1, 3, 6, 10]
+
+    strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
+
+    times = np.arange(-1,1,2/sample_rate)
+
+    times, coeffs, masses = solve_ode(
+        n_masses=n_masses, 
+        n_dimensions=n_dimensions, 
+        n_samples=len(times))
+
+    print(np.shape(coeffs))
+
+
+    if return_windowed_coeffs:  
+        win_basis_order = np.shape(coeffs)[0]
+        acc_basis_order = np.shape(coeffs)[0]
+    else:
+        win_basis_order = np.shape(coeffs)[0]
+        acc_basis_order = basis_order
+
+        if basis_type == "fourier":
+            # plus 2 as plus 1 in the real and imaginary in coeff gen
+            # this is so can get back to order is 1/2 n_samples
+            acc_basis_order += 2
+
+    output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses))
+    positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
+    if basis_type == "fourier":
+        all_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*acc_basis_order)), dtype=dtype)
+    else:
+        all_dynamics = np.zeros((n_data, n_masses, n_dimensions, acc_basis_order), dtype=dtype)
+
+    for data_index in range(n_data):
+
+        if data_index %2 == 0:
+            print(data_index)
+        times, temp_position, masses = solve_ode(
+            n_masses=n_masses, 
+            n_dimensions=n_dimensions, 
+            n_samples=len(times))
+        # position shape (n_samples, n_masses, n_dimensions)
+
+        temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
+        for mass_index in range(n_masses):
+            if basis_type=="fourier":
+                temp_dyn = basis[basis_type]["fit"](
+                    times,
+                    temp_position[:,mass_index,:].T,
+                    basis_order
+                    )
+            else:
+                temp_dyn = basis[basis_type]["fit"](
+                    times,
+                    temp_position[:,mass_index,:],
+                    basis_order-1
+                    ).T
+            all_dynamics[data_index, mass_index] = temp_dyn
+
+            if basis_type == "fourier":
+                temp_dyn = torch.view_as_real(torch.from_numpy(temp_dyn))
+                tdshape = temp_dyn.shape
+                temp_dyn = temp_dyn.flatten(start_dim=1)#temp_dyn.reshape(tdshape[0], tdshape[1]*tdshape[2])
+           
+            temp_output_coeffs[mass_index] = temp_dyn
+
+        output_coeffs_mass[data_index] = np.append(temp_output_coeffs.flatten(), masses)
+
+        positions[data_index] = np.transpose(temp_position, (1, 2, 0))
+
+        if n_dimensions == 3:
+            temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics[data_index], basis_type=basis_type)
+
+            for dind, detector in enumerate(detectors):
+                strain = compute_strain_from_coeffs(times, temp_strain_timeseries, detector, basis_type=basis_type)
+                window = signal.windows.tukey(np.shape(strain)[-1], alpha=0.5)
+                # shape (n_dims, n_times)
+                #strain_timeseries[data_index][dind] = strain * window[None, :]
+                strain_timeseries[data_index][dind] = strain
+
+        else:
+            raise Exception("Only runs for three dimensional data")
+
+    return times, output_coeffs_mass, strain_timeseries, acc_basis_order, positions, all_dynamics
+
 
 if __name__ == "__main__":
 

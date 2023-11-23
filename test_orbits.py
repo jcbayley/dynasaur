@@ -8,7 +8,14 @@ from data_generation import generate_data, compute_hTT_coeffs, compute_strain_fr
 import data_generation
 import make_animations as animations
 import plotting
-from train_model import get_dynamics, create_model, load_models, get_strain_from_samples
+from train_model import get_dynamics, get_strain_from_samples
+from create_model import create_models, load_models
+from data_generation import (
+    data_generation,
+    compute_waveform,
+    data_processing
+)
+
 import zuko
 import argparse
 import copy
