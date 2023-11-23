@@ -1,5 +1,11 @@
 import numpy as np
 from massdynamics.basis_functions import basis
+import massdynamics.window_functions as window_functions
+from mass_dynamics.data_generation import (
+    data_generation,
+    compute_waveform,
+    data_processing
+)
 
 def generate_random_coefficients(
     order: int, 
@@ -47,7 +53,7 @@ def generate_masses(n_masses: int) -> np.array:
 
     return masses
 
-def generate_random_data(
+def generate_data(
     n_data: int, 
     basis_order: int, 
     n_masses:int, 
@@ -88,7 +94,7 @@ def generate_random_data(
         fourier_weight=fourier_weight)
 
     if window != False and window != None or window != "none":
-        coeffs, win_coeffs = perform_window(times, random_coeffs, window, basis_type=basis_type)
+        coeffs, win_coeffs = window_functions.perform_window(times, random_coeffs, window, basis_type=basis_type)
     else:
         coeffs = random_coeffs
 
@@ -138,7 +144,7 @@ def generate_random_data(
 
             all_basis_dynamics[data_index, mass_index] = coeffs.T 
 
-        strain_timeseries[data_index], energy = get_waveform(
+        strain_timeseries[data_index], energy = compute_waveform.get_waveform(
             times, 
             masses, 
             all_basis_dynamics[data_index], 
@@ -146,13 +152,13 @@ def generate_random_data(
             basis_type=basis_type,
             compute_energy=False)
 
-        all_time_dynamics[data_index] = get_time_dynamics(
+        all_time_dynamics[data_index] = compute_waveform.get_time_dynamics(
             all_basis_dynamics[data_index], 
             times, 
             basis_type=basis_type)
 
 
-    output_coeffs_mass = positions_masses_to_samples(
+    output_coeffs_mass = data_processing.positions_masses_to_samples(
         all_basis_dynamics,
         all_masses,
         basis_type = basis_type

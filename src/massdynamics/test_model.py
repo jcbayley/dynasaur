@@ -6,7 +6,7 @@ from massdynamics.data_generation import (
 )
 
 from massdynamics.plotting import plotting, make_animations
-from mass_dynamics.basis_functions import basis
+from massdynamics.basis_functions import basis
 
 
 

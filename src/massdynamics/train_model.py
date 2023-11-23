@@ -15,7 +15,7 @@ import torch.nn as nn
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-import plotting
+import massdynamics.plotting as plotting
 import json
 import argparse
 import copy
