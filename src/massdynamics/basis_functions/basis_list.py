@@ -1,5 +1,5 @@
 import numpy as np
-import fourier_basis_functions
+from massdynamics.basis_functions import fourier_basis_functions
 
 basis = {
     "chebyshev":{

@@ -17,14 +17,7 @@ from zuko.flows import (
 from zuko.distributions import DiagNormal
 import numpy as np
 from data_generation import (
-    generate_data, 
-    generate_strain_coefficients, 
-    compute_strain_from_coeffs, 
-    window_coeffs, 
-    perform_window, 
-    compute_hTT_coeffs,
-    basis, 
-    compute_energy_loss
+    data_generation,
 )
 import torch
 import torch.nn as nn
@@ -42,7 +35,7 @@ def create_models(config, device):
         tuple of models: (pre_model, model)
     """
 
-    times, labels, strain, cshape, positions, all_dynamics = generate_data(
+    times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 
@@ -135,7 +128,7 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, labels, strain, cshape, positions, all_dynamics = generate_data(
+    times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 

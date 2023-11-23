@@ -1,0 +1,25 @@
+[project]
+name = "massdynamics"
+description = "compute mass dynamics from strain"
+version = "0.0.1"
+readme = "README.rst"
+authors = [
+    { name = "Joseph Bayley", email = "joseph.bayley@glasgow.ac.uk" }
+]
+dependencies = [
+    "torch",
+    "numpy",
+    "scipy",
+    "matplotlib"
+]
+
+[project.optional-dependencies]
+dev = [
+    "tox",
+    "pre-commit",
+    "bump2version"
+]
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"

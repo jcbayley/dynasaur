@@ -1,7 +1,7 @@
 import torch
 import numpy as np
-import compute_waveform
-import ..window_functions
+import massdynamics.data_generation.compute_waveform
+import massdynamics.window_functions
 
 def normalise_data(strain, norm_factor = None):
     """normalise the data to the maximum strain in all data

@@ -4,23 +4,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import os
-from data_generation import (
-    generate_data, 
-    compute_hTT_coeffs, 
-    compute_strain_from_coeffs, 
-    perform_window, 
-    basis, 
-    compute_energy_loss,
-    get_time_dynamics,
-    get_waveform,
-    get_strain_from_samples,
-    normalise_data,
-    samples_to_positions_masses,
+from massdynamics.data_generation import (
+    data_generation,
+    data_processing,
+    compute_waveform
 )
 import data_generation
 import make_animations as animations
 import plotting
-from model_functions import (
+from massdynamics.model_functions import (
     create_models,
     load_models, 
 )

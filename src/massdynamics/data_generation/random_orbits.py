@@ -1,4 +1,5 @@
-
+import numpy as np
+from massdynamics.basis_functions import basis
 
 def generate_random_coefficients(
     order: int, 

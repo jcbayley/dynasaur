@@ -1,22 +1,20 @@
 import zuko
-from data_generation import (
-    data_generation
+from massdynamics.data_generation import (
+    data_generation,
+    compute_waveform,
+    data_processing
 )
-import compute_waveform
-from basis_functions.basis import basis
-import create_model
-from plotting import plotting, make_animations
+from massdynamics.basis_functions import basis
+import massdynamics.create_model
+from massdynamics.plotting import plotting, make_animations
 from scipy import signal
-from test_model import run_testing
+from massdynamics.test_model import run_testing
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-#from make_animations import make_2d_animation, make_2d_distribution, make_3d_animation, make_3d_distribution
-import make_animations as animations
 import plotting
 import json
 import argparse

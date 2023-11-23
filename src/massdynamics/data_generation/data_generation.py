@@ -7,10 +7,10 @@ import argparse
 import h5py
 import os
 import torch
-import .newtonian_orbits
-import .kepler_orbits
-import .random_orbits
-from ..basis.basis import basis
+from massdynamics.data_generation import newtonian_orbits
+from massdynamics.data_generation import kepler_orbits
+from massdynamics.data_generation import random_orbits
+from massdynamics.basis_functions import basis
 
 
 def generate_data(
@@ -73,7 +73,7 @@ def get_data_path(
     data_type: str = "random"
     ):
 
-    path = os.path.join(f"data_{data_type}_{basis_type}{basis_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}"
+    path = os.path.join(f"data_{data_type}_{basis_type}{basis_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}")
 
     return path
 

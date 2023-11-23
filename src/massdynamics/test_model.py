@@ -1,11 +1,12 @@
 import torch
-from data_generation import (
+from massdynamics.data_generation import (
     data_generation,
     data_processing,
     compute_waveform,
 )
 
-from plotting import plotting, make_animations
+from massdynamics.plotting import plotting, make_animations
+from mass_dynamics.basis_functions import basis
 
 
 

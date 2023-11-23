@@ -1,6 +1,6 @@
 import scipy
 import numpy as np
-from basis import basis
+from massdynamics.basis_functions import basis
 
 
 def fit_cheby_to_hann(times, order=6, basis_type="chebyshev"):
