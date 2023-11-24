@@ -92,11 +92,12 @@ def get_initial_conditions(n_samples, n_masses, n_dimensions):
 
     return np.random.uniform(-1,1,size=(n_samples, n_masses, 2*n_dimensions))
 
-def generate_kepler_orbit(num_orbits, semi_major_axes, eccentricities, inclinations, G, M):
+def generate_kepler_orbit(times, semi_major_axes, eccentricities, inclinations, G, M):
     
     # Generate initial conditions for Keplerian orbits
     positions = []
     velocities = []
+    num_orbits = len(semi_major_axes)
 
     for i in range(num_orbits):
         # Semi-major axis (in meters)
@@ -112,10 +113,10 @@ def generate_kepler_orbit(num_orbits, semi_major_axes, eccentricities, inclinati
         period = np.sqrt(4 * np.pi**2 * a**3 / (G * M))
 
         # Generate an array of time points covering one orbit
-        t = 0#np.linspace(0, period, 1000)
+        #t = 0#np.linspace(0, period, 1000)
 
         # Calculate mean anomaly
-        mean_anomaly = 2 * np.pi * t / period
+        mean_anomaly = 2 * np.pi * times / period
 
         # Solve Kepler's equation for eccentric anomaly
         eccentric_anomaly = np.arctan2(np.sqrt(1 - e**2) * np.sin(mean_anomaly), e + np.cos(mean_anomaly))
@@ -149,7 +150,7 @@ def generate_kepler_orbit(num_orbits, semi_major_axes, eccentricities, inclinati
 
     return positions, velocities
 
-def scale_initial_conditions(initial_conditions, second_scale, distance_scale, mass_scale):
+def unnormalise_initial_conditions(initial_conditions, second_scale, distance_scale, mass_scale):
     """scale initial conditions from 0-1 to those with units
 
     Args:
@@ -166,7 +167,7 @@ def scale_initial_conditions(initial_conditions, second_scale, distance_scale, m
 
     return initial_conditions
 
-def unscale_initial_conditions(initial_conditions, second_scale, distance_scale, mass_scale):
+def normalise_initial_conditions(initial_conditions, second_scale, distance_scale, mass_scale):
     """rescale init conditions with units back to 0-1
 
     Args:
@@ -200,11 +201,14 @@ def interpolate_positions(old_times, new_times, positions):
     return interp_dict
 
 
-def generate_data(n_samples):
+def generate_data(
+    n_samples,
+    detectors = ["H1", "L1", "V1"],
+    basis_order = 16,
+    basis_type = "fourier",
+    n_dimensions = 3):
 
-    G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
-    M = 1.989e30     # mass of the sun (kg)
-
+    n_detectors = len(detectors)
     # scale to 1 year
     second_scale = 86400
     # between 0 and au/100
@@ -212,9 +216,15 @@ def generate_data(n_samples):
     # between 0 and 100 solar masses
     mass_scale = 1.989e30
 
+    G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
+    c = 3e8
+    M = 1*mass_scale     # mass of the sun (kg)
+
     G_scaled = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
     c_scaled = c * ((second_scale**2)/(distance_scale))
+    n_masses = 1
 
+    """
     normed_initial_conditions = get_initial_conditions(
         n_samples,
         n_masses, 
@@ -226,69 +236,50 @@ def generate_data(n_samples):
         distance_scale,
         mass_scale
     )
-
+    """
     masses = get_masses(n_samples, n_masses)
 
+    # priors currently fixed
+    times = np.linspace(0,5e7, basis_order)
+    n_times = len(times)
+
+    semi_major_axes = np.random.uniform(0.1,1,size=n_samples)*distance_scale
+    eccentricities = np.random.uniform(0.0,0.9,size=n_samples)
+    inclinations = np.random.uniform(0.0,2*np.pi,size=n_samples)
+
+    positions, velocities = generate_kepler_orbit(
+        times, 
+        semi_major_axes, 
+        eccentricities, 
+        inclinations, 
+        G, 
+        M)
+
+    # currently shape (n_samples, n_dimensions, n_times)
+    initial_positions = np.vstack([positions, velocities])
+    # now shape (n_samples, n_masses, n_dimensions, n_times)
+    initial_positions = np.expand_dims(initial_positions, 1)
+
+
+    return times, initial_positions, masses
 
 if __name__ == "__main__":
 
-    
-    times, outputs, masses = solve_ode(
-        n_samples=512
-    )
+    n_orbits = 5
+    times, positions, masses = generate_data(
+        n_orbits,
+        detectors = ["H1", "L1", "V1"],
+        basis_order = 128,
+        basis_type = "fourier",
+        n_dimensions = 3)
 
     #print(outputs)
-
+    print(np.shape(positions))
     fig, ax = plt.subplots()
+    ax.plot(0,0,marker="o", ms=5)
+    for i in range(n_orbits):
+        ax.plot(positions[i, 0, 0, :], positions[i, 0, 1, :], markersize = 2, marker="o")
+    fig.savefig("./test_orbits.png")
 
-    ax.plot(outputs[:, 0, 0], outputs[:, 0, 1], markersize = masses[0]*1e-2, marker="o")
-    ax.plot(outputs[:, 1, 0], outputs[:, 1, 1], markersize = masses[1]*1e-2, marker="o")
-    ax.plot(outputs[0, 0, 0], outputs[0, 0, 1], markersize = masses[0]*1, marker="o", color="k")
-    ax.plot(outputs[0, 1, 0], outputs[0, 1, 1], markersize = masses[1]*1, marker="o", color="k")
 
-    fig.savefig("./test_ode.png")
-
-    
-    second = 1./(24*3600)
-    times = np.linspace(0,2*second,128)
-
-    initial_conditions = get_initial_conditions(2, 3)
-    initial_conditions[:,3:6] *= 1e4
-    masses = get_masses(2)*4e3
-
-    # scale to 1 year
-    second_scale = 86400
-    # between 0 and au/100
-    distance_scale = 1.4e11*1e-4
-    # between 0 and 100 solar masses
-    mass_scale = 1.989e30*100
-
-    start_time = time.time()
-    der1 = lambda: newton_derivative_vect(
-        times[0], 
-        initial_conditions.flatten(), 
-        masses,
-        n_dimensions=3,
-        second_scale=second_scale,
-        distance_scale=distance_scale,
-        mass_scale=mass_scale)
-    print("vectorised", time.time() - start_time)
-
-    start_time = time.time()
-    der2 = lambda: newton_derivative(
-        times[0], 
-        initial_conditions.flatten(), 
-        masses,
-        n_dimensions=3,
-        second_scale=second_scale,
-        distance_scale=distance_scale,
-        mass_scale=mass_scale)
-
-    print("loops", time.time() - start_time)
-
-    t1 = timeit.timeit(der1, number=10000)
-    t2 = timeit.timeit(der2, number=10000)
-    print("vec,loop", t1, t2 )
-
-    #print(der1 - der2)
     

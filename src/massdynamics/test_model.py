@@ -1,8 +1,16 @@
 import torch
+from torch.utils.data import TensorDataset, DataLoader, random_split
+import os
+import numpy as np
+import copy
 from massdynamics.data_generation import (
     data_generation,
     data_processing,
-    compute_waveform,
+    compute_waveform
+)
+from massdynamics.create_model import (
+    load_models,
+    create_models
 )
 
 from massdynamics.plotting import plotting, make_animations
@@ -33,10 +41,10 @@ def run_testing(config:dict) -> None:
         )
 
     try:
-        strain, norm_factor = data_generation.normalise_data(strain, pre_model.norm_factor)
+        strain, norm_factor = data_processisng.normalise_data(strain, pre_model.norm_factor)
     except:
         print("WARNING: Normalising to different value")
-        strain, norm_factor = data_generation.normalise_data(strain, None)
+        strain, norm_factor = data_processing.normalise_data(strain, None)
 
     """
     print(labels)
@@ -363,7 +371,7 @@ def test_model_3d(
             multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu()
 
             print(multi_coeffmass_samples.shape)
-            multi_mass_samples, multi_coeff_samples = samples_to_positions_masses(
+            multi_mass_samples, multi_coeff_samples = data_processing.samples_to_positions_masses(
                 multi_coeffmass_samples[:,0], 
                 n_masses,
                 basis_order,
@@ -373,7 +381,7 @@ def test_model_3d(
             #print("multishape", multi_coeffmass_samples.shape)
             m_recon_masses = np.zeros((nsamples, n_masses))
             m_recon_tseries = np.zeros((nsamples, n_masses, n_dimensions, len(times)))
-            m_recon_strain = np.zeros((nsamples, len(config["detectors"]), len(times)))
+            m_recon_strain = np.zeros((nsamples, len(detectors), len(times)))
             #m_recon_energy = np.zeros((nsamples, len(times)))
             for i in range(nsamples):
                 #print(np.shape(multi_coeffmass_samples[i]))
@@ -392,11 +400,11 @@ def test_model_3d(
                     t_co, 
                     None, 
                     detectors=["H1","L1","V1"],
-                    return_windowed_coeffs=config["return_windowed_coeffs"], 
-                    window=config["window"], 
-                    basis_type=config["basis_type"])
+                    return_windowed_coeffs=return_windowed_coeffs, 
+                    window=window, 
+                    basis_type=basis_type)
 
-                temp_recon_strain, _ = data_proccessing.normalise_data(temp_recon_strain, pre_model.norm_factor)
+                temp_recon_strain, _ = data_processing.normalise_data(temp_recon_strain, pre_model.norm_factor)
 
                 m_recon_strain[i] = temp_recon_strain
                 #m_recon_energy[i] = temp_recon_energy
@@ -439,7 +447,7 @@ def test_model_3d(
             print("source_Strain", np.shape(source_strain))
             plotting.plot_sampled_reconstructions(
                 times, 
-                config["detectors"], 
+                detectors, 
                 m_recon_strain, 
                 source_strain, 
                 fname = os.path.join(plot_out,f"recon_strain_dist_{batch}.png"))

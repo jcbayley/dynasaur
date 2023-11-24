@@ -27,7 +27,7 @@ def generate_data(
     fourier_weight=0.0):
 
     if data_type == "random":
-        return random_orbits.generate_data(
+        times, postitions, masses = random_orbits.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 
@@ -39,7 +39,7 @@ def generate_data(
                 basis_type=basis_type,
                 fourier_weight=fourier_weight)
     elif data_type == "newton":
-        return newtonian_orbits.generate_data(
+        times, positions, masses = newtonian_orbits.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 
@@ -50,7 +50,7 @@ def generate_data(
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type)
     elif data_type == "kepler":
-        return kepler_orbits.generate_data(
+        times, positions, masses = kepler_orbits.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 
@@ -60,6 +60,53 @@ def generate_data(
                 window=window, 
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type)
+
+
+    output_coeffs_mass = np.zeros((n_data, basis_order*n_masses*n_dimensions + n_masses))
+    all_time_dynamics = np.zeros((n_data, n_masses, n_dimensions, len(times)))
+    if basis_type == "fourier":
+        all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order+1)), dtype=dtype)
+    else:
+        all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
+    all_masses = np.zeros((n_data, n_masses))
+
+    for data_index in range(n_data):
+
+        all_masses[data_index] = masses
+
+        #temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
+        for mass_index in range(n_masses):
+
+            # if windowing applied create coeffs which are windowed else just use the random coeffs
+            if window != "none":
+                coeffs = window_coeffs(times, random_coeffs, win_coeffs, basis_type=basis_type)
+            else:
+                coeffs = random_coeffs
+
+            all_basis_dynamics[data_index, mass_index] = coeffs.T 
+
+        strain_timeseries[data_index], energy = compute_waveform.get_waveform(
+            times, 
+            masses, 
+            all_basis_dynamics[data_index], 
+            detectors, 
+            basis_type=basis_type,
+            compute_energy=False)
+
+        all_time_dynamics[data_index] = compute_waveform.get_time_dynamics(
+            all_basis_dynamics[data_index], 
+            times, 
+            basis_type=basis_type)
+
+
+    output_coeffs_mass = data_processing.positions_masses_to_samples(
+        all_basis_dynamics,
+        all_masses,
+        basis_type = basis_type
+        )
+
+    return times, output_coeffs_mass, strain_timeseries, all_time_dynamics, all_basis_dynamics
+
 
 def get_data_path(
     basis_order: int = 8,
@@ -231,37 +278,52 @@ if __name__ == "__main__":
     parser.add_argument("-bt", "--basis-type", type=str, required=False, default="chebyshev")
     parser.add_argument("-dt", "--data-type", type=str, required=False, default="random")
     parser.add_argument("-fw", "--fourier-weight", type=float, required=False, default=0.0)
+    parser.add_argument("-T" "--test-model", type=bool, required=False, default=False)
 
     args = parser.parse_args()
 
     dets = ["H1", "L1", "V1"]
 
-    save_data(
-        data_dir = args.datadir, 
-        data_split = args.datasplit,
-        n_examples = args.nexamples,
-        basis_order = args.basisorder,
-        n_masses = args.nmasses,
-        sample_rate = args.samplerate,
-        n_dimensions = args.ndimensions,
-        detectors = dets[:int(args.ndetectors)],
-        window = args.window,
-        return_windowed_coeffs = args.returnwindowedcoeffs,
-        basis_type = args.basis_type,
-        data_type = args.data_type,
-        fourier_weight = args.fourier_weight
-        )
+    if args.test_model:
+        generate_data(
+            n_data=5, 
+            basis_order=16, 
+            n_masses=1, 
+            sample_rate=16, 
+            n_dimensions = 1, 
+            detectors=["H1"], 
+            window="none", 
+            return_windowed_coeffs=True, 
+            basis_type="fourier",
+            data_type = "kepler",
+            fourier_weight=0.0)
+    else:
+        save_data(
+            data_dir = args.datadir, 
+            data_split = args.datasplit,
+            n_examples = args.nexamples,
+            basis_order = args.basisorder,
+            n_masses = args.nmasses,
+            sample_rate = args.samplerate,
+            n_dimensions = args.ndimensions,
+            detectors = dets[:int(args.ndetectors)],
+            window = args.window,
+            return_windowed_coeffs = args.returnwindowedcoeffs,
+            basis_type = args.basis_type,
+            data_type = args.data_type,
+            fourier_weight = args.fourier_weight
+            )
 
-    """
-    data = load_data(
-        data_dir = args.savedir, 
-        basis_order = args.polyorder,
-        n_masses = args.nmasses,
-        sample_rate = args.samplerate,
-        n_dimensions = args.ndimensions,
-        detectors = dets[:int(args.ndetectors)],
-        window = args.window,
-        return_windowed_coeffs = args.returnwindowedcoeffs
-        )
-    """
+        """
+        data = load_data(
+            data_dir = args.savedir, 
+            basis_order = args.polyorder,
+            n_masses = args.nmasses,
+            sample_rate = args.samplerate,
+            n_dimensions = args.ndimensions,
+            detectors = dets[:int(args.ndetectors)],
+            window = args.window,
+            return_windowed_coeffs = args.returnwindowedcoeffs
+            )
+        """
 

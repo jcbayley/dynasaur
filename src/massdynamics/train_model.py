@@ -5,8 +5,7 @@ from massdynamics.data_generation import (
     data_processing
 )
 from massdynamics.basis_functions import basis
-import massdynamics.create_model
-from massdynamics.plotting import plotting, make_animations
+import massdynamics.create_model as create_model
 from scipy import signal
 from massdynamics.test_model import run_testing
 from torch.utils.data import TensorDataset, DataLoader, random_split
@@ -15,7 +14,7 @@ import torch.nn as nn
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-import massdynamics.plotting as plotting
+from massdynamics.plotting import plotting
 import json
 import argparse
 import copy
@@ -122,14 +121,14 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     if continue_train:
         pre_model, model = create_model.load_models(config, device=config["device"])
-        strain, norm_factor = data_generation.normalise_data(strain, pre_model.norm_factor)
+        strain, norm_factor = data_processing.normalise_data(strain, pre_model.norm_factor)
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
 
         pre_model.to(config["device"])
         model.to(config["device"])
         
-        strain, norm_factor = data_generation.normalise_data(strain, None)
+        strain, norm_factor = data_processing.normalise_data(strain, None)
         pre_model.norm_factor = norm_factor
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
