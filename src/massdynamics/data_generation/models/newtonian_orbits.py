@@ -4,6 +4,8 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import time
 import timeit
+from massdynamics.basis_functions import basis
+from massdynamics.data_generation import orbits_functions
 
 def newton_derivative(
     t, 
@@ -154,13 +156,60 @@ def solve_ode(
     # scale to 1 year
     second_scale = 86400
     # between 0 and au/100
-    distance_scale = 1.4e11*2e-4
+    distance_scale = 1.4e11
     # between 0 and 100 solar masses
-    mass_scale = 1.989e30*100
+    mass_scale = 1.989e30
 
-    initial_conditions = get_initial_conditions(n_masses, n_dimensions)
-    initial_conditions[:,3:6] *= 1e4
+    G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
+    c = 3e8
+
     masses = get_masses(n_masses)
+
+    #initial_conditions = get_initial_conditions(n_masses, n_dimensions)
+    #initial_conditions[:,3:6] *= 1e4
+    initial_positions = np.random.uniform(
+        -1,
+        1, 
+        size=(n_masses, n_dimensions)
+        )
+    initial_velocities = np.random.uniform(
+        -1,
+        1, 
+        size=(n_masses, n_dimensions)
+        )
+
+    oenergy = orbits_functions.orbital_energy(
+        masses[0], 
+        masses[1], 
+        initial_positions[0]*distance_scale, 
+        initial_positions[1]*distance_scale, 
+        initial_velocities[0]*distance_scale/second_scale, 
+        initial_velocities[1]*distance_scale/second_scale, 
+        G)
+
+
+    while oenergy > 0:
+        initial_positions = np.random.uniform(
+            -1,
+            1, 
+            size=(n_masses, n_dimensions)
+            )
+        initial_velocities = np.random.uniform(
+            -1,
+            1, 
+            size=(n_masses, n_dimensions)
+            )
+
+        oenergy = orbits_functions.orbital_energy(
+            masses[0], 
+            masses[1], 
+            initial_positions[0]*distance_scale, 
+            initial_positions[1]*distance_scale, 
+            initial_velocities[0]*distance_scale/second_scale, 
+            initial_velocities[1]*distance_scale/second_scale, 
+            G)
+
+    initial_conditions = np.concatenate([initial_positions, initial_velocities], axis=-1)
 
     ode = lambda t, x: newton_derivative_vect(
         t, 
@@ -189,9 +238,51 @@ def solve_ode(
     interp_positions = interpolate_positions(outputs.t, times, positions).T
     interp_positions = interp_positions.reshape(len(times), n_masses, 2*n_dimensions)[:,:,:3]
 
-    interp_positions = interp_positions - np.mean(interp_positions, axis=0)[None,:,:]
+    interp_positions = interp_positions - np.mean(interp_positions, axis=(0, 1))[None,None,:]
 
     return times, interp_positions, masses
+
+
+def generate_data(
+    n_data: int, 
+    basis_order: int, 
+    n_masses:int, 
+    sample_rate: int, 
+    n_dimensions: int = 3, 
+    detectors=["H1"], 
+    window="none", 
+    return_windowed_coeffs=True, 
+    basis_type="chebyshev",) -> np.array:
+    """_summary_
+
+    Args:
+        n_data (int): number of data samples to generate
+        n_order (int): order of polynomials 
+        n_masses (int): number of masses in system
+        sample_rate (int): sample rate of data
+
+    Returns:
+        np.array: _description_
+    """
+
+    if basis_type == "fourier":
+        dtype = complex
+    else:
+        dtype = np.float64
+
+    ntimeseries = [0, 1, 3, 6, 10]
+
+    strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
+
+    times = np.linspace(-1,1,sample_rate)
+
+    times, coeffs, masses = solve_ode(
+        n_masses=n_masses, 
+        n_dimensions=n_dimensions, 
+        n_samples=len(times))
+
+
+    return times, initial_positions, masses, None
 
 if __name__ == "__main__":
 
