@@ -31,7 +31,7 @@ def generate_random_coefficients(
         halforder = int(order/2) + 1
         coefficients = np.zeros((halforder,n_dimensions), dtype=basis[basis_type]["dtype"])
         for i in range(halforder):
-            coefficients[i] = np.exp(-0.9*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
+            coefficients[i] = np.exp(-fourier_weight*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
 
     return coefficients
 
@@ -134,8 +134,14 @@ def generate_data(
                 basis_order, 
                 n_dimensions,
                 basis_type = basis_type,
-                fourier_weight=0.0)
-            all_basis_dynamics[data_index, mass_index] = coeffs.T 
+                fourier_weight=fourier_weight)
+
+            if window != "none":
+                coeffs = window_coeffs(times, random_coeffs, win_coeffs, basis_type=basis_type)
+            else:
+                coeffs = random_coeffs
+                
+            all_basis_dynamics[data_index, mass_index] = random_coeffs.T 
         
         
     """

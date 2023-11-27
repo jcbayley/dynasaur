@@ -8,11 +8,13 @@ import h5py
 import os
 import torch
 from massdynamics.data_generation import (
-    newtonian_orbits,
-    kepler_orbits,
-    random_orbits,
     compute_waveform,
     data_processing,
+)
+from massdynamics.data_generation.models import (
+    random_orbits,
+    newtonian_orbits,
+    kepler_orbits
 )
 from massdynamics.basis_functions import basis
 

@@ -387,6 +387,7 @@ def get_time_dynamics(
         tuple: (coefficients, masses, timeseries)
     """
     n_masses, n_dimensions, n_coeffs = np.shape(coeff_samples)
+    # has to be reordered due to how the np polynomial computes val on a matrix
     tseries = basis[basis_type]["val"](times, np.transpose(coeff_samples, (2, 0, 1)))
     """
     tseries = np.zeros((n_masses, n_dimensions, len(times)))

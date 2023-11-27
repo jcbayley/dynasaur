@@ -244,7 +244,7 @@ def generate_data(
     times = np.linspace(0,5e7, sample_rate)
     n_times = len(times)
 
-    semi_major_axes = np.random.uniform(0.1,1,size=n_samples)*distance_scale
+    semi_major_axes = np.random.uniform(0.3,1,size=n_samples)*distance_scale
     eccentricities = np.random.uniform(0.0,0.9,size=n_samples)
     inclinations = np.random.uniform(0.0,2*np.pi,size=n_samples)
 

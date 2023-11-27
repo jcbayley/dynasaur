@@ -17,6 +17,20 @@ def normalise_data(strain, norm_factor = None):
     
     return np.array(strain)/norm_factor, norm_factor
 
+def unnormalise_data(strain, norm_factor = None):
+    """normalise the data to the maximum strain in all data
+
+    Args:
+        strain (_type_): strain array
+
+    Returns:
+        _type_: normalised strain
+    """
+    if norm_factor is None:
+        norm_factor = np.max(strain)
+    
+    return np.array(strain)*norm_factor, norm_factor
+
 def complex_to_real(input_array):
 
     output_array = np.concatenate(
@@ -108,10 +122,8 @@ def samples_to_positions_masses(
 
 def get_strain_from_samples(
     times, 
-    recon_masses, 
-    source_masses,
-    recon_coeffs, 
-    source_coeffs, 
+    masses, 
+    coeffs, 
     detectors=["H1"],
     return_windowed_coeffs=False, 
     window="none", 
@@ -134,45 +146,27 @@ def get_strain_from_samples(
     """
     # if there is a window and I and not predicting the windowed coefficients
    
-    n_masses, n_coeffs, n_dimensions = np.shape(recon_coeffs)
+    n_masses, n_coeffs, n_dimensions = np.shape(coeffs)
     if not return_windowed_coeffs and window != "none":
-        n_recon_coeffs = []
-        n_source_coeffs = []
+        n_coeffs = []
         # for each mass perform the window on the xyz positions (acceleration)
         for mass in range(n_masses):
-            temp_recon, win_coeffs = window_functions.perform_window(times, recon_coeffs[mass], window, basis_type=basis_type)
-            n_recon_coeffs.append(temp_recon)
-            if source_coeffs is not None:
-                temp_source, win_coeffs = window_functions.perform_window(times, source_coeffs[mass], window, basis_type=basis_type)
-                n_source_coeffs.append(temp_source)
-            
-
+            temp_recon, win_coeffs = window_functions.perform_window(times, coeffs[mass], window, basis_type=basis_type)
+            n_coeffs.append(temp_recon)
         
         # update the coefficients with the windowed version
-        recon_coeffs = np.array(n_recon_coeffs)
-        if source_coeffs is not None:
-            source_coeffs = np.array(n_source_coeffs)
+        coeffs = np.array(n_coeffs)
 
 
-    recon_strain, recon_energy = compute_waveform.get_waveform(
+    strain, energy = compute_waveform.get_waveform(
         times, 
-        recon_masses, 
-        recon_coeffs, 
+        masses, 
+        coeffs, 
         detectors, 
         basis_type=basis_type,
         compute_energy=True
     )
 
-    source_strain, source_energy = None, None
-    if source_coeffs is not None:
-        source_strain, source_energy = compute_waveform.get_waveform(
-            times, 
-            source_masses, 
-            source_coeffs, 
-            detectors, 
-            basis_type=basis_type,
-            compute_energy=True
-        )
 
-    return recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs
+    return strain, energy, coeffs
 

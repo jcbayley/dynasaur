@@ -98,6 +98,69 @@ def test_complex_real():
 
     print(samples - rsamps)
 
+def test_strain_reconstruct():
+
+    n_data = 1
+    n_masses = 2
+    n_dimensions = 3
+    basis_order = 16
+    sample_rate = 128
+    basis_type = "fourier"
+    detectors = ["H1"]
+
+    times, positions, masses, position_coeffs = kepler_orbits.generate_data(
+                n_data,
+                detectors = detectors,
+                n_masses=n_masses,
+                basis_order = basis_order,
+                basis_type = basis_type,
+                n_dimensions = n_dimensions,
+                sample_rate = sample_rate)
+
+    strain_timeseries, energy = compute_waveform.get_waveform(
+            times, 
+            masses[0], 
+            all_basis_dynamics[0], 
+            detectors, 
+            basis_type=basis_type,
+            compute_energy=False)
+
+    recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs = data_processing.get_strain_from_samples(
+                times, 
+                recon_masses,
+                source_masses, 
+                recon_coeffs, 
+                source_coeffs, 
+                detectors=detectors,
+                return_windowed_coeffs=return_windowed_coeffs, 
+                window=window, 
+                basis_type=basis_type)
+
+
+    t_mass, t_coeff = data_processing.samples_to_positions_masses(
+                label[:1].cpu().numpy(), 
+                n_masses,
+                basis_order,
+                n_dimensions,
+                basis_type)
+
+    #print(np.shape(label), np.shape(coeffmass_samples))
+    #print(np.shape(coeff_samples), np.shape(t_coeff))
+    source_coeffs = t_coeff[0]
+    source_masses = t_mass[0]
+    
+    source_strain, source_energy,source_coeffs = data_processing.get_strain_from_samples(
+        times, 
+        source_masses,  
+        source_coeffs, 
+        detectors=detectors,
+        return_windowed_coeffs=return_windowed_coeffs, 
+        window=window, 
+        basis_type=basis_type)
+
+
+    source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
+
 if __name__ == "__main__":
 
     test_complex_real()

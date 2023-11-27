@@ -69,7 +69,7 @@ def create_models(config, device):
 
     # Flow creation
 
-    if config["custom_flow"]:
+    if config["flow_model_type"] == "custom":
         bins = config["nsplines"]
         randperm = False
         orders = [
@@ -107,6 +107,13 @@ def create_models(config, device):
             base=base
             ).to(config["device"])
         
+    elif config["flow_model_type"] == "cnf":
+        model = zuko.flows.spline.CNF(
+            n_features, 
+            context=n_context, 
+            transforms=config["ntransforms"],  
+            hidden_features=config["hidden_features"]
+            ).to(config["device"])
     else:
         model = zuko.flows.spline.NSF(
             n_features, 
@@ -158,10 +165,12 @@ def load_models(config, device):
 
     model.load_state_dict(weights["model_state_dict"])
 
+    pre_model.norm_factor = weights["norm_factor"]
+    """
     if "norm_factor" in weights:
         pre_model.norm_factor = weights["norm_factor"]
     else:
         pre_model.norm_factor = 1.0
-
+    """
     return pre_model, model
 

@@ -40,11 +40,8 @@ def run_testing(config:dict) -> None:
         fourier_weight=config["fourier_weight"]
         )
 
-    try:
-        strain, norm_factor = data_processisng.normalise_data(strain, pre_model.norm_factor)
-    except:
-        print("WARNING: Normalising to different value")
-        strain, norm_factor = data_processing.normalise_data(strain, None)
+    strain, norm_factor = data_processing.normalise_data(strain, pre_model.norm_factor)
+
 
     """
     print(labels)
@@ -316,20 +313,38 @@ def test_model_3d(
             #ax.plot(recon_tseries[0][0], ls="--", color="r", label="remake")
             fig.savefig(os.path.join(root_dir, "test_pos2.png"))
             """
-            recon_strain, source_strain, recon_energy, source_energy, recon_coeffs, source_coeffs = data_processing.get_strain_from_samples(
+
+
+            recon_strain, recon_energy, recon_coeffs = data_processing.get_strain_from_samples(
                 times, 
                 recon_masses,
-                source_masses, 
                 recon_coeffs, 
+                detectors=detectors,
+                return_windowed_coeffs=return_windowed_coeffs, 
+                window=window, 
+                basis_type=basis_type)
+            """
+            source_strain, source_energy = compute_waveform.get_waveform(
+                times, 
+                source_masses, 
+                source_coeffs, 
+                detectors, 
+                basis_type=basis_type,
+                compute_energy=False)
+            """
+            
+            source_strain, source_energy,source_coeffs = data_processing.get_strain_from_samples(
+                times, 
+                source_masses,  
                 source_coeffs, 
                 detectors=detectors,
                 return_windowed_coeffs=return_windowed_coeffs, 
                 window=window, 
                 basis_type=basis_type)
-
+            
             recon_strain, _ = data_processing.normalise_data(recon_strain, pre_model.norm_factor)
             source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
-
+            source_plot_data = data[0].cpu().numpy()
             #window = signal.windows.tukey(np.shape(source_strain)[-1], alpha=0.5)
             #recon_strain = recon_strain * window[None, :]
 
@@ -338,7 +353,7 @@ def test_model_3d(
                             detectors, 
                             recon_strain, 
                             source_strain, 
-                            data[0].cpu().numpy(), 
+                            source_plot_data, 
                             source_energy,
                             recon_energy,
                             fname = os.path.join(plot_out, f"reconstructed_{batch}.png"))
@@ -393,12 +408,10 @@ def test_model_3d(
                 m_recon_tseries[i] = t_time
                 m_recon_masses[i] = t_mass
 
-                temp_recon_strain, temp_recon_energy, _, _, temp_m_recon_coeffs, _ = data_processing.get_strain_from_samples(
+                temp_recon_strain, temp_recon_energy, temp_m_recon_coeffs = data_processing.get_strain_from_samples(
                     times, 
                     t_mass,
-                    None,
-                    t_co, 
-                    None, 
+                    t_co,  
                     detectors=["H1","L1","V1"],
                     return_windowed_coeffs=return_windowed_coeffs, 
                     window=window, 
