@@ -277,7 +277,7 @@ def test_model_3d(
             coeffmass_samples = model(input_data).sample().cpu()
 
             mass_samples, coeff_samples = data_processing.samples_to_positions_masses(
-                coeffmass_samples, 
+                coeffmass_samples.numpy(), 
                 n_masses,
                 basis_order,
                 n_dimensions,
@@ -287,7 +287,7 @@ def test_model_3d(
             #print(coeff_samples[0, 1, :, 0])
 
             t_mass, t_coeff = data_processing.samples_to_positions_masses(
-                label[:1].cpu(), 
+                label[:1].cpu().numpy(), 
                 n_masses,
                 basis_order,
                 n_dimensions,
@@ -370,9 +370,9 @@ def test_model_3d(
             n_animate_samples = 50
             multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu()
 
-            print(multi_coeffmass_samples.shape)
+            print("mmsamples", multi_coeffmass_samples.shape, multi_coeffmass_samples.dtype)
             multi_mass_samples, multi_coeff_samples = data_processing.samples_to_positions_masses(
-                multi_coeffmass_samples[:,0], 
+                multi_coeffmass_samples[:,0].numpy(), 
                 n_masses,
                 basis_order,
                 n_dimensions,

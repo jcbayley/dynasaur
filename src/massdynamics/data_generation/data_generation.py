@@ -7,9 +7,13 @@ import argparse
 import h5py
 import os
 import torch
-from massdynamics.data_generation import newtonian_orbits
-from massdynamics.data_generation import kepler_orbits
-from massdynamics.data_generation import random_orbits
+from massdynamics.data_generation import (
+    newtonian_orbits,
+    kepler_orbits,
+    random_orbits,
+    compute_waveform,
+    data_processing,
+)
 from massdynamics.basis_functions import basis
 
 
@@ -27,7 +31,7 @@ def generate_data(
     fourier_weight=0.0):
 
     if data_type == "random":
-        times, postitions, masses = random_orbits.generate_data(
+        times, postitions, masses, position_coeffs = random_orbits.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 
@@ -39,7 +43,7 @@ def generate_data(
                 basis_type=basis_type,
                 fourier_weight=fourier_weight)
     elif data_type == "newton":
-        times, positions, masses = newtonian_orbits.generate_data(
+        times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 
@@ -50,44 +54,63 @@ def generate_data(
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type)
     elif data_type == "kepler":
-        times, positions, masses = kepler_orbits.generate_data(
-                n_data, 
-                basis_order, 
-                n_masses, 
-                sample_rate, 
-                n_dimensions, 
-                detectors=detectors, 
-                window=window, 
-                return_windowed_coeffs=return_windowed_coeffs, 
-                basis_type=basis_type)
+        times, positions, masses, position_coeffs = kepler_orbits.generate_data(
+                n_data,
+                detectors = detectors,
+                n_masses=n_masses,
+                basis_order = basis_order,
+                basis_type = basis_type,
+                n_dimensions = n_dimensions,
+                sample_rate = sample_rate)
+    else:
+        raise Exception(f"No data with name {data_type}")
 
+    if basis_type == "fourier":
+        dtype = complex
+    else:
+        dtype = np.float64
 
     output_coeffs_mass = np.zeros((n_data, basis_order*n_masses*n_dimensions + n_masses))
     all_time_dynamics = np.zeros((n_data, n_masses, n_dimensions, len(times)))
+    strain_timeseries = np.zeros((n_data, len(detectors), len(times)))
     if basis_type == "fourier":
-        all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order+1)), dtype=dtype)
+        all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
     else:
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
+
     all_masses = np.zeros((n_data, n_masses))
 
     for data_index in range(n_data):
 
-        all_masses[data_index] = masses
+        all_masses[data_index] = masses[data_index]
 
         #temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
         for mass_index in range(n_masses):
+            if position_coeffs is None:
+                if basis_type=="fourier":
+                    temp_coeffs = basis[basis_type]["fit"](
+                        times,
+                        positions[data_index, mass_index, :, :],
+                        int(0.5*basis_order + 1)
+                        )
+                else:
+                    temp_coeffs = basis[basis_type]["fit"](
+                        times,
+                        positions[data_index,mass_index, :, :],
+                        basis_order-1
+                        ).T
+            else:
+                temp_coeffs = position_coeffs[data_index, mass_index]
 
             # if windowing applied create coeffs which are windowed else just use the random coeffs
             if window != "none":
-                coeffs = window_coeffs(times, random_coeffs, win_coeffs, basis_type=basis_type)
-            else:
-                coeffs = random_coeffs
-
-            all_basis_dynamics[data_index, mass_index] = coeffs.T 
+                temp_coeffs = window_coeffs(times, temp_coeffs, win_coeffs, basis_type=basis_type)
+            
+            all_basis_dynamics[data_index, mass_index] = temp_coeffs
 
         strain_timeseries[data_index], energy = compute_waveform.get_waveform(
             times, 
-            masses, 
+            masses[data_index], 
             all_basis_dynamics[data_index], 
             detectors, 
             basis_type=basis_type,
@@ -105,7 +128,9 @@ def generate_data(
         basis_type = basis_type
         )
 
-    return times, output_coeffs_mass, strain_timeseries, all_time_dynamics, all_basis_dynamics
+    samples_shape, feature_shape = np.shape(output_coeffs_mass)
+
+    return times, output_coeffs_mass, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
 
 
 def get_data_path(

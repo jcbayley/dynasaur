@@ -17,6 +17,22 @@ def normalise_data(strain, norm_factor = None):
     
     return np.array(strain)/norm_factor, norm_factor
 
+def complex_to_real(input_array):
+
+    output_array = np.concatenate(
+        [
+            np.real(input_array)[..., None], 
+            np.imag(input_array)[..., None]
+        ], 
+        axis=-1)
+    
+    return output_array
+
+def real_to_complex(input_array):
+
+    output_array = input_array[...,0] + 1j*input_array[...,1]
+
+    return output_array
 
 def positions_masses_to_samples(
     coeff_samples: np.array,
@@ -37,15 +53,18 @@ def positions_masses_to_samples(
     """
 
     if basis_type == "fourier":
-        coeff_samples = torch.view_as_real(torch.from_numpy(coeff_samples)).flatten(start_dim=-1)
+        #coeff_samples = torch.view_as_real(torch.from_numpy(coeff_samples)).flatten(start_dim=-1)
+        output_coeffs = complex_to_real(coeff_samples).reshape(np.shape(coeff_samples)[0], -1)
     else:
-        coeff_samples = torch.from_numpy(coeff_samples)
+        output_coeffs = coeff_samples.reshape(np.shape(coeff_samples)[0], -1)
     # flatten all dimensions apart from 1st which is samples
-    output_coeffs = coeff_samples.flatten(start_dim=1)
+    #output_coeffs = coeff_samples.flatten(start_dim=1)
     # append masses to the flattened output coefficients 
-    output_coeffs = torch.cat([output_coeffs, torch.from_numpy(mass_samples)], dim=1)
 
-    return output_coeffs.numpy()
+    output_coeffs = np.concatenate([output_coeffs, mass_samples], axis=1)
+
+    return output_coeffs
+
 
 def samples_to_positions_masses(
     coeffmass_samples, 
@@ -65,17 +84,24 @@ def samples_to_positions_masses(
     Returns:
         _type_: masses (Nsamples, Nmasses), coeffs (Nsamples, Nmasses, Ndimensions, Ncoeffs)
     """
-    masses = coeffmass_samples[:, -n_masses:].numpy()
+    masses = coeffmass_samples[:, -n_masses:]
     if basis_type == "fourier":
         sshape = np.shape(coeffmass_samples[:, :-n_masses])
-        coeffs = coeffmass_samples[:, :-n_masses].reshape(sshape[0], n_masses, n_dimensions, int(basis_order/2 + 1), 2)
-        coeffs = torch.view_as_complex(coeffs).numpy()
+
+        coeffs = coeffmass_samples[:, :-n_masses].reshape(
+            sshape[0], 
+            n_masses, 
+            n_dimensions, 
+            int(basis_order/2 + 1), 
+            2)
+        #coeffs = torch.view_as_complex(coeffs).numpy()
+        coeffs = real_to_complex(coeffs)
         # plus 1 on basis order as increased coeffs to return same ts samples
         # also divide half as half basis size when complex number
         #coeffs = np.transpose(coeffs, (0,1,3,2))
         #coeffs = coeffs.reshape(sshape[0], n_masses, int(0.5*basis_order+1), n_dimensions)
     else:
-        coeffs = coeffmass_samples[:,:-n_masses].reshape(-1,n_masses,basis_order, n_dimensions)
+        coeffs = coeffmass_samples[:,:-n_masses].reshape(-1,n_masses, n_dimensions, basis_order)
 
     return masses, coeffs
 

@@ -27,6 +27,34 @@ def compute_orbital_energy(position, velocity, G, M, m):
 
     return total_energy
 
+def orbital_energy(M1, M2, r1, r2, v1, v2, G):
+    """
+    Compute the orbital energy of two orbiting objects.
+
+    Parameters:
+    - M1, M2: masses of the two objects
+    - r1, r2: positions of the two objects as numpy arrays
+    - v1, v2: velocities of the two objects as numpy arrays
+
+    Returns:
+    - Orbital energy (float)
+    """
+    G = 6.67430e-11  # Gravitational constant in m^3 kg^(-1) s^(-2)
+
+    # Calculate the relative position and velocity vectors
+    relative_position = r1 - r2
+    relative_velocity = v1 - v2
+
+    # Calculate the reduced mass
+    mu = (M1 * M2) / (M1 + M2)
+
+    # Calculate the orbital energy
+    kinetic_energy = 0.5 * mu * np.dot(relative_velocity, relative_velocity)
+    potential_energy = - (G * M1 * M2) / np.linalg.norm(relative_position)
+
+    energy = kinetic_energy + potential_energy
+    return energy
+
 def compute_angular_momentum(position, velocity, m):
     """compute total angular momentum as a function of time
 

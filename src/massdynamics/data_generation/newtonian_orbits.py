@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import time
 import timeit
 from massdynamics.basis_functions import basis
+from massdynamics.data_generation import orbits_functions
 
 def newton_derivative(
     t, 
@@ -155,13 +156,60 @@ def solve_ode(
     # scale to 1 year
     second_scale = 86400
     # between 0 and au/100
-    distance_scale = 1.4e11*2e-4
+    distance_scale = 1.4e11
     # between 0 and 100 solar masses
-    mass_scale = 1.989e30*100
+    mass_scale = 1.989e30
 
-    initial_conditions = get_initial_conditions(n_masses, n_dimensions)
-    initial_conditions[:,3:6] *= 1e4
+    G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
+    c = 3e8
+
     masses = get_masses(n_masses)
+
+    #initial_conditions = get_initial_conditions(n_masses, n_dimensions)
+    #initial_conditions[:,3:6] *= 1e4
+    initial_positions = np.random.uniform(
+        -1,
+        1, 
+        size=(n_masses, n_dimensions)
+        )
+    initial_velocities = np.random.uniform(
+        -1,
+        1, 
+        size=(n_masses, n_dimensions)
+        )
+
+    oenergy = orbits_functions.orbital_energy(
+        masses[0], 
+        masses[1], 
+        initial_positions[0]*distance_scale, 
+        initial_positions[1]*distance_scale, 
+        initial_velocities[0]*distance_scale/second_scale, 
+        initial_velocities[1]*distance_scale/second_scale, 
+        G)
+
+
+    while oenergy > 0:
+        initial_positions = np.random.uniform(
+            -1,
+            1, 
+            size=(n_masses, n_dimensions)
+            )
+        initial_velocities = np.random.uniform(
+            -1,
+            1, 
+            size=(n_masses, n_dimensions)
+            )
+
+        oenergy = orbits_functions.orbital_energy(
+            masses[0], 
+            masses[1], 
+            initial_positions[0]*distance_scale, 
+            initial_positions[1]*distance_scale, 
+            initial_velocities[0]*distance_scale/second_scale, 
+            initial_velocities[1]*distance_scale/second_scale, 
+            G)
+
+    initial_conditions = np.concatenate([initial_positions, initial_velocities], axis=-1)
 
     ode = lambda t, x: newton_derivative_vect(
         t, 
@@ -195,7 +243,7 @@ def solve_ode(
     return times, interp_positions, masses
 
 
-def generate_newton_data(
+def generate_data(
     n_data: int, 
     basis_order: int, 
     n_masses:int, 
@@ -226,87 +274,15 @@ def generate_newton_data(
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
 
-    times = np.arange(-1,1,2/sample_rate)
+    times = np.linspace(-1,1,sample_rate)
 
     times, coeffs, masses = solve_ode(
         n_masses=n_masses, 
         n_dimensions=n_dimensions, 
         n_samples=len(times))
 
-    print(np.shape(coeffs))
 
-
-    if return_windowed_coeffs:  
-        win_basis_order = np.shape(coeffs)[0]
-        acc_basis_order = np.shape(coeffs)[0]
-    else:
-        win_basis_order = np.shape(coeffs)[0]
-        acc_basis_order = basis_order
-
-        if basis_type == "fourier":
-            # plus 2 as plus 1 in the real and imaginary in coeff gen
-            # this is so can get back to order is 1/2 n_samples
-            acc_basis_order += 2
-
-    output_coeffs_mass = np.zeros((n_data, acc_basis_order*n_masses*n_dimensions + n_masses))
-    positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
-    if basis_type == "fourier":
-        all_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*acc_basis_order)), dtype=dtype)
-    else:
-        all_dynamics = np.zeros((n_data, n_masses, n_dimensions, acc_basis_order), dtype=dtype)
-
-    for data_index in range(n_data):
-
-        if data_index %2 == 0:
-            print(data_index)
-        times, temp_position, masses = solve_ode(
-            n_masses=n_masses, 
-            n_dimensions=n_dimensions, 
-            n_samples=len(times))
-        # position shape (n_samples, n_masses, n_dimensions)
-
-        temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
-        for mass_index in range(n_masses):
-            if basis_type=="fourier":
-                temp_dyn = basis[basis_type]["fit"](
-                    times,
-                    temp_position[:,mass_index,:].T,
-                    basis_order
-                    )
-            else:
-                temp_dyn = basis[basis_type]["fit"](
-                    times,
-                    temp_position[:,mass_index,:],
-                    basis_order-1
-                    ).T
-            all_dynamics[data_index, mass_index] = temp_dyn
-
-            if basis_type == "fourier":
-                temp_dyn = torch.view_as_real(torch.from_numpy(temp_dyn))
-                tdshape = temp_dyn.shape
-                temp_dyn = temp_dyn.flatten(start_dim=1)#temp_dyn.reshape(tdshape[0], tdshape[1]*tdshape[2])
-           
-            temp_output_coeffs[mass_index] = temp_dyn
-
-        output_coeffs_mass[data_index] = np.append(temp_output_coeffs.flatten(), masses)
-
-        positions[data_index] = np.transpose(temp_position, (1, 2, 0))
-
-        if n_dimensions == 3:
-            temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics[data_index], basis_type=basis_type)
-
-            for dind, detector in enumerate(detectors):
-                strain = compute_strain_from_coeffs(times, temp_strain_timeseries, detector, basis_type=basis_type)
-                window = signal.windows.tukey(np.shape(strain)[-1], alpha=0.5)
-                # shape (n_dims, n_times)
-                #strain_timeseries[data_index][dind] = strain * window[None, :]
-                strain_timeseries[data_index][dind] = strain
-
-        else:
-            raise Exception("Only runs for three dimensional data")
-
-    return times, output_coeffs_mass, strain_timeseries, acc_basis_order, positions, all_dynamics
-
+    return times, initial_positions, masses, None
 
 if __name__ == "__main__":
 

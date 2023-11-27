@@ -85,7 +85,7 @@ def generate_data(
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
 
-    times = np.arange(-1,1,2/sample_rate)
+    times = np.linspace(-1,1,sample_rate)
 
     random_coeffs = generate_random_coefficients(
         basis_order, 
@@ -135,7 +135,10 @@ def generate_data(
                 n_dimensions,
                 basis_type = basis_type,
                 fourier_weight=0.0)
-
+            all_basis_dynamics[data_index, mass_index] = coeffs.T 
+        
+        
+    """
             # if windowing applied create coeffs which are windowed else just use the random coeffs
             if window != "none":
                 coeffs = window_coeffs(times, random_coeffs, win_coeffs, basis_type=basis_type)
@@ -163,7 +166,8 @@ def generate_data(
         all_masses,
         basis_type = basis_type
         )
+    """
 
 
-
-    return times, output_coeffs_mass, strain_timeseries, acc_basis_order, all_time_dynamics, all_basis_dynamics
+    return times, None, all_masses, all_basis_dynamics
+    #return times, output_coeffs_mass, strain_timeseries, acc_basis_order, all_time_dynamics, all_basis_dynamics

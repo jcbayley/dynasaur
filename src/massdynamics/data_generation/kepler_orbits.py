@@ -190,7 +190,7 @@ def get_masses(n_samples, n_masses):
 
     masses = np.random.uniform(0,1,size=(n_samples, n_masses))
     masssum = np.sum(masses, axis=1)
-    return masses/masssum[None, :]
+    return masses/masssum[:, None]
 
 def interpolate_positions(old_times, new_times, positions):
     """Interpolate between points """
@@ -205,8 +205,10 @@ def generate_data(
     n_samples,
     detectors = ["H1", "L1", "V1"],
     basis_order = 16,
+    n_masses = 1,
     basis_type = "fourier",
-    n_dimensions = 3):
+    n_dimensions = 3,
+    sample_rate=16):
 
     n_detectors = len(detectors)
     # scale to 1 year
@@ -222,7 +224,6 @@ def generate_data(
 
     G_scaled = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
     c_scaled = c * ((second_scale**2)/(distance_scale))
-    n_masses = 1
 
     """
     normed_initial_conditions = get_initial_conditions(
@@ -240,7 +241,7 @@ def generate_data(
     masses = get_masses(n_samples, n_masses)
 
     # priors currently fixed
-    times = np.linspace(0,5e7, basis_order)
+    times = np.linspace(0,5e7, sample_rate)
     n_times = len(times)
 
     semi_major_axes = np.random.uniform(0.1,1,size=n_samples)*distance_scale
@@ -255,18 +256,21 @@ def generate_data(
         G, 
         M)
 
+    positions = np.array(positions)/distance_scale
+    velocities = np.array(velocities)*second_scale/distance_scale
+
     # currently shape (n_samples, n_dimensions, n_times)
     initial_positions = np.vstack([positions, velocities])
     # now shape (n_samples, n_masses, n_dimensions, n_times)
     initial_positions = np.expand_dims(initial_positions, 1)
 
 
-    return times, initial_positions, masses
+    return times, initial_positions, masses, None
 
 if __name__ == "__main__":
 
     n_orbits = 5
-    times, positions, masses = generate_data(
+    times, positions, masses,  = generate_data(
         n_orbits,
         detectors = ["H1", "L1", "V1"],
         basis_order = 128,

@@ -243,11 +243,14 @@ def compute_energy_loss(times, masses, coeffs, basis_type="chebyshev"):
     Ider3 = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, basis_type=basis_type)
 
     n_dimensions, n_dimensions, n_coeffs = np.shape(Ider3)
+  
+    Ider3_timeseries = basis[basis_type]["val"](times, np.transpose(Ider3, (2, 0, 1)))
+    """
     Ider3_timeseries = np.zeros((n_dimensions, n_dimensions, len(times)))
     for i in range(n_dimensions):
         for j in range(n_dimensions):
             Ider3_timeseries[i,j] = basis[basis_type]["val"](times, Ider3[i,j])
-
+    """
   
     energy = np.sum(Ider3_timeseries**2, axis = (0,1))
 
@@ -290,7 +293,7 @@ def compute_strain(pols, detector="H1"):
     strain = aplus*hplus + across*hcross
     return strain
 
-def compute_strain_from_coeffs(times, pols, detector="H1", basis_type="chebyshev"):
+def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebyshev"):
     """convert a set of coefficienct of hTT to a timeseries, theen compute the strain from hplus and hcross
 
 
@@ -303,14 +306,21 @@ def compute_strain_from_coeffs(times, pols, detector="H1", basis_type="chebyshev
     """
     # these are fixed for now so only have to be calculated once
     n_dimensions, n_dimensions, n_coeffs = np.shape(pols)
+    """
     hTT_timeseries = np.zeros((n_dimensions, n_dimensions, len(times)))
     for i in range(n_dimensions):
         for j in range(n_dimensions):
             hTT_timeseries[i,j] = basis[basis_type]["val"](times, pols[i,j])
+    """
+    # input to val should be (nbasis, ndim, ndim) as val evaluated over 1st dimension
+    # the output of val should switch back to having time dimension last
+    hTT_timeseries = basis[basis_type]["val"](times, np.transpose(pols, (2, 0, 1)))
 
-    strain = compute_strain(hTT_timeseries, detector=detector)
+    strain_timeseries = np.zeros((len(detectors), len(times)))
+    for dind, detector in enumerate(detectors):
+        strain_timeseries[dind] = compute_strain(hTT_timeseries, detector=detector)
 
-    return strain
+    return strain_timeseries
 
 def get_waveform(
     times, 
@@ -327,12 +337,15 @@ def get_waveform(
     else:
         energy = None
 
+    strain_timeseries = compute_strain_from_coeffs(times, strain_coeffs, detectors=detectors, basis_type=basis_type)
+    """
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):
         strain = compute_strain_from_coeffs(times, strain_coeffs, detector=detector, basis_type=basis_type)
         #strain = compute_strain(temp_strain_timeseries, detector, basis_type=basis_type)
+        print("strain", np.shape(strain))
         strain_timeseries[dind] = strain
-    
+    """
     return strain_timeseries, energy
 
 def generate_outputs(
@@ -374,10 +387,12 @@ def get_time_dynamics(
         tuple: (coefficients, masses, timeseries)
     """
     n_masses, n_dimensions, n_coeffs = np.shape(coeff_samples)
+    tseries = basis[basis_type]["val"](times, np.transpose(coeff_samples, (2, 0, 1)))
+    """
     tseries = np.zeros((n_masses, n_dimensions, len(times)))
     for mass_index in range(n_masses):
         for dim_index in range(n_dimensions):
             tseries[mass_index, dim_index] = basis[basis_type]["val"](times, coeff_samples[mass_index, dim_index, :])
-
+    """
     return tseries
 

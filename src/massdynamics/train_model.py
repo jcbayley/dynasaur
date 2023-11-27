@@ -112,7 +112,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     #strain = strain * window[None, None, :]
 
     n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = 2*config["sample_rate"]
+    n_context = config["n_context"]
 
     fig, ax = plt.subplots()
     ax.plot(strain[0])

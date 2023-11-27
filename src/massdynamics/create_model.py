@@ -35,7 +35,7 @@ def create_models(config, device):
         tuple of models: (pre_model, model)
     """
 
-    times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+    times, labels, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 
@@ -48,8 +48,8 @@ def create_models(config, device):
         data_type=config["data_type"])
 
 
-    n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = 2*config["sample_rate"]
+    n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    n_context = config["n_context"]
 
     # pre processing creation
     pre_model = nn.Sequential()
@@ -128,7 +128,7 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+    times, labels, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 
@@ -141,11 +141,11 @@ def load_models(config, device):
         data_type=config["data_type"])
 
     if config["basis_type"] == "fourier":
-        n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+        n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     else:
-        n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+        n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
 
-    n_context = 2*config["sample_rate"]
+    n_context = config["n_context"]
 
     pre_model, model = create_models(config, device)
 
