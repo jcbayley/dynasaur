@@ -108,10 +108,9 @@ def create_models(config, device):
             ).to(config["device"])
         
     elif config["flow_model_type"] == "cnf":
-        model = zuko.flows.spline.CNF(
+        model = zuko.flows.CNF(
             n_features, 
             context=n_context, 
-            transforms=config["ntransforms"],  
             hidden_features=config["hidden_features"]
             ).to(config["device"])
     else:
