@@ -3,7 +3,7 @@ from massdynamics.basis_functions import basis
 import lal
 import lalpulsar
 
-def generate_strain_coefficients(coeffs: np.array, basis_type="chebyshev") -> np.array:
+def generate_strain_coefficients(coeffs: np.array, basis_type="chebyshev", duration=2) -> np.array:
     """
 
     Args:
@@ -14,7 +14,7 @@ def generate_strain_coefficients(coeffs: np.array, basis_type="chebyshev") -> np
     """
 
     squares_chebyshev = basis[basis_type]["power"](coeffs, 2)
-    diff_chebyshev = basis[basis_type]["derivative"](squares_chebyshev, m=2)
+    diff_chebyshev = basis[basis_type]["derivative"](squares_chebyshev, m=2, duration=duration)
 
     return diff_chebyshev
 
@@ -37,8 +37,8 @@ def subtract_trace(coeffs, basis_type="chebyshev"):
     # divide by three the subtract from diagonals
     factor = basis[basis_type]["multiply"](trace, 1./3)
     for i in range(n_dimensions):
-        coeffs[i,i] = basis[basis_type]["subtract"](coeffs[i,i], factor)
-
+        subbed = basis[basis_type]["subtract"](coeffs[i,i], factor)
+        coeffs[i,i, :len(subbed)] = subbed
     return coeffs
 
 def compute_second_mass_moment(
@@ -73,7 +73,7 @@ def compute_second_mass_moment(
                 if len(mult) > new_coeff_shape:
                     second_mass_moment.resize((n_dimensions, n_dimensions, len(mult)), refcheck=False)
     
-                second_mass_moment[i,j] += basis[basis_type]["multiply"](mult, masses[mass_ind])
+                second_mass_moment[i,j, :len(mult)] += basis[basis_type]["multiply"](mult, masses[mass_ind])
                 """
                 temp_moment = masses[mass_ind]*basis[basis_type]["multiply"](coeffs[mass_ind, i], coeffs[mass_ind, j])
                 if len(second_mass_moment[i][j]) == 0:
@@ -89,7 +89,7 @@ def compute_second_mass_moment(
     return second_mass_moment
 
 
-def compute_derivative_of_mass_moment(coeffs, order=2, basis_type="chebyshev"):
+def compute_derivative_of_mass_moment(coeffs, order=2, basis_type="chebyshev", duration=2):
     """compute the second derivative of the second mass moment tensor
 
     Args:
@@ -103,7 +103,7 @@ def compute_derivative_of_mass_moment(coeffs, order=2, basis_type="chebyshev"):
 
     for i in range(n_dimensions):
         for j in range(n_dimensions):
-            Iprime2_coeffs[i][j] = basis[basis_type]["derivative"](coeffs[i][j], m=2)
+            Iprime2_coeffs[i][j] = basis[basis_type]["derivative"](coeffs[i][j], m=2, duration=duration)
 
     return np.array(Iprime2_coeffs)
 
@@ -185,8 +185,8 @@ def project_and_remove_trace(projection_tensor, coeffs, basis_type="chebyshev"):
                     if len(t_fact2) == 1:
                         t_fact2 = np.repeat(t_fact2, len(fact2))
 
-                    fact1 += t_fact1
-                    fact2 += t_fact2
+                    fact1[:len(t_fact1)] += t_fact1
+                    fact2[:len(t_fact2)] += t_fact2
             
             h_TT[i,j] = fact2 - 0.5*fact1
             """
@@ -207,7 +207,7 @@ def project_and_remove_trace(projection_tensor, coeffs, basis_type="chebyshev"):
             """
     return np.array(h_TT)
 
-def compute_hTT_coeffs(masses, coeffs, basis_type="chebyshev"):
+def compute_hTT_coeffs(masses, coeffs, basis_type="chebyshev", duration=2):
     """compute the htt coefficients for polynomial
 
     Args:
@@ -219,13 +219,13 @@ def compute_hTT_coeffs(masses, coeffs, basis_type="chebyshev"):
         _type_: _description_
     """
     second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, basis_type=basis_type)
-    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=2, basis_type=basis_type)
+    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=2, basis_type=basis_type, duration=duration)
     projection_tensor = compute_projection_tensor()
     hTT = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, basis_type=basis_type)
 
     return hTT
 
-def compute_energy_loss(times, masses, coeffs, basis_type="chebyshev"):
+def compute_energy_loss(times, masses, coeffs, basis_type="chebyshev", duration=2):
     """compute the energy as a function of time
 
     Args:
@@ -237,14 +237,14 @@ def compute_energy_loss(times, masses, coeffs, basis_type="chebyshev"):
         _type_: _description_
     """
     second_mass_moment = compute_second_mass_moment(masses, coeffs, remove_trace=True, basis_type=basis_type)
-    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=3, basis_type=basis_type)
+    second_mass_moment_derivative = compute_derivative_of_mass_moment(second_mass_moment, order=3, basis_type=basis_type, duration=duration)
     projection_tensor = compute_projection_tensor()
     
     Ider3 = project_and_remove_trace(projection_tensor, second_mass_moment_derivative, basis_type=basis_type)
 
     n_dimensions, n_dimensions, n_coeffs = np.shape(Ider3)
   
-    Ider3_timeseries = basis[basis_type]["val"](times, np.transpose(Ider3, (2, 0, 1)))
+    Ider3_timeseries = basis[basis_type]["val"](times, Ider3)
     """
     Ider3_timeseries = np.zeros((n_dimensions, n_dimensions, len(times)))
     for i in range(n_dimensions):
@@ -314,7 +314,7 @@ def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebys
     """
     # input to val should be (nbasis, ndim, ndim) as val evaluated over 1st dimension
     # the output of val should switch back to having time dimension last
-    hTT_timeseries = basis[basis_type]["val"](times, np.transpose(pols, (2, 0, 1)))
+    hTT_timeseries = basis[basis_type]["val"](times, pols)
 
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):
@@ -330,10 +330,12 @@ def get_waveform(
     basis_type="chebyshev",
     compute_energy=False):
 
-    strain_coeffs = compute_hTT_coeffs(norm_masses, basis_dynamics, basis_type=basis_type)
+    duration = np.max(times) - np.min(times)
+
+    strain_coeffs = compute_hTT_coeffs(norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
 
     if compute_energy:
-        energy = compute_energy_loss(times, norm_masses, basis_dynamics, basis_type=basis_type)
+        energy = compute_energy_loss(times, norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
     else:
         energy = None
 
@@ -349,12 +351,14 @@ def get_waveform(
     return strain_timeseries, energy
 
 def generate_outputs(
+    times,
     masses,
     dynamics, 
     basis_type="chebyshev"):
 
+    duration = np.max(times) - np.min(times)
     if n_dimensions == 1:
-        strain_coeffs = generate_strain_coefficients(all_dynamics[data_index])
+        strain_coeffs = generate_strain_coefficients(all_dynamics[data_index], duration)
         strain_timeseries[data_index] = basis[basis_type]["val"](times, strain_coeffs)
     elif n_dimensions == 2:
         temp_strain_timeseries = generate_2d_derivative(all_dynamics[data_index].reshape(basis_order, n_dimensions), times)
@@ -362,7 +366,7 @@ def generate_outputs(
         hcross = temp_strain_timeseries[0,1]
         strain_timeseries[data_index][0] = hplus + hcross
     elif n_dimensions == 3:
-        temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics[data_index], basis_type=basis_type)
+        temp_strain_timeseries = compute_hTT_coeffs(masses, all_dynamics[data_index], basis_type=basis_type, duration=duration)
 
         for dind, detector in enumerate(detectors):
             strain_timeseries[data_index][dind] = compute_strain_from_coeffs(times, temp_strain_timeseries, detector, basis_type=basis_type)
@@ -388,7 +392,7 @@ def get_time_dynamics(
     """
     n_masses, n_dimensions, n_coeffs = np.shape(coeff_samples)
     # has to be reordered due to how the np polynomial computes val on a matrix
-    tseries = basis[basis_type]["val"](times, np.transpose(coeff_samples, (2, 0, 1)))
+    tseries = basis[basis_type]["val"](times, coeff_samples)
     """
     tseries = np.zeros((n_masses, n_dimensions, len(times)))
     for mass_index in range(n_masses):

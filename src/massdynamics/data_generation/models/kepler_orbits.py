@@ -241,7 +241,9 @@ def generate_data(
     masses = get_masses(n_samples, n_masses)
 
     # priors currently fixed
-    times = np.linspace(0,5e7, sample_rate)
+    #times = np.linspace(0,5e7, sample_rate)
+    times = np.arange(0,5e7,5e7/sample_rate)
+    output_times = times/5e7
     n_times = len(times)
 
     semi_major_axes = np.random.uniform(0.3,1,size=n_samples)*distance_scale
@@ -265,7 +267,7 @@ def generate_data(
     initial_positions = np.expand_dims(initial_positions, 1)
 
 
-    return times, initial_positions, masses, None
+    return output_times, initial_positions, masses, None
 
 if __name__ == "__main__":
 

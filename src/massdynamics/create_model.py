@@ -173,3 +173,10 @@ def load_models(config, device):
     """
     return pre_model, model
 
+
+def backwards_pass(pre_model, model, data):
+
+    input_data = pre_model(data)
+
+    output = model(input_data)
+

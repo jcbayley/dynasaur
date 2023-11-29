@@ -100,7 +100,7 @@ def generate_data(
                         times,
                         positions[data_index,mass_index, :, :],
                         basis_order-1
-                        ).T
+                        )
             else:
                 temp_coeffs = position_coeffs[data_index, mass_index]
 

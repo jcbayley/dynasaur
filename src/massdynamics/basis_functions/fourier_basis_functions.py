@@ -45,7 +45,7 @@ def fit(times, amps1, order):
         _type_: _description_
     """
     window = 1#signal.windows.tukey(np.shape(amps1)[-1], alpha=0.5)
-    fftout = np.fft.rfft(amps1*window, axis=-1)[:,:order]*int(len(times)/2 + 1)/order
+    fftout = np.fft.rfft(amps1*window, axis=-1)[:,:order]#*int(len(times)/2 + 1)/order
     return fftout
 
 def val(times, amps1):
@@ -64,9 +64,9 @@ def val(times, amps1):
 
     fftout = np.fft.irfft(amps1, axis=0) * shape_ratio
     """
-    fftout = np.fft.irfft(amps1, n=len(times), axis=0)*shape_ratio
+    fftout = np.fft.irfft(amps1, n=len(times), axis=-1)*shape_ratio
     # switch back to having the time dimension last
     # this is so its consistent with the np polynomial val function
-    fftout = np.transpose(fftout, (1, 2, 0))
+    #
     return fftout
 
