@@ -85,7 +85,7 @@ def generate_data(
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
 
-    times = np.linspace(-1,1,sample_rate)
+    times = np.arange(-1,1,2./sample_rate)
 
     random_coeffs = generate_random_coefficients(
         basis_order, 

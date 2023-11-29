@@ -296,7 +296,7 @@ def test_model_3d(
             source_masses = t_mass[0]
             recon_coeffs = coeff_samples[0]
             recon_masses = mass_samples[0]
-           
+
             source_tseries = compute_waveform.get_time_dynamics(
                 source_coeffs,
                 times,  

@@ -108,10 +108,9 @@ def create_models(config, device):
             ).to(config["device"])
         
     elif config["flow_model_type"] == "cnf":
-        model = zuko.flows.spline.CNF(
+        model = zuko.flows.CNF(
             n_features, 
             context=n_context, 
-            transforms=config["ntransforms"],  
             hidden_features=config["hidden_features"]
             ).to(config["device"])
     else:
@@ -173,4 +172,11 @@ def load_models(config, device):
         pre_model.norm_factor = 1.0
     """
     return pre_model, model
+
+
+def backwards_pass(pre_model, model, data):
+
+    input_data = pre_model(data)
+
+    output = model(input_data)
 

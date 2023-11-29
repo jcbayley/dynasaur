@@ -3,7 +3,13 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 
-def make_2d_animation(root_dir, index, timeseries, masses, true_timeseries, true_masses):
+def make_2d_animation(
+    root_dir, 
+    index, 
+    timeseries, 
+    masses, 
+    true_timeseries, 
+    true_masses):
     """_summary_
 
     Args:
@@ -44,7 +50,13 @@ def make_2d_animation(root_dir, index, timeseries, masses, true_timeseries, true
     writergif = animation.PillowWriter(fps=30) 
     ani.save(os.path.join(root_dir, f"animation_{index}.gif"), writer=writergif)
 
-def make_2d_distribution(root_dir, index, timeseries, masses, true_timeseries, true_masses):
+def make_2d_distribution(
+    root_dir, 
+    index, 
+    timeseries, 
+    masses, 
+    true_timeseries, 
+    true_masses):
     """_summary_
 
     Args:
@@ -89,7 +101,13 @@ def make_2d_distribution(root_dir, index, timeseries, masses, true_timeseries, t
     ani.save(os.path.join(root_dir, f"multi_animation_{index}.gif"), writer=writergif)
 
 
-def make_3d_animation(root_dir, index, timeseries, masses, true_timeseries, true_masses):
+def make_3d_animation(
+    root_dir, 
+    index, 
+    timeseries, 
+    masses, 
+    true_timeseries, 
+    true_masses):
     """_summary_
 
     Args:
@@ -147,7 +165,8 @@ def make_3d_distribution(
     timeseries, 
     masses, 
     true_timeseries, 
-    true_masses):
+    true_masses,
+    duration = 5):
     """make animation in 3d of marticle movements
 
     Args:
@@ -197,7 +216,8 @@ def make_3d_distribution(
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
 
-    writergif = animation.PillowWriter(fps=int(0.5*n_frames)) 
+    fps = int(n_frames/duration)
+    writergif = animation.PillowWriter(fps=fps) 
     ani.save(os.path.join(root_dir, f"multi_animation_{index}.gif"), writer=writergif)
 
 def make_3d_distribution_zproj(
@@ -206,7 +226,8 @@ def make_3d_distribution_zproj(
     timeseries, 
     masses, 
     true_timeseries, 
-    true_masses):
+    true_masses,
+    duration=5):
     """make animation in 3d of marticle movements
 
     Args:
@@ -254,7 +275,8 @@ def make_3d_distribution_zproj(
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
 
-    writergif = animation.PillowWriter(fps=int(0.5*n_frames)) 
+    fps = int(n_frames/duration)
+    writergif = animation.PillowWriter(fps=fps) 
     ani.save(os.path.join(root_dir, f"multi_animation_zproj{index}.gif"), writer=writergif)
 
 
@@ -263,7 +285,8 @@ def line_of_sight_animation(
     masses, 
     true_timeseries, 
     true_masses, 
-    fname):
+    fname,
+    duration=5):
 
     nsamples, nmasses, ndimensions, nframes = np.shape(timeseries)
 
@@ -307,6 +330,7 @@ def line_of_sight_animation(
 
     ani = animation.FuncAnimation(fig, update_plot, frames=nframes, interval=1)
 
-    writergif = animation.PillowWriter(fps=int(0.5*nframes)) 
+    fps = int(nframes/duration)
+    writergif = animation.PillowWriter(fps=fps) 
     ani.save(fname, writer=writergif)
 

@@ -45,13 +45,16 @@ def fit(times, amps1, order):
         _type_: _description_
     """
     window = 1#signal.windows.tukey(np.shape(amps1)[-1], alpha=0.5)
-    fftout = np.fft.rfft(amps1*window, axis=-1)[:, :order]
+    fftout = np.fft.rfft(amps1*window, axis=-1)[:,:order]#*int(len(times)/2 + 1)/order
     return fftout
 
 def val(times, amps1):
     # pad the frequency series with zeros to get same timeseries back
     # amps1 shape should have the frequency dimension as 0
     
+    # compute ratio for renormalisiation later
+    shape_ratio = int(len(times)/2 + 1) / np.shape(amps1)[0]
+    """
     if int(len(times)/2 + 1) > np.shape(amps1)[0]:
         tempshape = np.array(np.shape(amps1))
         # add on zeros so half langth of ts (ts will then be correct size)
@@ -59,9 +62,11 @@ def val(times, amps1):
         zerosappend = np.zeros(tuple(tempshape)).astype(complex)
         amps1 = np.concatenate([amps1, zerosappend], axis=0)
 
-    fftout = np.fft.irfft(amps1, axis=0)
+    fftout = np.fft.irfft(amps1, axis=0) * shape_ratio
+    """
+    fftout = np.fft.irfft(amps1, n=len(times), axis=-1)*shape_ratio
     # switch back to having the time dimension last
     # this is so its consistent with the np polynomial val function
-    fftout = np.transpose(fftout, (1, 2, 0))
+    #
     return fftout
 

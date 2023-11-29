@@ -143,7 +143,21 @@ def interpolate_positions(old_times, new_times, positions):
         interp_dict[object_ind] = interp(new_times)
     return interp_dict
 
+def too_close_event(t, x):
+
+    x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
+    x_derivative = np.zeros((n_masses, 2*n_dimensions))
+
+    # compute separations of each object and the absolute distance
+    diff_xyz = x_posvels[:,0:3,None].T - x_posvels[:,0:3,None] # Nx3xxN matrix
+    #inv_r_cubed = (np.sum(diff_xyz**2, axis=1) + EPS)**(-1.5) # NxN matrix
+    r_cubed = (np.einsum("ijk,ijk->ik", diff_xyz, diff_xyz))**0.5
+
+    if r_cubed < 1e-4:
+        event.terminal = True
+
 def solve_ode(
+    times, 
     n_masses=2, 
     n_dimensions=3, 
     n_samples=128
@@ -151,7 +165,6 @@ def solve_ode(
 
 
     second = 1./(24*3600)
-    times = np.linspace(0,2*second,n_samples)
 
     # scale to 1 year
     second_scale = 86400
@@ -188,7 +201,8 @@ def solve_ode(
         G)
 
 
-    while oenergy > 0:
+    # set energy so orbit is bound, 
+    while oenergy > 0.1:
         initial_positions = np.random.uniform(
             -1,
             1, 
@@ -227,7 +241,8 @@ def solve_ode(
         initial_conditions.flatten(), 
         tfirst=True,
         method="LSODA",
-        rtol = 1e-5)
+        rtol = 1e-5,
+        events = [too_close_event])
     
     if max(outputs.t) < max(times):
         outputs.t = np.append(outputs.t, max(times)+0.1)
@@ -274,15 +289,25 @@ def generate_data(
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
 
+    second = 1./(24*3600)
+    n_samples = sample_rate
     times = np.linspace(-1,1,sample_rate)
+    solve_times = np.linspace(0,2*second,sample_rate)
 
-    times, coeffs, masses = solve_ode(
-        n_masses=n_masses, 
-        n_dimensions=n_dimensions, 
-        n_samples=len(times))
+    all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
+    all_masses = np.zeros((n_data, n_masses))
+    for i in range(n_data):
+        t_times, positions, masses = solve_ode(
+            times=solve_times,
+            n_masses=n_masses, 
+            n_dimensions=n_dimensions, 
+            n_samples=len(times))
+        print(f"solved: {i}")
+        all_positions[i] = positions
+        all_masses[i] = masses
 
 
-    return times, initial_positions, masses, None
+    return times, all_positions, all_masses, None
 
 if __name__ == "__main__":
 
