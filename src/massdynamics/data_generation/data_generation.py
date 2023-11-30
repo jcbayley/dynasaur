@@ -66,7 +66,7 @@ def generate_data(
                 sample_rate = sample_rate)
     else:
         raise Exception(f"No data with name {data_type}")
-
+    
     if basis_type == "fourier":
         dtype = complex
     else:
@@ -91,14 +91,16 @@ def generate_data(
 
         # move to center of mass frane 
         if positions is not None:
-            positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index])
+            if n_masses > 1:
+                positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
         if position_coeffs is not None:
             positions[data_index] = basis[basis_type]["val"](
                 times,
                 position_coeffs[data_index]
             )
-            positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index])
+            if n_masses > 1:
+                positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
@@ -108,15 +110,9 @@ def generate_data(
                 )
             #print(np.max(positions[data_index, mass_index]),np.max(temp_coeffs))
             # if windowing applied create coeffs which are windowed else just use the random coeffs
-            if window != "none":
-                temp_coeffs = window_coeffs(times, temp_coeffs, win_coeffs, basis_type=basis_type)
             
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
 
-        all_basis_dynamics[data_index] = data_processing.subtract_center_of_mass_coeffs(
-            all_basis_dynamics[data_index], 
-            masses[data_index],
-            basis_type=basis_type)
         
         strain_timeseries[data_index], energy = compute_waveform.get_waveform(
             times, 
@@ -138,7 +134,7 @@ def generate_data(
         all_basis_dynamics,
         all_masses,
         basis_type = basis_type
-        )
+            )
 
     samples_shape, feature_shape = np.shape(output_coeffs_mass)
 

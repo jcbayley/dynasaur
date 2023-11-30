@@ -285,7 +285,7 @@ def solve_ode(
     scaled_interp_positions = ode_interp_positions*distance_scale/position_scale
     
     
-    return times, ode_interp_positions, scaled_masses
+    return times, scaled_interp_positions, scaled_masses
 
 
 def generate_data(
@@ -322,7 +322,7 @@ def generate_data(
     second = 1./(24*3600)
     n_samples = sample_rate
     times = np.linspace(0,1,sample_rate) #in days for ode
-    solve_times = np.linspace(0,1,sample_rate)
+    solve_times = np.linspace(0,10000,sample_rate)
 
     all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
     all_masses = np.zeros((n_data, n_masses))
