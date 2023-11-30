@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import time
 import timeit
 from massdynamics.basis_functions import basis
-from massdynamics.data_generation import orbits_functions
+from massdynamics.data_generation import orbits_functions, data_processing
 
 def newton_derivative(
     t, 
@@ -63,7 +63,6 @@ def newton_derivative(
         """
     #energy_loss_term = x_derivative[i][3:6] * factor
 
-
     return x_derivative.flatten()
 
 def newton_derivative_vect(
@@ -81,7 +80,7 @@ def newton_derivative_vect(
     """compute the derivative of the position and velocity
 
     Args:
-        x_positions (_type_): _description_
+        x_positions (_type_): (Nmasses*6, )
         masses (_type_): _description_
     """
     n_masses = len(masses)
@@ -114,20 +113,6 @@ def newton_derivative_vect(
     return x_derivative.flatten()
 
 
-def get_initial_conditions(n_masses, n_dimensions):
-    """get positions and velocities
-    position in m/1e5
-    velocity in m/1e5/day
-
-    Args:
-        n_masses (_type_): _description_
-        n_dimensions (_type_): _description_
-
-    Returns:
-        _type_: _description_
-    """
-    return np.random.uniform(-1,1,size=(n_masses, 2*n_dimensions))
-
 def get_masses(n_masses):
 
     masses = np.random.uniform(0,1,size=n_masses)
@@ -135,7 +120,7 @@ def get_masses(n_masses):
     return masses/np.sum(masses)
 
 def interpolate_positions(old_times, new_times, positions):
-    """Interpolate between points """
+    """Interpolate between points over dimension 1 """
     interp_dict = np.zeros((positions.shape[0], len(new_times)))
     for object_ind in range(positions.shape[0]):
         #print(np.shape(positions[object_ind]))
@@ -143,18 +128,42 @@ def interpolate_positions(old_times, new_times, positions):
         interp_dict[object_ind] = interp(new_times)
     return interp_dict
 
-def too_close_event(t, x):
+def too_close_event(t, x, n_masses=2, n_dimensions=3):
 
-    x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
+    x = x.reshape(n_masses, 2*n_dimensions)
     x_derivative = np.zeros((n_masses, 2*n_dimensions))
 
     # compute separations of each object and the absolute distance
-    diff_xyz = x_posvels[:,0:3,None].T - x_posvels[:,0:3,None] # Nx3xxN matrix
+    diff_xyz = x[:,0:3,None].T - x[:,0:3,None] # Nx3xxN matrix
     #inv_r_cubed = (np.sum(diff_xyz**2, axis=1) + EPS)**(-1.5) # NxN matrix
     r_cubed = (np.einsum("ijk,ijk->ik", diff_xyz, diff_xyz))**0.5
 
-    if r_cubed < 1e-4:
-        event.terminal = True
+    if np.any(r_cubed < 1e-4):
+        return r_cubed
+    
+def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale):
+
+    
+    initial_positions = np.random.uniform(
+        -1,
+        1, 
+        size=(n_masses, n_dimensions)
+        )*position_scale
+    initial_velocities = np.random.uniform(
+        -1,
+        1, 
+        size=(n_masses, n_dimensions)
+        )*velocity_scale
+    """
+    initial_positions = np.ones((n_masses, n_dimensions))*position_scale
+    initial_positions[0] *= -1
+    initial_positions[:,1:] *= 0
+    initial_velocities = np.ones((n_masses, n_dimensions))*velocity_scale
+    initial_velocities[0] *= -1
+    initial_velocities[:,2] *= 0
+    initial_velocities[:,0] *= 0
+    """
+    return initial_positions, initial_velocities
 
 def solve_ode(
     times, 
@@ -176,86 +185,107 @@ def solve_ode(
     G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
     c = 3e8
 
-    masses = get_masses(n_masses)
+    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
+    c_ggravunits = c * ((second_scale**2)/(distance_scale))
+
+    #####################
+    ## hand tuned dont like
+    #####################
+    #masses = get_masses(n_masses)*mass_scale
+    masses = np.array([0.5,0.5])*mass_scale*1e-2
 
     #initial_conditions = get_initial_conditions(n_masses, n_dimensions)
     #initial_conditions[:,3:6] *= 1e4
-    initial_positions = np.random.uniform(
-        -1,
-        1, 
-        size=(n_masses, n_dimensions)
-        )
-    initial_velocities = np.random.uniform(
-        -1,
-        1, 
-        size=(n_masses, n_dimensions)
-        )
+    position_scale = 2*distance_scale                             # in m
+    velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-2       # in m/s
+
+    initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
+    
 
     oenergy = orbits_functions.orbital_energy(
         masses[0], 
         masses[1], 
-        initial_positions[0]*distance_scale, 
-        initial_positions[1]*distance_scale, 
-        initial_velocities[0]*distance_scale/second_scale, 
-        initial_velocities[1]*distance_scale/second_scale, 
+        initial_positions[0], 
+        initial_positions[1], 
+        initial_velocities[0], 
+        initial_velocities[1], 
         G)
 
-
+    #print(oenergy)
     # set energy so orbit is bound, 
+    
+    n_resampled = 0
     while oenergy > 0.1:
-        initial_positions = np.random.uniform(
-            -1,
-            1, 
-            size=(n_masses, n_dimensions)
-            )
-        initial_velocities = np.random.uniform(
-            -1,
-            1, 
-            size=(n_masses, n_dimensions)
-            )
+        initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
 
         oenergy = orbits_functions.orbital_energy(
             masses[0], 
             masses[1], 
-            initial_positions[0]*distance_scale, 
-            initial_positions[1]*distance_scale, 
-            initial_velocities[0]*distance_scale/second_scale, 
-            initial_velocities[1]*distance_scale/second_scale, 
+            initial_positions[0], 
+            initial_positions[1], 
+            initial_velocities[0], 
+            initial_velocities[1], 
             G)
+        
+        n_resampled += 1
+    print("N_resampled: ", n_resampled)
+    
 
-    initial_conditions = np.concatenate([initial_positions, initial_velocities], axis=-1)
+    initial_positions = data_processing.subtract_center_of_mass(initial_positions[:,:,np.newaxis], masses)[:,:,0]
 
-    ode = lambda t, x: newton_derivative_vect(
+    scaled_initial_velocities = initial_velocities/velocity_scale
+    scaled_initial_positions = initial_positions/position_scale
+    scaled_masses = masses/mass_scale
+
+    ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
+    ode_initial_positions = initial_positions/distance_scale                # now in AU
+    ode_masses = masses/mass_scale
+
+    #print(ode_initial_positions, initial_positions)
+    #print(ode_initial_velocities, initial_velocities)
+    #print(ode_masses, masses)
+
+    initial_conditions = np.concatenate([ode_initial_positions, ode_initial_velocities], axis=-1)
+
+    #print(initial_conditions)
+    ode = lambda t, x: newton_derivative(
         t, 
         x, 
-        masses=masses, 
+        masses=ode_masses, 
         factor=1, 
         n_dimensions=n_dimensions,
         second_scale=second_scale,
         distance_scale=distance_scale,
         mass_scale=mass_scale)
+    
+    #too_close_event.terminal = True
 
     outputs = solve_ivp(
         ode,
-        [min(times) - second, max(times) + second], 
-        initial_conditions.flatten(), 
+        t_span=[min(times), max(times)], 
+        y0=initial_conditions.flatten(), 
         tfirst=True,
-        method="LSODA",
-        rtol = 1e-5,
-        events = [too_close_event])
+        method="RK45",
+        rtol = 1e-5,)
     
+    """
     if max(outputs.t) < max(times):
         outputs.t = np.append(outputs.t, max(times)+0.1)
         outputs.y = np.append(outputs.y.T, outputs.y[:, -1:].T, axis=0).T
+    """
+    # y is shape (nvals, ntimes, )
 
-    # y is shape (ntimes, )
-    positions = outputs.y[:, :]
-    interp_positions = interpolate_positions(outputs.t, times, positions).T
-    interp_positions = interp_positions.reshape(len(times), n_masses, 2*n_dimensions)[:,:,:3]
+    positions = outputs.y.reshape(n_masses, 2*n_dimensions, len(outputs.t))[:,:3] # get positions only
+    positions = positions.reshape(n_masses*n_dimensions, len(outputs.t))
 
-    interp_positions = interp_positions - np.mean(interp_positions, axis=(0, 1))[None,None,:]
+    ode_interp_positions = interpolate_positions(outputs.t, times, positions).T # ntimes, nvals
+    ode_interp_positions = ode_interp_positions.reshape(len(times), n_masses, n_dimensions)
+    ode_interp_positions = ode_interp_positions #- np.mean(ode_interp_positions, axis=(0, 1))[None,None,:]
 
-    return times, interp_positions, masses
+    scaled_interp_positions = ode_interp_positions*distance_scale/position_scale
+    
+    
+    return times, ode_interp_positions, scaled_masses
 
 
 def generate_data(
@@ -291,8 +321,8 @@ def generate_data(
 
     second = 1./(24*3600)
     n_samples = sample_rate
-    times = np.linspace(-1,1,sample_rate)
-    solve_times = np.linspace(0,2*second,sample_rate)
+    times = np.linspace(0,1,sample_rate) #in days for ode
+    solve_times = np.linspace(0,1,sample_rate)
 
     all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
     all_masses = np.zeros((n_data, n_masses))
@@ -303,7 +333,7 @@ def generate_data(
             n_dimensions=n_dimensions, 
             n_samples=len(times))
         print(f"solved: {i}")
-        all_positions[i] = positions
+        all_positions[i] = np.transpose(positions, (1,2,0))
         all_masses[i] = masses
 
 
