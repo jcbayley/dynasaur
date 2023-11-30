@@ -239,7 +239,7 @@ def generate_data(
         mass_scale
     )
     """
-    masses = get_masses(n_samples, n_masses)*mass_scale/1e5
+    masses = get_masses(n_samples, n_masses)#*mass_scale/1e5
 
     # priors currently fixed
     #times = np.linspace(0,5e7, sample_rate)
