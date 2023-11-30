@@ -239,7 +239,7 @@ def generate_data(
         mass_scale
     )
     """
-    masses = get_masses(n_samples, n_masses)*mass_scale/1e5
+    masses = get_masses(n_samples, n_masses)#*mass_scale/1e5
 
     # priors currently fixed
     #times = np.linspace(0,5e7, sample_rate)
@@ -254,7 +254,7 @@ def generate_data(
 
     # define the semimajor axis with a fixed period for each of the masses
     if fixed_period:
-        semi_major_axis = (G*(M + masses[:,0])/(4*np.pi**2) * period**2)**(1/3)
+        semi_major_axes = (G*(M + masses[:,0])/(4*np.pi**2) * period**2)**(1/3)
     else:
         max_semi_major_axis = (G*M/(4*np.pi**2) * min_period**2)**(1/3)
         semi_major_axes = np.random.uniform(0.3,1,size=n_samples)*distance_scale
