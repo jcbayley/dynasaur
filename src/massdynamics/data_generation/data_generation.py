@@ -104,6 +104,7 @@ def generate_data(
             else:
                 temp_coeffs = position_coeffs[data_index, mass_index]
 
+            #print(np.max(positions[data_index, mass_index]),np.max(temp_coeffs))
             # if windowing applied create coeffs which are windowed else just use the random coeffs
             if window != "none":
                 temp_coeffs = window_coeffs(times, temp_coeffs, win_coeffs, basis_type=basis_type)
@@ -122,6 +123,8 @@ def generate_data(
             all_basis_dynamics[data_index], 
             times, 
             basis_type=basis_type)
+
+        #print(np.max(all_time_dynamics))
 
 
     output_coeffs_mass = data_processing.positions_masses_to_samples(

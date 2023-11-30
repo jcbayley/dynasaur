@@ -328,7 +328,9 @@ def get_waveform(
     basis_dynamics, 
     detectors, 
     basis_type="chebyshev",
-    compute_energy=False):
+    compute_energy=False
+    ):
+    
 
     duration = np.max(times) - np.min(times)
 

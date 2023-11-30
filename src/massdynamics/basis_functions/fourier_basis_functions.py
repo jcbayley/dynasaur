@@ -64,7 +64,7 @@ def val(times, amps1):
 
     fftout = np.fft.irfft(amps1, axis=0) * shape_ratio
     """
-    fftout = np.fft.irfft(amps1, n=len(times), axis=-1)*shape_ratio
+    fftout = np.fft.irfft(amps1, n=len(times), axis=-1)#*1./shape_ratio
     # switch back to having the time dimension last
     # this is so its consistent with the np polynomial val function
     #
