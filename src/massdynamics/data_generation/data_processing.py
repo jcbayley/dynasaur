@@ -170,3 +170,24 @@ def get_strain_from_samples(
 
     return strain, energy, coeffs
 
+
+def subtract_center_of_mass(positions, masses):
+    """
+    Subtract the center of mass motion from a time series of N masses.
+
+    Parameters:
+    - positions: Numpy array of shape (n_masses, n_dimensions, time) representing the positions of two masses over time.
+    - masses: Numpy array of shape (n_masses,) representing the masses of the two objects.
+
+    Returns:
+    - relative_positions: Numpy array of shape (n_masses, n_dimensions, time) representing the relative positions after subtracting
+      the center of mass motion.
+    """
+    # Calculate the center of mass position at each time step
+    center_of_mass_positions = np.average(positions, axis=0, weights=masses)
+
+    # Subtract the center of mass position from the positions of the individual masses
+    relative_positions = positions - center_of_mass_positions[np.newaxis, :, :]
+
+    return relative_positions
+

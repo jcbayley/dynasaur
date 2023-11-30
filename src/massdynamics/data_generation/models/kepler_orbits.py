@@ -208,7 +208,8 @@ def generate_data(
     n_masses = 1,
     basis_type = "fourier",
     n_dimensions = 3,
-    sample_rate=16):
+    sample_rate=16,
+    fixed_period=False):
 
     n_detectors = len(detectors)
     # scale to 1 year
@@ -238,15 +239,25 @@ def generate_data(
         mass_scale
     )
     """
-    masses = get_masses(n_samples, n_masses)
+    masses = get_masses(n_samples, n_masses)*mass_scale/1e5
 
     # priors currently fixed
     #times = np.linspace(0,5e7, sample_rate)
-    times = np.arange(0,5e7,5e7/sample_rate)
-    output_times = times/5e7
+    duration = 5e7
+    times = np.arange(0,duration,duration/sample_rate)
+    output_times = times/duration
     n_times = len(times)
 
-    semi_major_axes = np.random.uniform(0.3,1,size=n_samples)*distance_scale
+    fixed_period = True
+    period = duration
+    min_period = 2.*duration/sample_rate
+
+    # define the semimajor axis with a fixed period for each of the masses
+    if fixed_period:
+        semi_major_axes = (G*(M + masses[:,0])/(4*np.pi**2) * period**2)**(1/3)
+    else:
+        max_semi_major_axis = (G*M/(4*np.pi**2) * min_period**2)**(1/3)
+        semi_major_axes = np.random.uniform(0.3,1,size=n_samples)*distance_scale
     eccentricities = np.random.uniform(0.0,0.9,size=n_samples)
     inclinations = np.random.uniform(0.0,2*np.pi,size=n_samples)
 
@@ -262,7 +273,7 @@ def generate_data(
     velocities = np.array(velocities)*second_scale/distance_scale
 
     # currently shape (n_samples, n_dimensions, n_times)
-    initial_positions = np.vstack([positions, velocities])
+    initial_positions = positions#np.vstack([positions, velocities])
     # now shape (n_samples, n_masses, n_dimensions, n_times)
     initial_positions = np.expand_dims(initial_positions, 1)
 

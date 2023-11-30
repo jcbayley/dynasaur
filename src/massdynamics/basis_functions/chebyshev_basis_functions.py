@@ -33,7 +33,8 @@ def fit(times, amps1, order):
         _type_: (Ndets, Ncoeffs)
     """
     amps_fit = np.transpose(amps1, (1,0))
-    return np.transpose(np.polynomial.chebyshev.chebfit(times, amps_fit, order), (1,0))
+    fit = np.transpose(np.polynomial.chebyshev.chebfit(times, amps_fit, order), (1,0))
+    return fit
 
 def val(times, amps1):
     """_summary_

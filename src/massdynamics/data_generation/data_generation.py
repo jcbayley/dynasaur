@@ -66,7 +66,7 @@ def generate_data(
                 sample_rate = sample_rate)
     else:
         raise Exception(f"No data with name {data_type}")
-
+    
     if basis_type == "fourier":
         dtype = complex
     else:
@@ -87,29 +87,33 @@ def generate_data(
         all_masses[data_index] = masses[data_index]
 
         #temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
-        for mass_index in range(n_masses):
-            if position_coeffs is None:
-                if basis_type=="fourier":
-                    temp_coeffs = basis[basis_type]["fit"](
-                        times,
-                        positions[data_index, mass_index, :, :],
-                        int(0.5*basis_order + 1)
-                        )
-                else:
-                    temp_coeffs = basis[basis_type]["fit"](
-                        times,
-                        positions[data_index,mass_index, :, :],
-                        basis_order-1
-                        )
-            else:
-                temp_coeffs = position_coeffs[data_index, mass_index]
+        t_basis_order = int(0.5*basis_order + 1) if basis_type == "fourier" else basis_order-1
 
+        # move to center of mass frane 
+        if positions is not None:
+            if n_masses > 1:
+                positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
+
+        if position_coeffs is not None:
+            positions[data_index] = basis[basis_type]["val"](
+                times,
+                position_coeffs[data_index]
+            )
+            if n_masses > 1:
+                positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
+
+        for mass_index in range(n_masses):
+            temp_coeffs = basis[basis_type]["fit"](
+                times,
+                positions[data_index,mass_index, :, :],
+                t_basis_order
+                )
+            #print(np.max(positions[data_index, mass_index]),np.max(temp_coeffs))
             # if windowing applied create coeffs which are windowed else just use the random coeffs
-            if window != "none":
-                temp_coeffs = window_coeffs(times, temp_coeffs, win_coeffs, basis_type=basis_type)
             
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
 
+        
         strain_timeseries[data_index], energy = compute_waveform.get_waveform(
             times, 
             masses[data_index], 
@@ -123,12 +127,14 @@ def generate_data(
             times, 
             basis_type=basis_type)
 
+        #print(np.max(all_time_dynamics))
+
 
     output_coeffs_mass = data_processing.positions_masses_to_samples(
         all_basis_dynamics,
         all_masses,
         basis_type = basis_type
-        )
+            )
 
     samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
