@@ -165,6 +165,7 @@ def load_models(config, device):
     model.load_state_dict(weights["model_state_dict"])
 
     pre_model.norm_factor = weights["norm_factor"]
+    pre_model.label_norm_factor = weights["label_norm_factor"]
     """
     if "norm_factor" in weights:
         pre_model.norm_factor = weights["norm_factor"]

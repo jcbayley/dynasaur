@@ -122,6 +122,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     if continue_train:
         pre_model, model = create_model.load_models(config, device=config["device"])
         strain, norm_factor = data_processing.normalise_data(strain, pre_model.norm_factor)
+        labels, label_norm_factor = data_processing.normalise_labels(labels, pre_model.label_norm_factor, n_masses=config["n_masses"])
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
 
@@ -130,6 +131,12 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         
         strain, norm_factor = data_processing.normalise_data(strain, None)
         pre_model.norm_factor = norm_factor
+        print("lm", np.min(labels[:,:-config["n_masses"]]), np.max(labels[:,:-config["n_masses"]]), np.shape(labels))
+        print("lmas", np.min(labels[:,-config["n_masses"]:]), np.max(labels[:,-config["n_masses"]:]), np.shape(labels))
+        labels, label_norm_factor = data_processing.normalise_labels(labels, None, n_masses=config["n_masses"])
+        print("am", np.min(labels[:,:-config["n_masses"]]), np.max(labels[:,:-config["n_masses"]]), np.shape(labels))
+        print("amas", np.min(labels[:,-config["n_masses"]:]), np.max(labels[:,-config["n_masses"]:]), np.shape(labels))
+        pre_model.label_norm_factor = label_norm_factor
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 
@@ -177,7 +184,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
                 "model_state_dict": model.state_dict(),
                 "pre_model_state_dict": pre_model.state_dict(),
                 "optimiser_state_dict":optimiser.state_dict(),
-                "norm_factor": pre_model.norm_factor
+                "norm_factor": pre_model.norm_factor,
+                "label_norm_factor": pre_model.label_norm_factor
             },
             os.path.join(config["root_dir"],"test_model.pt"))
 

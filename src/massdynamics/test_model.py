@@ -41,6 +41,7 @@ def run_testing(config:dict) -> None:
         )
 
     strain, norm_factor = data_processing.normalise_data(strain, pre_model.norm_factor)
+    labels, label_norm_factor = data_processing.normalise_labels(labels, pre_model.label_norm_factor, n_masses=config["n_masses"])
 
 
     """
@@ -272,9 +273,15 @@ def test_model_3d(
             input_data = pre_model(data)
           
             coeffmass_samples = model(input_data).sample().cpu()
+      
+            print("labelshape",np.shape(label))
+            coeffmass_samples, nf = data_processing.unnormalise_labels(coeffmass_samples, pre_model.label_norm_factor, n_masses=n_masses)
+            print("bmasstr",np.min(label.cpu().numpy()[:,-n_masses:]), np.min(label.cpu().numpy()[:,-n_masses:]))
+            label, nf = data_processing.unnormalise_labels(label.cpu().numpy(), pre_model.label_norm_factor, n_masses=n_masses)
+            print("amasstr",np.min(label[:,-n_masses:]), np.min(label[:,-n_masses:]))
 
             mass_samples, coeff_samples = data_processing.samples_to_positions_masses(
-                coeffmass_samples.numpy(), 
+                coeffmass_samples, 
                 n_masses,
                 basis_order,
                 n_dimensions,
@@ -284,7 +291,7 @@ def test_model_3d(
             #print(coeff_samples[0, 1, :, 0])
 
             t_mass, t_coeff = data_processing.samples_to_positions_masses(
-                label[:1].cpu().numpy(), 
+                label[:1], 
                 n_masses,
                 basis_order,
                 n_dimensions,
@@ -383,11 +390,18 @@ def test_model_3d(
 
             nsamples = 500
             n_animate_samples = 50
-            multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu()
+            multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
+
+            print("b",np.min(multi_coeffmass_samples), np.max(multi_coeffmass_samples), pre_model.label_norm_factor, np.shape(multi_coeffmass_samples))
+            multi_coeffmass_samples, nf = data_processing.unnormalise_labels(multi_coeffmass_samples[:,0], pre_model.label_norm_factor, n_masses=n_masses)
+            print("a",np.min(multi_coeffmass_samples), np.max(multi_coeffmass_samples))
+
+            
+            plotting.plot_1d_posteriors(multi_coeffmass_samples, label[0], fname=os.path.join(plot_out,f"posterior_1d_{batch}.png"))
 
             print("mmsamples", multi_coeffmass_samples.shape, multi_coeffmass_samples.dtype)
             multi_mass_samples, multi_coeff_samples = data_processing.samples_to_positions_masses(
-                multi_coeffmass_samples[:,0].numpy(), 
+                multi_coeffmass_samples, 
                 n_masses,
                 basis_order,
                 n_dimensions,

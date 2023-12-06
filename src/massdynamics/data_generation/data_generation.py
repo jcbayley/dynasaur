@@ -33,7 +33,7 @@ def generate_data(
     fourier_weight=0.0):
 
     if data_type == "random":
-        times, postitions, masses, position_coeffs = random_orbits.generate_data(
+        times, positions, masses, position_coeffs = random_orbits.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 
@@ -80,6 +80,12 @@ def generate_data(
     else:
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
 
+    if positions is None:
+        no_positions = True
+        positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
+    else:
+        no_positions = False
+
     all_masses = np.zeros((n_data, n_masses))
 
     for data_index in range(n_data):
@@ -89,11 +95,6 @@ def generate_data(
         #temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
         t_basis_order = int(0.5*basis_order + 1) if basis_type == "fourier" else basis_order-1
 
-        # move to center of mass frane 
-        if positions is not None:
-            if n_masses > 1:
-                positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
-
         if position_coeffs is not None:
             positions[data_index] = basis[basis_type]["val"](
                 times,
@@ -101,6 +102,10 @@ def generate_data(
             )
             if n_masses > 1:
                 positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
+
+        # move to center of mass frane 
+        if n_masses > 1:
+            positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
@@ -129,12 +134,13 @@ def generate_data(
 
         #print(np.max(all_time_dynamics))
 
-
+    
+    
     output_coeffs_mass = data_processing.positions_masses_to_samples(
         all_basis_dynamics,
         all_masses,
         basis_type = basis_type
-            )
+        )
 
     samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
