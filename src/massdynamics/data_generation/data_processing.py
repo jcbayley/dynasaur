@@ -31,6 +31,39 @@ def unnormalise_data(strain, norm_factor = None):
     
     return np.array(strain)*norm_factor, norm_factor
 
+def normalise_labels(label, norm_factor = None, n_masses=2):
+    """normalise the labels (flattened)
+
+    Args:
+        strain (_type_): strain array
+
+    Returns:
+        _type_: normalised strain
+    """
+    if norm_factor is None:
+        norm_factor = np.max(label[:,:-n_masses])
+        print("nf",norm_factor, label.shape, np.max(label))
+    
+    label[:,:-n_masses] /= norm_factor
+
+    return np.array(label), norm_factor
+
+def unnormalise_labels(label, norm_factor = None, n_masses=2):
+    """normalise the data to the maximum strain in all data
+
+    Args:
+        strain (_type_): strain array
+
+    Returns:
+        _type_: normalised strain
+    """
+    if norm_factor is None:
+        norm_factor = np.max(label[:,:-n_masses])
+
+    label[:,:-n_masses] *= norm_factor
+    
+    return np.array(label), norm_factor
+
 def complex_to_real(input_array):
 
     output_array = np.concatenate(
@@ -74,7 +107,6 @@ def positions_masses_to_samples(
     # flatten all dimensions apart from 1st which is samples
     #output_coeffs = coeff_samples.flatten(start_dim=1)
     # append masses to the flattened output coefficients 
-
     output_coeffs = np.concatenate([output_coeffs, mass_samples], axis=1)
 
     return output_coeffs

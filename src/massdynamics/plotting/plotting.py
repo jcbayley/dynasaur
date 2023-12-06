@@ -195,3 +195,30 @@ def plot_mass_distributions(
     if fname is not None:
         fig.savefig(fname)
 
+def plot_1d_posteriors(samples, truths, fname=None):
+    """_summary_
+
+    Args:
+        samples (_type_): shape(nsamples, ndims)
+        truths (_type_): (ndims)
+    """
+
+    """
+    fig, ax = plt.subplots(figsize = (len(truths), 7))
+    print(np.shape(samples), np.shape(truths))
+    ax.violinplot(samples)
+    ax.plot(np.arange(len(truths)) + 1, truths, marker="o", ls="none")
+    """
+    fig, ax = plt.subplots(nrows = samples.shape[1], figsize = (7, len(truths)))
+    for i in range(samples.shape[1]):
+        ax[i].hist(samples[:,i], bins=20, alpha=0.7)
+        ax[i].axvline(truths[i], color="r")
+        ax[i].set_xlabel(f"Index: {i}")
+        ax[i].set_ylabel("Count")
+    
+    fig.tight_layout()
+    
+    if fname is not None:
+        fig.savefig(fname)
+
+

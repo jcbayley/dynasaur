@@ -197,7 +197,7 @@ def solve_ode(
     #initial_conditions = get_initial_conditions(n_masses, n_dimensions)
     #initial_conditions[:,3:6] *= 1e4
     position_scale = 2*distance_scale                             # in m
-    velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-2       # in m/s
+    velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
 
     initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
     
@@ -228,7 +228,7 @@ def solve_ode(
             G)
         
         n_resampled += 1
-    print("N_resampled: ", n_resampled)
+    #print("N_resampled: ", n_resampled)
     
 
     initial_positions = data_processing.subtract_center_of_mass(initial_positions[:,:,np.newaxis], masses)[:,:,0]
@@ -265,8 +265,9 @@ def solve_ode(
         t_span=[min(times), max(times)], 
         y0=initial_conditions.flatten(), 
         tfirst=True,
-        method="RK45",
-        rtol = 1e-5,)
+        method="LSODA",
+        rtol=1e-6,
+        atol=1e-6)
     
     """
     if max(outputs.t) < max(times):
