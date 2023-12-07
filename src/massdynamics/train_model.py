@@ -131,11 +131,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         
         strain, norm_factor = data_processing.normalise_data(strain, None)
         pre_model.norm_factor = norm_factor
-        print("lm", np.min(labels[:,:-config["n_masses"]]), np.max(labels[:,:-config["n_masses"]]), np.shape(labels))
-        print("lmas", np.min(labels[:,-config["n_masses"]:]), np.max(labels[:,-config["n_masses"]:]), np.shape(labels))
         labels, label_norm_factor = data_processing.normalise_labels(labels, None, n_masses=config["n_masses"])
-        print("am", np.min(labels[:,:-config["n_masses"]]), np.max(labels[:,:-config["n_masses"]]), np.shape(labels))
-        print("amas", np.min(labels[:,-config["n_masses"]:]), np.max(labels[:,-config["n_masses"]:]), np.shape(labels))
         pre_model.label_norm_factor = label_norm_factor
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
@@ -189,9 +185,15 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             },
             os.path.join(config["root_dir"],"test_model.pt"))
 
-        fig, ax = plt.subplots()
-        ax.plot(train_losses)
-        ax.plot(val_losses)
+        fig, ax = plt.subplots(nrows=2)
+        ax[0].plot(train_losses)
+        ax[0].plot(val_losses)
+        ax[1].plot(train_losses)
+        ax[1].plot(val_losses)
+        ax[1].set_xscale("log")
+        ax[1].set_xlabel("Time")
+        ax[0].set_ylabel("Loss")
+        ax[1].set_ylabel("Loss")
         fig.savefig(os.path.join(config["root_dir"], "lossplot.png"))
 
     print("Completed Training")

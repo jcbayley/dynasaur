@@ -140,6 +140,65 @@ def too_close_event(t, x, n_masses=2, n_dimensions=3):
 
     if np.any(r_cubed < 1e-4):
         return r_cubed
+
+def generate_kepler_orbit(times, semi_major_axes, eccentricities, inclinations, G, M):
+    
+    # Generate initial conditions for Keplerian orbits
+    positions = []
+    velocities = []
+    num_orbits = len(semi_major_axes)
+
+    for i in range(num_orbits):
+        # Semi-major axis (in meters)
+        a = semi_major_axes[i]
+
+        # Eccentricity
+        e = eccentricities[i]
+
+        # Inclination (angle in radians)
+        inclination = inclinations[i]
+
+        # Orbital period (Kepler's third law)
+        period = np.sqrt(4 * np.pi**2 * a**3 / (G * M))
+
+        # Generate an array of time points covering one orbit
+        #t = 0#np.linspace(0, period, 1000)
+
+        # Calculate mean anomaly
+        mean_anomaly = 2 * np.pi * times / period
+
+        # Solve Kepler's equation for eccentric anomaly
+        eccentric_anomaly = np.arctan2(np.sqrt(1 - e**2) * np.sin(mean_anomaly), e + np.cos(mean_anomaly))
+
+        # Calculate true anomaly
+        true_anomaly = 2 * np.arctan2(np.sqrt(1 + e) * np.sin(eccentric_anomaly / 2), np.sqrt(1 - e) * np.cos(eccentric_anomaly / 2))
+
+        # Generate polar coordinates in the orbital plane
+        r = a * (1 - e**2) / (1 + e * np.cos(true_anomaly))
+        theta = true_anomaly + inclination
+
+        # Convert polar coordinates to Cartesian coordinates
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+        z = np.zeros(np.shape(x))
+
+        # Calculate radial velocity
+        v_r = np.sqrt(G * M * (2 / r - 1 / a))
+
+        # Calculate tangential velocity
+        #v_t = np.sqrt(2 * G * M / r - G * M / a)
+        v_t = np.sqrt(2 * G * M / r)
+
+        # Convert polar velocities to Cartesian velocities
+        vx = v_r * np.cos(theta) - v_t * np.sin(theta)
+        vy = v_r * np.sin(theta) + v_t * np.cos(theta)
+        vz = np.zeros(np.shape(vx))
+
+        # Append positions and velocities
+        positions.append(np.array([x, y, z]))
+        velocities.append(np.array([vx, vy, vz]))
+
+    return positions, velocities
     
 def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale):
 
@@ -165,42 +224,104 @@ def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, vel
     """
     return initial_positions, initial_velocities
 
-def solve_ode(
+def get_initial_conditions(
     times, 
-    n_masses=2, 
-    n_dimensions=3, 
-    n_samples=128
+    G, 
+    M, 
+    n_masses, 
+    n_dimensions,
+    position_scale, 
+    mass_scale, 
+    velocity_scale,
+    data_type = "kepler"):
+    """return initial positions, velocities and masses
+       these should be in units of 
+       mass: kg
+       positions: m
+       velocities: m/s
+
+    Args:
+        times (): _description_
+        G (_type_): _description_
+        M (_type_): _description_
+        n_masses (_type_): _description_
+        n_dimensions (_type_): _description_
+        position_scale (_type_): _description_
+        mass_scale (_type_): _description_
+        velocity_scale (_type_): _description_
+        initial_type (str, optional): _description_. Defaults to "kepler".
+
+    Returns:
+        _type_: _description_
+    """
+    if data_type == "equalmass_3d":
+        masses = np.array([0.5,0.5])*mass_scale*1e-2
+        initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
+    elif data_type == "kepler_fixedperiod":
+        duration = np.max(times) - np.min(times)
+        n_samples = len(times)
+        period = duration
+        min_period = 2.*duration/n_samples
+
+        semi_major_axes = (G*(M + masses[:,0])/(4*np.pi**2) * period**2)**(1/3)
+        eccentricities = np.random.uniform(0.0,0.9,size=1)
+        inclinations = np.random.uniform(0.0,2*np.pi,size=1)
+
+        initial_positions, initial_velocities = generate_kepler_orbit(
+            times, 
+            semi_major_axes, 
+            eccentricities, 
+            inclinations, 
+            G, 
+            M)
+
+        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
+
+    elif data_type == "kepler":
+        duration = np.max(times) - np.min(times)
+        n_samples = len(times)
+        period = duration
+        min_period = 2.*duration/n_samples
+
+        semi_major_axes = (G*(M + masses[:,0])/(4*np.pi**2) * period**2)**(1/3)
+        eccentricities = np.random.uniform(0.0,0.9,size=1)
+        inclinations = np.random.uniform(0.0,2*np.pi,size=1)
+
+        initial_positions, initial_velocities = generate_kepler_orbit(
+            times, 
+            semi_major_axes, 
+            eccentricities, 
+            inclinations, 
+            G, 
+            M)
+        
+        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
+
+    return masses, initial_positions, initial_velocities
+
+def resample_initial_conditions(
+    times, 
+    G, 
+    M, 
+    n_masses, 
+    n_dimensions, 
+    position_scale, 
+    mass_scale, 
+    velocity_scale,
+    data_type = "kepler_fixedperiod"
     ):
 
+    masses, initial_positions, initial_velocities = get_initial_conditions(
+        times, 
+        G, 
+        M, 
+        n_masses, 
+        n_dimensions, 
+        position_scale, 
+        mass_scale, 
+        velocity_scale,
+        data_type = data_type)
 
-    second = 1./(24*3600)
-
-    # scale to 1 year
-    second_scale = 86400
-    # between 0 and au/100
-    distance_scale = 1.4e11
-    # between 0 and 100 solar masses
-    mass_scale = 1.989e30
-
-    G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
-    c = 3e8
-
-    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
-    c_ggravunits = c * ((second_scale**2)/(distance_scale))
-
-    #####################
-    ## hand tuned dont like
-    #####################
-    #masses = get_masses(n_masses)*mass_scale
-    masses = np.array([0.5,0.5])*mass_scale*1e-2
-
-    #initial_conditions = get_initial_conditions(n_masses, n_dimensions)
-    #initial_conditions[:,3:6] *= 1e4
-    position_scale = 2*distance_scale                             # in m
-    velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
-
-    initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
-    
 
     oenergy = orbits_functions.orbital_energy(
         masses[0], 
@@ -215,8 +336,18 @@ def solve_ode(
     # set energy so orbit is bound, 
     
     n_resampled = 0
-    while oenergy > 0.1:
-        initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
+    while oenergy > 0.0:
+        #initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
+        masses, initial_positions, initial_velocities = get_initial_conditions(
+            times, 
+            G, 
+            M, 
+            n_masses, 
+            n_dimensions, 
+            position_scale, 
+            mass_scale, 
+            velocity_scale,
+            data_type = data_type)
 
         oenergy = orbits_functions.orbital_energy(
             masses[0], 
@@ -229,13 +360,38 @@ def solve_ode(
         
         n_resampled += 1
     #print("N_resampled: ", n_resampled)
+
+    return masses, initial_positions, initial_velocities
+
+def solve_ode(
+    times, 
+    masses,
+    initial_positions,
+    initial_velocities,
+    G=6.67e-11,
+    n_samples=128):
+    second = 1./(24*3600)
+
+    # scale to 1 year
+    second_scale = 86400
+    # between 0 and au/100
+    distance_scale = 1.4e11
+    # between 0 and 100 solar masses
+    mass_scale = 1.989e30
+
+    position_scale = 2*distance_scale                             # in m
+    velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
+
+    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
+    c_ggravunits = c * ((second_scale**2)/(distance_scale))
     
 
     initial_positions = data_processing.subtract_center_of_mass(initial_positions[:,:,np.newaxis], masses)[:,:,0]
 
     scaled_initial_velocities = initial_velocities/velocity_scale
     scaled_initial_positions = initial_positions/position_scale
-    scaled_masses = masses/mass_scale
+    #scaled_masses = masses/mass_scale
+    scaled_masses = masses/np.sum(masses)
 
     ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
     ode_initial_positions = initial_positions/distance_scale                # now in AU
@@ -298,7 +454,8 @@ def generate_data(
     detectors=["H1"], 
     window="none", 
     return_windowed_coeffs=True, 
-    basis_type="chebyshev",) -> np.array:
+    basis_type="chebyshev",
+    data_type="newtonian-kepler") -> np.array:
     """_summary_
 
     Args:
@@ -325,14 +482,41 @@ def generate_data(
     times = np.linspace(0,1,sample_rate) #in days for ode
     solve_times = np.linspace(0,10000,sample_rate)
 
+    G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
+    c = 3e8
+
+    # scale to 1 year
+    second_scale = 86400
+    # between 0 and au/100
+    distance_scale = 1.4e11
+    # between 0 and 100 solar masses
+    mass_scale = 1.989e30
+
+
+
+
     all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
     all_masses = np.zeros((n_data, n_masses))
     for i in range(n_data):
+        masses, initial_positions, initial_velocities = resample_initial_conditions(
+            times, 
+            G, 
+            M, 
+            n_masses, 
+            n_dimensions, 
+            position_scale, 
+            mass_scale, 
+            velocity_scale,
+            data_type = newtonian.split("-")[1]
+            )
+
         t_times, positions, masses = solve_ode(
             times=solve_times,
-            n_masses=n_masses, 
-            n_dimensions=n_dimensions, 
+            masses=masses, 
+            initial_positions=initial_positions,
+            initial_velocities=initial_velocities,
             n_samples=len(times))
+
         print(f"solved: {i}")
         all_positions[i] = np.transpose(positions, (1,2,0))
         all_masses[i] = masses

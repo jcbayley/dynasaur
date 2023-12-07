@@ -44,7 +44,7 @@ def generate_data(
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type,
                 fourier_weight=fourier_weight)
-    elif data_type == "newton":
+    elif "newtonian" in data_type:
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
                 n_data, 
                 basis_order, 
