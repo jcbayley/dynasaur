@@ -54,7 +54,8 @@ def generate_data(
                 detectors=detectors, 
                 window=window, 
                 return_windowed_coeffs=return_windowed_coeffs, 
-                basis_type=basis_type)
+                basis_type=basis_type,
+                data_type=data_type)
     elif data_type == "kepler":
         times, positions, masses, position_coeffs = kepler_orbits.generate_data(
                 n_data,

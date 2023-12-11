@@ -227,7 +227,6 @@ def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, vel
 def get_initial_conditions(
     times, 
     G, 
-    M, 
     n_masses, 
     n_dimensions,
     position_scale, 
@@ -258,32 +257,37 @@ def get_initial_conditions(
         masses = np.array([0.5,0.5])*mass_scale*1e-2
         initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
     elif data_type == "kepler_fixedperiod":
+        M = 1e30
         duration = np.max(times) - np.min(times)
         n_samples = len(times)
         period = duration
         min_period = 2.*duration/n_samples
 
-        semi_major_axes = (G*(M + masses[:,0])/(4*np.pi**2) * period**2)**(1/3)
+        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
+
+        semi_major_axes = (G*np.sum(masses)/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = np.random.uniform(0.0,0.9,size=1)
         inclinations = np.random.uniform(0.0,2*np.pi,size=1)
 
         initial_positions, initial_velocities = generate_kepler_orbit(
             times, 
-            semi_major_axes, 
+            [semi_major_axes], 
             eccentricities, 
             inclinations, 
             G, 
             M)
 
-        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
 
     elif data_type == "kepler":
+        M = 1e30
         duration = np.max(times) - np.min(times)
         n_samples = len(times)
         period = duration
         min_period = 2.*duration/n_samples
 
-        semi_major_axes = (G*(M + masses[:,0])/(4*np.pi**2) * period**2)**(1/3)
+        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
+
+        semi_major_axes = (G*np.sum(masses)/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = np.random.uniform(0.0,0.9,size=1)
         inclinations = np.random.uniform(0.0,2*np.pi,size=1)
 
@@ -295,14 +299,12 @@ def get_initial_conditions(
             G, 
             M)
         
-        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
 
     return masses, initial_positions, initial_velocities
 
 def resample_initial_conditions(
     times, 
     G, 
-    M, 
     n_masses, 
     n_dimensions, 
     position_scale, 
@@ -314,7 +316,6 @@ def resample_initial_conditions(
     masses, initial_positions, initial_velocities = get_initial_conditions(
         times, 
         G, 
-        M, 
         n_masses, 
         n_dimensions, 
         position_scale, 
@@ -369,33 +370,34 @@ def solve_ode(
     initial_positions,
     initial_velocities,
     G=6.67e-11,
+    c=3e8,
     n_samples=128):
-    second = 1./(24*3600)
 
+    # scalings for the ode solver
     # scale to 1 year
     second_scale = 86400
-    # between 0 and au/100
+    # scale to 1 au
     distance_scale = 1.4e11
-    # between 0 and 100 solar masses
+    #  solar masses
     mass_scale = 1.989e30
 
-    position_scale = 2*distance_scale                             # in m
-    velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
+    #position_scale = 2*distance_scale                             # in m
+    #velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
 
     G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
     c_ggravunits = c * ((second_scale**2)/(distance_scale))
-    
+
+    # rescale positions and velocities and masses
+    ode_initial_positions = initial_positions/distance_scale                # now in AU
+    ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
+    ode_masses = masses/mass_scale                                          # now in solar masses
 
     initial_positions = data_processing.subtract_center_of_mass(initial_positions[:,:,np.newaxis], masses)[:,:,0]
 
-    scaled_initial_velocities = initial_velocities/velocity_scale
-    scaled_initial_positions = initial_positions/position_scale
+    #scaled_initial_velocities = initial_velocities/velocity_scale
+    #scaled_initial_positions = initial_positions/position_scale
     #scaled_masses = masses/mass_scale
-    scaled_masses = masses/np.sum(masses)
-
-    ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
-    ode_initial_positions = initial_positions/distance_scale                # now in AU
-    ode_masses = masses/mass_scale
+    #scaled_masses = masses/np.sum(masses)
 
     #print(ode_initial_positions, initial_positions)
     #print(ode_initial_velocities, initial_velocities)
@@ -439,10 +441,10 @@ def solve_ode(
     ode_interp_positions = ode_interp_positions.reshape(len(times), n_masses, n_dimensions)
     ode_interp_positions = ode_interp_positions #- np.mean(ode_interp_positions, axis=(0, 1))[None,None,:]
 
-    scaled_interp_positions = ode_interp_positions*distance_scale/position_scale
+    interp_positions = ode_interp_positions*distance_scale
     
     
-    return times, scaled_interp_positions, scaled_masses
+    return times, interp_positions, masses
 
 
 def generate_data(
@@ -492,8 +494,8 @@ def generate_data(
     # between 0 and 100 solar masses
     mass_scale = 1.989e30
 
-
-
+    position_scale = 2*distance_scale                             # in m
+    velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
 
     all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
     all_masses = np.zeros((n_data, n_masses))
@@ -501,13 +503,12 @@ def generate_data(
         masses, initial_positions, initial_velocities = resample_initial_conditions(
             times, 
             G, 
-            M, 
             n_masses, 
             n_dimensions, 
             position_scale, 
             mass_scale, 
             velocity_scale,
-            data_type = newtonian.split("-")[1]
+            data_type = data_type.split("-")[1]
             )
 
         t_times, positions, masses = solve_ode(
@@ -521,6 +522,9 @@ def generate_data(
         all_positions[i] = np.transpose(positions, (1,2,0))
         all_masses[i] = masses
 
+    # scale the positions and masses for use in the neural network
+    all_positions = all_positions/distance_scale
+    all_masses = all_masses/mass_scale
 
     return times, all_positions, all_masses, None
 
