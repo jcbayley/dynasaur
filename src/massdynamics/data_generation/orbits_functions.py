@@ -39,7 +39,7 @@ def orbital_energy(M1, M2, r1, r2, v1, v2, G):
     Returns:
     - Orbital energy (float)
     """
-    G = 6.67430e-11  # Gravitational constant in m^3 kg^(-1) s^(-2)
+    #G = 6.67430e-11  # Gravitational constant in m^3 kg^(-1) s^(-2)
 
     # Calculate the relative position and velocity vectors
     relative_position = r1 - r2
