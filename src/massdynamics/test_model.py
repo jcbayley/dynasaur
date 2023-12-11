@@ -40,8 +40,14 @@ def run_testing(config:dict) -> None:
         fourier_weight=config["fourier_weight"]
         )
 
-    strain, norm_factor = data_processing.normalise_data(strain, pre_model.norm_factor)
-    labels, label_norm_factor = data_processing.normalise_labels(labels, pre_model.label_norm_factor, n_masses=config["n_masses"])
+    strain, norm_factor = data_processing.normalise_data(
+        strain, 
+        pre_model.norm_factor)
+    labels, label_norm_factor, mass_norm_factor = data_processing.normalise_labels(
+        labels, 
+        pre_model.label_norm_factor, 
+        pre_model.mass_norm_factor, 
+        n_masses=config["n_masses"])
 
 
     """
@@ -275,9 +281,17 @@ def test_model_3d(
             coeffmass_samples = model(input_data).sample().cpu()
       
             print("labelshape",np.shape(label))
-            coeffmass_samples, nf = data_processing.unnormalise_labels(coeffmass_samples, pre_model.label_norm_factor, n_masses=n_masses)
+            coeffmass_samples, nf, mf = data_processing.unnormalise_labels(
+                coeffmass_samples, 
+                pre_model.label_norm_factor, 
+                pre_model.mass_norm_factor,
+                n_masses=n_masses)
             print("bmasstr",np.min(label.cpu().numpy()[:,-n_masses:]), np.min(label.cpu().numpy()[:,-n_masses:]))
-            label, nf = data_processing.unnormalise_labels(label.cpu().numpy(), pre_model.label_norm_factor, n_masses=n_masses)
+            label, nf, mf = data_processing.unnormalise_labels(
+                label.cpu().numpy(), 
+                pre_model.label_norm_factor, 
+                pre_model.mass_norm_factor,
+                n_masses=n_masses)
             print("amasstr",np.min(label[:,-n_masses:]), np.min(label[:,-n_masses:]))
 
             mass_samples, coeff_samples = data_processing.samples_to_positions_masses(
@@ -393,7 +407,11 @@ def test_model_3d(
             multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
 
             print("b",np.min(multi_coeffmass_samples), np.max(multi_coeffmass_samples), pre_model.label_norm_factor, np.shape(multi_coeffmass_samples))
-            multi_coeffmass_samples, nf = data_processing.unnormalise_labels(multi_coeffmass_samples[:,0], pre_model.label_norm_factor, n_masses=n_masses)
+            multi_coeffmass_samples, nf, mf = data_processing.unnormalise_labels(
+                multi_coeffmass_samples[:,0], 
+                pre_model.label_norm_factor, 
+                pre_model.mass_norm_factor,
+                n_masses=n_masses)
             print("a",np.min(multi_coeffmass_samples), np.max(multi_coeffmass_samples))
 
             

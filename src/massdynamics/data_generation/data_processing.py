@@ -31,7 +31,7 @@ def unnormalise_data(strain, norm_factor = None):
     
     return np.array(strain)*norm_factor, norm_factor
 
-def normalise_labels(label, norm_factor = None, n_masses=2):
+def normalise_labels(label, label_norm_factor = None, mass_norm_factor=None,n_masses=2):
     """normalise the labels (flattened)
 
     Args:
@@ -40,15 +40,20 @@ def normalise_labels(label, norm_factor = None, n_masses=2):
     Returns:
         _type_: normalised strain
     """
-    if norm_factor is None:
-        norm_factor = np.max(label[:,:-n_masses])
-        print("nf",norm_factor, label.shape, np.max(label))
+    if label_norm_factor is None:
+        label_norm_factor = np.max(label[:,:-n_masses])
+        #print("nf",norm_factor, label.shape, np.max(label))
+
+    if mass_norm_factor is None:
+        mass_norm_factor = np.max(label[:,-n_masses:])
     
-    label[:,:-n_masses] /= norm_factor
+    label[:,:-n_masses] /= label_norm_factor
 
-    return np.array(label), norm_factor
+    label[:,-n_masses:] /= mass_norm_factor
 
-def unnormalise_labels(label, norm_factor = None, n_masses=2):
+    return np.array(label), label_norm_factor, mass_norm_factor
+
+def unnormalise_labels(label, label_norm_factor=None, mass_norm_factor=None, n_masses=2):
     """normalise the data to the maximum strain in all data
 
     Args:
@@ -57,12 +62,17 @@ def unnormalise_labels(label, norm_factor = None, n_masses=2):
     Returns:
         _type_: normalised strain
     """
-    if norm_factor is None:
-        norm_factor = np.max(label[:,:-n_masses])
+    if label_norm_factor is None:
+        label_norm_factor = np.max(label[:,:-n_masses])
 
-    label[:,:-n_masses] *= norm_factor
+    if mass_norm_factor is None:
+        mass_norm_factor = np.max(label[:,-n_masses:])
+
+    label[:,:-n_masses] *= label_norm_factor
+
+    label[:,-n_masses:] *= mass_norm_factor
     
-    return np.array(label), norm_factor
+    return np.array(label), label_norm_factor, mass_norm_factor
 
 def complex_to_real(input_array):
 
