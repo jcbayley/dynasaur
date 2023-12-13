@@ -7,6 +7,16 @@ import timeit
 from massdynamics.basis_functions import basis
 from massdynamics.data_generation import orbits_functions, data_processing
 
+def compute_gw_acc(m0, m1, r, v, rvect, vvect, G, c):
+
+    prefact = 2*(G**2)/(5*(c**5)*(r**3))*m0*m1*(m1/(m0 + m1))
+
+    fact1 = rvect*np.dot(rvect, vvect)*((34/3)*G*(m0+m1)/r + 6*v**2)
+
+    fact2 = vvect*(-6*G*(m0+m1)/r - 2*v**2)
+
+    return prefact * (fact1 + fact2)
+
 def newton_derivative(
     t, 
     x_posvels, 
@@ -50,11 +60,23 @@ def newton_derivative(
         x_derivative[i][0:n_dimensions] = x_vels[i]
         for j, mass_2 in enumerate(masses):
             if i == j: continue
-            separation_cubed = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)**3
+            separation = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)
+            separation_cubed = separation**3
+            absvel = np.sqrt(np.sum((x_vels[i] - x_vels[j])**2))
             #seps[i,j] = separation_cubed
             diff = x_positions[j] - x_positions[i]
+            veldiff = x_vels[i] - x_vels[j]
             acceleration = G_ggravunits*mass_2*diff/separation_cubed
-            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration * (1 + decay)
+            gw_acceleration = compute_gw_acc(
+                mass_1, 
+                mass_2, 
+                separation, 
+                absvel, 
+                diff, 
+                veldiff, 
+                G_ggravunits, 
+                c_ggravunits)
+            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration + gw_acceleration
          
         """
         # get all other masses but this one
@@ -261,6 +283,39 @@ def kepler_apoapsis(semi_major_axis, eccentricity, theta, masses, G):
 
     return np.concatenate([[r0],[r1]], axis=0), np.concatenate([[v0],[v1]], axis=0)
 
+def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
+    """generate initial conditionss for a kepler orbit in 2d plane starting at apoapsis
+
+    Args:
+        semi_major_axis (_type_): _description_
+        eccentricity (_type_): _description_
+        theta (_type_): _description_
+        masses (_type_): _description_
+        G (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    ra = semi_major_axis*(1+eccentricity)
+    velocity = np.sqrt(G*np.sum(masses)/ra*(1-eccentricity))
+
+    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
+                                [np.sin(theta), np.cos(theta), 0],
+                                [0,0,0]])
+
+    r0 = np.array([-ra, 0, 0])
+    v0 = np.array([0,-velocity, 0])
+
+    r1 = np.array([ra,0,0])
+    v1 = np.array([0,velocity,0])
+
+    r0 = rotation_matrix.dot(masses[1]/np.sum(masses) * r0)
+    r1 = rotation_matrix.dot(masses[0]/np.sum(masses) * r1)
+
+    v0 = rotation_matrix.dot(masses[1]/np.sum(masses) * v0)
+    v1 = rotation_matrix.dot(masses[0]/np.sum(masses) * v1)
+
+    return np.concatenate([[r0],[r1]], axis=0), np.concatenate([[v0],[v1]], axis=0)
 
     
 def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale):
@@ -397,6 +452,33 @@ def get_initial_conditions(
         #true_anomoly = np.random.uniform(0.0, 2*np.pi, size=1) # True anomaly in degrees
 
         initial_positions, initial_velocities = kepler_apoapsis(
+            semi_major_axes, 
+            eccentricities, 
+            arg_periapsis, 
+            masses, 
+            G)
+    elif data_type == "circularbinary":
+        M = 1e30
+        duration = np.max(times) - np.min(times)
+        n_samples = len(times)
+        period = duration
+        min_period = 2.*duration/n_samples
+
+        M = mass_scale
+
+        masses = 10*np.array([M, M])
+
+        period = np.random.uniform(duration/15, duration/7)
+
+
+        semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
+        eccentricities = 0.0
+        #inclinations = np.array([0.0])
+        #long_ascending_node = 0.0#np.random.uniform(0.0, 2*np.pi, size=1) # Longitude of the ascending node in degrees
+        arg_periapsis = np.random.uniform(0.0, 2*np.pi) # Argument of periapsis in degrees
+        #true_anomoly = np.random.uniform(0.0, 2*np.pi, size=1) # True anomaly in degrees
+
+        initial_positions, initial_velocities = kepler_apoapsis_binary(
             semi_major_axes, 
             eccentricities, 
             arg_periapsis, 
