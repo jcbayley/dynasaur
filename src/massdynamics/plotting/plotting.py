@@ -36,6 +36,13 @@ def plot_data(times, positions, strain, n_examples, root_dir):
 
         fig.savefig(os.path.join(savedir, f"output_strain_{i}.png"))
 
+
+        fig, ax = plt.subplots()
+        ax.plot(positions[i, 0, 0, :], positions[i, 0, 1, :])
+        ax.plot(positions[i, 1, 0, :], positions[i, 1, 1, :])
+
+        fig.savefig(os.path.join(savedir, f"xyplane_positions_{i}.png"))
+
 def plot_z_projection(source_tseries, recon_tseries, fname = "z_projection.png"):
 
     n_masses, n_dimensions, n_samples = np.shape(source_tseries)
@@ -126,6 +133,38 @@ def plot_sampled_reconstructions(
         fig.savefig(fname)
     
     return fig
+
+def plot_sample_positions(
+    times, 
+    source_tseries, 
+    recon_tseries, 
+    n_dimensions, 
+    n_masses,
+    fname:str = None):
+    """_summary_
+
+    Args:
+        time (_type_): _description_
+        source_tseries (_type_): _description_
+        recon_tseries (_type_): _description_
+        n_dimensions (_type_): _description_
+        fname (str, optional): _description_. Defaults to None.
+    """
+    fig, ax = plt.subplots(nrows=n_dimensions)
+    lower, med, upper = np.quantile(recon_tseries, [0.1, 0.5, 0.9], axis = 0)
+    print(np.shape(med), len(times), np.shape(recon_tseries))
+    for i in range(n_dimensions):
+        for j in range(n_masses):
+            #ax[i].fill_between(times, lower[j,i], upper[j,i], label="90% confidence", alpha=0.5, color=f"C{j}")
+            #ax[i].plot(times, med[j,i], color=f"C{j}", label="median")
+            ax[i].plot(times, source_tseries[j,i], label="source", color="k")
+            #ax[i].plot(times, source_tseries[j, i, :], color=f"C{j}")
+            ax[i].plot(times, recon_tseries[:, j, i, :].T, ls="--", color=f"C{j}", alpha=0.4)
+            ax[i].set_ylabel(f"Dimension {i} position")
+
+    if fname is not None:
+        fig.savefig(fname)
+
 
 def plot_positions(
     times, 

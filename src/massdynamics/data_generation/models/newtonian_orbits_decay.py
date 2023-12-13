@@ -43,6 +43,7 @@ def newton_derivative(
     x_vels = x_posvels[:, n_dimensions:2*n_dimensions]
 
     seps = np.zeros((n_masses, n_masses))
+    decay = 0.9
 
     x_derivative = np.zeros((n_masses, 2*n_dimensions))
     for i, mass_1 in enumerate(masses):
@@ -52,7 +53,8 @@ def newton_derivative(
             separation_cubed = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)**3
             #seps[i,j] = separation_cubed
             diff = x_positions[j] - x_positions[i]
-            x_derivative[i][n_dimensions:2*n_dimensions] += G_ggravunits*mass_2*diff/separation_cubed
+            acceleration = G_ggravunits*mass_2*diff/separation_cubed
+            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration * (1 + decay)
          
         """
         # get all other masses but this one
@@ -383,9 +385,9 @@ def get_initial_conditions(
 
         M = mass_scale
 
-        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
+        masses = np.array([M, np.random.uniform(1e-3*M, 1e-2*M)])
 
-        period = np.random.uniform(duration/4, duration*2)
+        period = np.random.uniform(duration/4, duration)
 
         semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = 0.0

@@ -481,6 +481,14 @@ def test_model_3d(
 
                     source_masses = new_source_masses
                     source_tseries = new_source_tseries
+
+            plotting.plot_sample_positions(
+                times, 
+                source_tseries, 
+                m_recon_tseries, 
+                n_dimensions, 
+                n_masses,
+                fname = os.path.join(plot_out, f"samples_positions_{batch}.png"))
             
 
             plotting.plot_sample_separations(
@@ -501,24 +509,25 @@ def test_model_3d(
                 m_recon_masses,
                 source_masses,
                 fname=os.path.join(plot_out,f"massdistributions_{batch}.png"))
-
             
+            print("line of sight ani")
             make_animations.line_of_sight_animation(
                 m_recon_tseries, 
                 m_recon_masses, 
                 source_tseries, 
                 source_masses, 
                 os.path.join(plot_out,f"2d_massdist_{batch}.gif"))
-
-
+            """
+            print("3d dist")
             make_animations.make_3d_distribution(
                 plot_out, 
-                batch, 
                 m_recon_tseries[:n_animate_samples], 
                 m_recon_masses[:n_animate_samples], 
                 source_tseries, 
-                source_masses)
-
+                source_masses,
+                fname = os.path.join(plot_out, f"multi_animation_{batch}.gif"))
+            
+            print("zproj")
             make_animations.make_3d_distribution_zproj(
                 plot_out, 
                 batch, 
@@ -526,3 +535,4 @@ def test_model_3d(
                 m_recon_masses, 
                 source_tseries, 
                 source_masses)
+            """

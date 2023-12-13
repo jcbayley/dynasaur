@@ -14,6 +14,7 @@ from massdynamics.data_generation import (
 from massdynamics.data_generation.models import (
     random_orbits,
     newtonian_orbits,
+    newtonian_orbits_decay,
     kepler_orbits
 )
 from massdynamics.basis_functions import basis
@@ -44,8 +45,20 @@ def generate_data(
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type,
                 fourier_weight=fourier_weight)
-    elif "newtonian" in data_type:
+    elif data_type.split("-")[0] == "newtonian":
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                return_windowed_coeffs=return_windowed_coeffs, 
+                basis_type=basis_type,
+                data_type=data_type)
+    elif data_type.split("-")[0] == "newtonian_decay":
+        times, positions, masses, position_coeffs = newtonian_orbits_decay.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 

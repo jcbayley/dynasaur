@@ -1,7 +1,10 @@
 import os
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
+
 
 def make_2d_animation(
     root_dir, 
@@ -161,12 +164,12 @@ def make_3d_animation(
 
 def make_3d_distribution(
     root_dir, 
-    index, 
     timeseries, 
     masses, 
     true_timeseries, 
     true_masses,
-    duration = 5):
+    duration = 5,
+    fname=None):
     """make animation in 3d of marticle movements
 
     Args:
@@ -215,10 +218,11 @@ def make_3d_distribution(
 
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
-
-    fps = int(n_frames/duration)
-    writergif = animation.PillowWriter(fps=fps) 
-    ani.save(os.path.join(root_dir, f"multi_animation_{index}.gif"), writer=writergif)
+    print("made animation")
+    #fps = int(n_frames/duration)
+    #writergif = animation.PillowWriter(fps=fps) 
+    ani.save(fname, writer="imagemagick")
+    print("saved")
 
 def make_3d_distribution_zproj(
     root_dir, 
@@ -305,7 +309,7 @@ def line_of_sight_animation(
     # timeseries shape now: nsamples, ndims, ntimes
     fig, ax = plt.subplots()
 
-    print(np.shape(concat_ts[:, 0, 0]))
+    #print(np.shape(concat_ts[:, 0, 0]))
     hst, xedge, yedge = np.histogram2d(concat_ts[:, 0, 0], concat_ts[:, 1, 0], bins=np.array([binsx, binsy]))
     image = ax.imshow(
         hst, 
@@ -318,7 +322,6 @@ def line_of_sight_animation(
                 binsy[-1]])
     point = ax.scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=5, color="k")
     point2 = ax.scatter(true_timeseries[:, 1, 0], true_timeseries[:, 0, 0], s=5, color="r")
-
     def update_plot(frame):
 
         hst, xedge, yedge = np.histogram2d(concat_ts[:, 0, frame], concat_ts[:, 1, frame], bins=np.array([binsx, binsy]))
@@ -329,8 +332,7 @@ def line_of_sight_animation(
         point2.set_offsets(np.c_[ty, tx])
 
     ani = animation.FuncAnimation(fig, update_plot, frames=nframes, interval=1)
-
-    fps = int(nframes/duration)
-    writergif = animation.PillowWriter(fps=fps) 
-    ani.save(fname, writer=writergif)
+    #fps = int(nframes/duration)
+    #writergif = animation.PillowWriter(fps=fps) 
+    ani.save(fname, writer="imagemagick")
 
