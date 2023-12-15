@@ -9,12 +9,13 @@ from massdynamics.data_generation import orbits_functions, data_processing
 
 def compute_gw_acc(m0, m1, r, v, rvect, vvect, G, c):
 
-    prefact = 2*(G**2)/(5*(c**5)*(r**3))*m0*m1*(m1/(m0 + m1))
+    prefact = 4*(G**2)/(5*(c**5)*(r**3))*m0*m1*(m1/(m0 + m1))
 
     fact1 = rvect*np.dot(rvect, vvect)*((34/3)*G*(m0+m1)/r + 6*v**2)
 
     fact2 = vvect*(-6*G*(m0+m1)/r - 2*v**2)
-
+    #print(prefact, fact1, fact2)
+    #print(c,G,m0,m1, r, v)
     return prefact * (fact1 + fact2)
 
 def newton_derivative(
@@ -44,9 +45,6 @@ def newton_derivative(
     # compute G in gaussian gravitational units to prevent overflows
     # G * (s/day)/(m/Au) * Msun(kg)
 
-    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
-    c_ggravunits = c * ((second_scale**2)/(distance_scale))
-
     # reshape posvels to more useful shape
     x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
     x_positions = x_posvels[:, 0:n_dimensions]
@@ -66,7 +64,7 @@ def newton_derivative(
             #seps[i,j] = separation_cubed
             diff = x_positions[j] - x_positions[i]
             veldiff = x_vels[i] - x_vels[j]
-            acceleration = G_ggravunits*mass_2*diff/separation_cubed
+            acceleration = G*mass_2*diff/separation_cubed
             gw_acceleration = compute_gw_acc(
                 mass_1, 
                 mass_2, 
@@ -74,8 +72,9 @@ def newton_derivative(
                 absvel, 
                 diff, 
                 veldiff, 
-                G_ggravunits, 
-                c_ggravunits)
+                G, 
+                c)
+            #print(acceleration, gw_acceleration)
             x_derivative[i][n_dimensions:2*n_dimensions] += acceleration + gw_acceleration
          
         """
@@ -112,8 +111,6 @@ def newton_derivative_vect(
     # define some constants 
     # compute G in gaussian gravitational units to prevent overflows
     # G * (s/day)/(m/Au) * Msun(kg)
-    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
-    c_ggravunits = c * ((second_scale**2)/(distance_scale))
 
     x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
     x_derivative = np.zeros((n_masses, 2*n_dimensions))
@@ -466,10 +463,9 @@ def get_initial_conditions(
 
         M = mass_scale
 
-        masses = 10*np.array([M, M])
+        masses = np.random.uniform(1, 10)*np.array([M, M])
 
-        period = np.random.uniform(duration/15, duration/7)
-
+        period = np.random.uniform(duration/2, duration/0.5)
 
         semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = 0.0
@@ -572,6 +568,8 @@ def solve_ode(
     mass_scale = 1.989e30
 
     ode_times = times/second_scale
+    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
+    c_ggravunits = c * ((second_scale**2)/(distance_scale))
 
     n_masses, n_dimensions = np.shape(initial_positions)
 
@@ -601,7 +599,8 @@ def solve_ode(
         second_scale=second_scale,
         distance_scale=distance_scale,
         mass_scale=mass_scale,
-        G=G)
+        G=G_ggravunits,
+        c=c_ggravunits)
     
     #too_close_event.terminal = True
 
@@ -610,7 +609,7 @@ def solve_ode(
         t_span=[min(ode_times), max(ode_times)], 
         y0=initial_conditions.flatten(), 
         tfirst=True,
-        method="LSODA",
+        method="RK45",
         rtol=1e-6,
         atol=1e-6)
     
