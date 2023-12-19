@@ -415,7 +415,7 @@ def test_model_3d(
             print("a",np.min(multi_coeffmass_samples), np.max(multi_coeffmass_samples))
 
             
-            plotting.plot_1d_posteriors(multi_coeffmass_samples, label[0], fname=os.path.join(plot_out,f"posterior_1d_{batch}.png"))
+            #plotting.plot_1d_posteriors(multi_coeffmass_samples, label[0], fname=os.path.join(plot_out,f"posterior_1d_{batch}.png"))
 
             print("mmsamples", multi_coeffmass_samples.shape, multi_coeffmass_samples.dtype)
             multi_mass_samples, multi_coeff_samples = data_processing.samples_to_positions_masses(
