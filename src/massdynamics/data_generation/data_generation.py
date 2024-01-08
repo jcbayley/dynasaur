@@ -79,7 +79,7 @@ def generate_data(
                 n_dimensions = n_dimensions,
                 sample_rate = sample_rate)
     else:
-        raise Exception(f"No data with name {data_type}")
+        raise Exception(f"No data with name {data_type.split('-')[0]}")
     
     if basis_type == "fourier":
         dtype = complex

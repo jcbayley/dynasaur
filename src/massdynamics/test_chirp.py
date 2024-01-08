@@ -9,13 +9,12 @@ from massdynamics.data_generation import (
     data_processing,
     compute_waveform
 )
-import data_generation
-import make_animations as animations
-import plotting
-from massdynamics.model_functions import (
+from massdynamics.plotting import plotting, make_animations
+from massdynamics.create_model import (
     create_models,
     load_models, 
 )
+from massdynamics.basis_functions import basis
 
 import zuko
 import argparse
@@ -165,13 +164,12 @@ def fit_positions_with_polynomial(
     for mind in range(n_masses):
         # this way around as fit to second last dimensions
         temp_dyn = np.zeros((n_dimensions, basis_order), dtype=dtype)
-        for dimind in range(3):
-            dimfit = basis[basis_type]["fit"](
-                times, 
-                positions[mind, dimind], 
-                basis_order-1)
+        dimfit = basis[basis_type]["fit"](
+            times, 
+            positions[mind], 
+            basis_order)
 
-            temp_dyn[dimind] = dimfit
+        temp_dyn[:] = dimfit
             
         if window != "none":
             temp_dyn2, win_coeffs = perform_window(
@@ -240,14 +238,14 @@ def test_different_orientations(times, m1, m2, tc, basis_order, detectors, windo
             window=window, 
             basis_type=basis_type)
         
-        dynamics[orient] = get_time_dynamics(
+        dynamics[orient] = compute_waveform.get_time_dynamics(
             times, 
             basis_dynamics[orient], 
             basis_type=basis_type)
         
         print(np.shape(basis_dynamics[orient]))
 
-        strain_timeseries[orient], energy[orient] = get_waveform(
+        strain_timeseries[orient], energy[orient] = compute_waveform.get_waveform(
             times, 
             norm_masses[orient], 
             basis_dynamics[orient], 
@@ -281,7 +279,7 @@ def test_different_orientations(times, m1, m2, tc, basis_order, detectors, windo
         norm_masses[orient] for orient in orientations
     ])
 
-    animations.make_3d_distribution(
+    make_animations.make_3d_distribution(
                 root_dir, 
                 0, 
                 m_recon_tseries, 
@@ -327,7 +325,7 @@ def test_1and2_masses(times, m1, m2, tc, basis_order, detectors, window="none", 
             basis_dynamics[orient], 
             basis_type=basis_type)
 
-        strain_timeseries[orient], energy[orient] = get_waveform(
+        strain_timeseries[orient], energy[orient] = compute_waveform.get_waveform(
             times, 
             norm_masses[orient], 
             basis_dynamics[orient], 
@@ -367,7 +365,7 @@ def test_1and2_masses(times, m1, m2, tc, basis_order, detectors, window="none", 
         norm_masses[orient] for orient in orientations
     ])
 
-    animations.make_3d_distribution(
+    make_animations.make_3d_distribution(
                 root_dir, 
                 1, 
                 m_recon_tseries, 
@@ -399,7 +397,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], basis_order
     # change to mass, dim, order
     #basis_dynamics = np.transpose(coeffs, (0,2,1))
 
-    timeseries_dynamics = get_time_dynamics(
+    timeseries_dynamics = compute_waveform.get_time_dynamics(
         basis_dynamics, 
         times, 
         basis_type=basis_type
@@ -412,7 +410,7 @@ def chirp_positions(times, m1, m2, tc, detectors=["H1", "L1", "V1"], basis_order
     fig.savefig(os.path.join(root_dir, "chirp_positions.png"))
 
 
-    strain_timeseries, energy = get_waveform(
+    strain_timeseries, energy = compute_waveform.get_waveform(
         times, 
         norm_masses, 
         norm_basis_dynamics, 
@@ -493,7 +491,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     ax.fill_between(ts, np.exp(-config["fourier_weight"]*ts)*-1, np.exp(-config["fourier_weight"]*ts)*1, alpha = 0.5)
     fig.savefig(os.path.join(plot_out, "basis_prior.png"))
 
-    data, norm_factor = normalise_data(data, pre_model.norm_factor)    
+    data, norm_factor = data_processing.normalise_data(data, pre_model.norm_factor)    
     print("normfactor", norm_factor)
 
     #data = data/100
@@ -501,7 +499,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     n_masses = 2
     n_dimensions = 3
    
-    animations.make_3d_animation(plot_out, 100, all_dynamics, 0.01*np.array([m1,m2]), None, None)
+    make_animations.make_3d_animation(plot_out, 100, all_dynamics, 0.01*np.array([m1,m2]), None, None)
 
     
     reconstructx = basis[basis_type]["val"](times, basis_dynamics[0][0])
@@ -529,14 +527,14 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
 
     input_data = pre_model(torch.from_numpy(np.array([data])).to(torch.float32))
 
-    nsamples = 200
+    nsamples = 20
     n_animate_samples = 50
-    multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu()
+    multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
 
     m_recon_tseries, m_recon_masses = np.zeros((nsamples, n_masses, n_dimensions, len(times))), np.zeros((nsamples, n_masses))
     m_recon_strain = np.zeros((nsamples, 3, len(times)))
 
-    multi_mass_samples, multi_coeff_samples = samples_to_positions_masses(
+    multi_mass_samples, multi_coeff_samples = data_processing.samples_to_positions_masses(
                 multi_coeffmass_samples[:,0], 
                 n_masses,
                 basis_order,
@@ -546,7 +544,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
     for i in range(nsamples):
         t_co = multi_coeff_samples[i]*max_dyn
         t_mass = multi_mass_samples[i]
-        t_time = get_time_dynamics(
+        t_time = compute_waveform.get_time_dynamics(
             multi_coeff_samples[i],
             times,  
             basis_type=basis_type)
@@ -556,12 +554,10 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
         m_recon_masses[i] = t_mass
 
 
-        temp_recon_strain, temp_recon_energy, _, _, temp_m_recon_coeffs, _ = get_strain_from_samples(
+        temp_recon_strain, temp_recon_energy, temp_m_recon_coeffs = data_processing.get_strain_from_samples(
             times, 
             t_mass,
-            None,
-            t_co, 
-            None, 
+            np.array(t_co), 
             detectors=["H1","L1","V1"],
             return_windowed_coeffs=config["return_windowed_coeffs"], 
             window=config["window"], 
@@ -616,7 +612,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
                 fname=os.path.join(plot_out,f"massdistributions_{batch}.png"))
 
     print(np.max(m_recon_tseries), np.min(m_recon_tseries))
-    animations.line_of_sight_animation(
+    make_animations.line_of_sight_animation(
                 m_recon_tseries, 
                 m_recon_masses, 
                 source_tseries, 
@@ -625,7 +621,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
 
     print("source", np.shape(source_tseries), np.shape(source_masses))
 
-    animations.make_3d_distribution(
+    make_animations.make_3d_distribution(
                 plot_out, 
                 batch, 
                 m_recon_tseries[:n_animate_samples], 
@@ -633,7 +629,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000):
                 source_tseries, 
                 source_masses)
 
-    animations.make_3d_distribution_zproj(
+    make_animations.make_3d_distribution_zproj(
                 plot_out, 
                 batch, 
                 m_recon_tseries, 
