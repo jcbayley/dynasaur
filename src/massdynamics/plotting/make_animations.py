@@ -500,6 +500,8 @@ def make_distribution_projections(
     masses, 
     true_timeseries, 
     true_masses,
+    strain=None,
+    true_strain=None,
     duration=5,
     center_of_mass=True):
     """make animation in 3d of marticle movements
@@ -516,8 +518,10 @@ def make_distribution_projections(
     #num_masses = np.shape(masses)[-1]
     n_samples, n_masses, n_dimensions, n_frames = np.shape(timeseries)
 
+    n_samples_strain, n_detectors, n_times = np.shape(strain)
+
     # Create a figure and axis
-    fig, ax = plt.subplots(nrows=2, ncols=2)
+    fig, ax = plt.subplots(nrows=2, ncols=3)
 
     ax[0,0].set_xlim([np.min(timeseries[:,:,0,:]),np.max(timeseries[:,:,0,:])])
     ax[0,0].set_ylim([np.min(timeseries[:,:,1,:]),np.max(timeseries[:,:,1,:])])
@@ -525,21 +529,31 @@ def make_distribution_projections(
     ax[0,1].set_xlim([np.min(timeseries[:,:,0,:]),np.max(timeseries[:,:,0,:])])
     ax[0,1].set_ylim([np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])])
 
-    ax[1,0].set_xlim([np.min(timeseries[:,:,1,:]),np.max(timeseries[:,:,1,:])])
-    ax[1,0].set_ylim([np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])])
+    ax[0,2].set_xlim([np.min(timeseries[:,:,1,:]),np.max(timeseries[:,:,1,:])])
+    ax[0,2].set_ylim([np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])])
+
+    ax[1,0].set_xlim([0,n_frames])
+    ax[1,1].set_xlim([0,n_frames])
+    ax[1,2].set_xlim([0,n_frames])
+
+    ax[1,0].set_ylim([np.min(strain[:,0,:]),np.max(strain[:,0,:])])
+    ax[1,1].set_ylim([np.min(strain[:,1,:]),np.max(strain[:,1,:])])
+    ax[1,2].set_ylim([np.min(strain[:,2,:]),np.max(strain[:,2,:])])
+
 
     print("anishape", np.shape(timeseries))
+    print("axshape",np.shape(ax))
     # Create particles as lines
     #particles = [ax.plot(timeseries[:,mind,0,0], timeseries[:,mind,1,0], timeseries[:,mind,2,0], marker="o", ls="none",markersize=masses[0,mind]*10) for mind in range(num_masses)]
     particlesxy = [ax[0,0].scatter(timeseries[:,mind,0,0], timeseries[:,mind,1,0],s=masses[:,mind]*10, alpha=0.5) for mind in range(n_masses)]
     particlesxz = [ax[0,1].scatter(timeseries[:,mind,0,0], timeseries[:,mind,2,0],s=masses[:,mind]*10, alpha=0.5) for mind in range(n_masses)]
-    particlesyz = [ax[1,0].scatter(timeseries[:,mind,1,0], timeseries[:,mind,2,0],s=masses[:,mind]*10, alpha=0.5) for mind in range(n_masses)]
+    particlesyz = [ax[0,2].scatter(timeseries[:,mind,1,0], timeseries[:,mind,2,0],s=masses[:,mind]*10, alpha=0.5) for mind in range(n_masses)]
 
     if true_timeseries is not None:
         #true_particles = [ax.plot(true_timeseries[mind,0,0], true_timeseries[mind,1,0], true_timeseries[mind,2,0], marker="o", ls="none", color="k", markersize=true_masses[mind]*10) for mind in range(num_masses)]
         true_particlesxy = ax[0,0].scatter(true_timeseries[:,0,0], true_timeseries[:,1,0],s=true_masses*10, color="k")
         true_particlesxz = ax[0,1].scatter(true_timeseries[:,0,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
-        true_particlesyz = ax[1,0].scatter(true_timeseries[:,1,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
+        true_particlesyz = ax[0,2].scatter(true_timeseries[:,1,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
 
     if center_of_mass:
         centermass_timeseries = []
@@ -550,10 +564,33 @@ def make_distribution_projections(
 
         center_particlesxy = ax[0,0].scatter(centermass_timeseries[:,0,0], centermass_timeseries[:,1,0],s=np.sum(masses, axis=1), color="C2") 
         center_particlesxz = ax[0,1].scatter(centermass_timeseries[:,0,0], centermass_timeseries[:,2,0],s=np.sum(masses, axis=1), color="C2") 
-        center_particlesyz = ax[1,0].scatter(centermass_timeseries[:,1,0], centermass_timeseries[:,2,0],s=np.sum(masses, axis=1), color="C2") 
+        center_particlesyz = ax[0,2].scatter(centermass_timeseries[:,1,0], centermass_timeseries[:,2,0],s=np.sum(masses, axis=1), color="C2") 
 
+    if strain is not None:
+        strain_xdata = np.arange(len(strain[0,0]))
+        strain_plots = [ax[1,i].plot(strain_xdata[:1], strain[:,i,:1].T, alpha=0.3, color=f"C{i}") for i in range(n_detectors)]
+
+    if true_strain is not None:
+        true_strain_xdata = np.arange(len(strain[0,0]))
+        true_strain_plot = [ax[1,i].plot(true_strain_xdata[:1],true_strain[i,:1], color="k")[0] for i in range(n_detectors)]
+
+    ax[0,0].set_xlabel("X dimension")
+    ax[0,0].set_ylabel("Y dimension")
+    ax[0,1].set_xlabel("X dimension")
+    ax[0,1].set_ylabel("Z dimension")
+    ax[0,2].set_xlabel("Y dimension")
+    ax[0,2].set_ylabel("Z dimension")
+
+    ax[1,0].set_xlabel("Time")
+    ax[1,1].set_xlabel("Time")
+    ax[1,2].set_xlabel("Time")
+
+    ax[1,0].set_ylabel("Strain [H1]")
+    ax[1,1].set_ylabel("Strain [L1]")
+    ax[1,2].set_ylabel("Strain [V1]")
 
     def update_plot(frame):
+        print(n_frames, frame)
         for mind in range(n_masses):
             # Set new positions for each particle based on the current frame
             #print(np.shape(timeseries[:,mind][:,:,frame]))
@@ -577,10 +614,23 @@ def make_distribution_projections(
             center_particlesxy.set_offsets(np.c_[xc, yc])
             center_particlesxz.set_offsets(np.c_[xc, zc])
             center_particlesyz.set_offsets(np.c_[yc, zc])
+        
+        
+        if frame > 1:
+            
+            if strain is not None:
+                for det, line in enumerate(strain_plots):
+                    for lind, lns in enumerate(line):
+                        lns.set_data(strain_xdata[:frame],strain[lind,det,:frame].T)
+            
+            if true_strain is not None:
+                for det, line in enumerate(true_strain_plot):
+                    line.set_data(true_strain_xdata[:frame], true_strain[det,:frame])
+        
 
+    fig.tight_layout()
 
-
-    ani = animation.FuncAnimation(fig, update_plot, frames=n_frames-1, interval=1)
+    ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
 
     fps = int(n_frames/duration)
     writergif = animation.PillowWriter(fps=fps) 

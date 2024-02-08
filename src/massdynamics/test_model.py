@@ -550,7 +550,9 @@ def test_model_3d(
                 m_recon_masses, 
                 source_tseries, 
                 source_masses,
-                duration=5)
+                strain=m_recon_strain,
+                true_strain=source_strain,
+                duration=8)
             
             """
             print("3d dist")
