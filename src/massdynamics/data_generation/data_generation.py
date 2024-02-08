@@ -33,7 +33,7 @@ def generate_data(
     data_type = "random",
     fourier_weight=0.0):
 
-    if data_type == "random":
+    if data_type.split("-")[0] == "random":
         times, positions, masses, position_coeffs = random_orbits.generate_data(
                 n_data, 
                 basis_order, 
@@ -44,7 +44,8 @@ def generate_data(
                 window=window, 
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type,
-                fourier_weight=fourier_weight)
+                fourier_weight=fourier_weight,
+                data_type=data_type)
     elif data_type.split("-")[0] == "newtonian":
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
                 n_data, 
@@ -120,6 +121,7 @@ def generate_data(
         # move to center of mass frane 
         if n_masses > 1:
             positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
+            
 
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
