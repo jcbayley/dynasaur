@@ -233,3 +233,37 @@ def subtract_center_of_mass(positions, masses):
 
     return relative_positions
 
+def cartesian_to_spherical(positions):
+    """Convert cartesian to spherical coords
+
+    Args:
+        positions (_type_): input shape (Ndata, Ndimensions, Nsamples)
+
+    Returns:
+        _type_: (Ndata, Ndimensions, Nsamples)
+    """
+    r = np.sqrt(np.einsum("ijk,ijk->ik", positions, positions))
+    theta = np.unwrap(np.arctan2(np.einsum("ijk,ijk->ik", positions[:,:2,:], positions[:,:2,:]), positions[:,2,:]), axis=-1)
+    phi = np.unwrap(np.arctan2(positions[:,1,:], positions[:,0,:]), axis=-1)
+
+    positions_spherical = np.concatenate([r[:,np.newaxis,:], phi[:,np.newaxis,:], theta[:,np.newaxis,:]], axis=1)
+
+    return positions_spherical
+
+def spherical_to_cartesian(positions):
+    """Convert cartesian to spherical coords
+
+    Args:
+        positions (_type_): input shape (Ndata, Ndimensions, Nsamples)
+
+    Returns:
+        _type_: (Ndata, Ndimensions, Nsamples)
+    """
+    x = positions[:,0,:] * np.sin(positions[:,2,:]) * np.cos(positions[:,1,:])
+    y = positions[:,0,:] * np.sin(positions[:,2,:]) * np.sin(positions[:,1,:])
+    z = positions[:,0,:] * np.cos(positions[:,2,:])
+
+    positions_spherical = np.concatenate([x[:,np.newaxis,:], y[:,np.newaxis,:], z[:,np.newaxis,:]], axis=1)
+
+    return positions_spherical
+

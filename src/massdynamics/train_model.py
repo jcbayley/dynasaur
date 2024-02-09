@@ -93,7 +93,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         config["n_data"] = len(labels)
     else:
         print("making data ........")
-        times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+        times, labels, strain, cshape, positions, all_dynamics, all_dynamics_coord = data_generation.generate_data(
             n_data=config["n_data"], 
             basis_order=config["basis_order"], 
             n_masses=config["n_masses"], 
@@ -104,7 +104,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             return_windowed_coeffs=config["return_windowed_coeffs"],
             basis_type = config["basis_type"],
             data_type = config["data_type"],
-            fourier_weight=config["fourier_weight"])
+            fourier_weight=config["fourier_weight"],
+            coordinate_type=config["coordinate_type"])
 
     acc_basis_order = cshape
 

@@ -51,7 +51,8 @@ def val(times, amps1):
     # amps1 shape should have the frequency dimension as 0
     
     # transpose as applied over first dimension but returns over last
-    fftout = np.transpose(amps1, (2, 0, 1))
+    #fftout = np.transpose(amps1, (2, 0, 1))
+    fftout = np.moveaxis(amps1, -1, 0)
     val = np.polynomial.chebyshev.chebval(times, fftout)
     return val
 

@@ -26,7 +26,7 @@ def run_testing(config:dict) -> None:
     """
     pre_model, model = load_models(config, config["device"])
 
-    times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+    times, labels, strain, cshape, positions, all_dynamics, all_dynamics_coord = data_generation.generate_data(
         config["n_test_data"], 
         config["basis_order"], 
         config["n_masses"], 
@@ -37,7 +37,8 @@ def run_testing(config:dict) -> None:
         return_windowed_coeffs=config["return_windowed_coeffs"],
         basis_type = config["basis_type"],
         data_type = config["data_type"],
-        fourier_weight=config["fourier_weight"]
+        fourier_weight=config["fourier_weight"],
+        coordinate_type=config["coordinate_type"]
         )
 
     strain, norm_factor = data_processing.normalise_data(

@@ -31,7 +31,8 @@ def generate_data(
     return_windowed_coeffs=True, 
     basis_type="chebyshev",
     data_type = "random",
-    fourier_weight=0.0):
+    fourier_weight=0.0,
+    coordinate_type="cartesian"):
 
     if data_type == "random":
         times, positions, masses, position_coeffs = random_orbits.generate_data(
@@ -91,8 +92,12 @@ def generate_data(
     strain_timeseries = np.zeros((n_data, len(detectors), len(times)))
     if basis_type == "fourier":
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
+        all_basis_dynamics_coord = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
+
     else:
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
+        all_basis_dynamics_coord = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
+
 
     if positions is None:
         no_positions = True
@@ -121,6 +126,14 @@ def generate_data(
         if n_masses > 1:
             positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
+        if coordinate_type == "spherical":
+            positions_coord = data_processing.cartesian_to_spherical(positions[data_index])
+        elif coordinate_type == "cartiesian":
+            positions_coord == positions[data_index]
+        else:
+            raise Exception(f"Coordinate type {coordinate_type} is not supported")
+
+
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
                 times,
@@ -131,6 +144,16 @@ def generate_data(
             # if windowing applied create coeffs which are windowed else just use the random coeffs
             
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
+
+            if coordinate_type != "cartesian":
+    
+                temp_coeffs2 = basis[basis_type]["fit"](
+                    times,
+                    positions_coord[mass_index, :, :][np.newaxis,:],
+                    t_basis_order
+                    )
+                
+                all_basis_dynamics_coord[data_index, mass_index] = temp_coeffs2
 
         
         strain_timeseries[data_index], energy = compute_waveform.get_waveform(
@@ -149,16 +172,22 @@ def generate_data(
         #print(np.max(all_time_dynamics))
 
     
-    
-    output_coeffs_mass = data_processing.positions_masses_to_samples(
-        all_basis_dynamics,
-        all_masses,
-        basis_type = basis_type
-        )
+    if coordinate_type == "cartesian":
+        output_coeffs_mass = data_processing.positions_masses_to_samples(
+            all_basis_dynamics,
+            all_masses,
+            basis_type = basis_type
+            )
+    else:
+        output_coeffs_mass = data_processing.positions_masses_to_samples(
+            all_basis_dynamics_coord,
+            all_masses,
+            basis_type = basis_type
+            )
 
     samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    return times, output_coeffs_mass, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
+    return times, output_coeffs_mass, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics, all_basis_dynamics_coord
 
 
 def get_data_path(
