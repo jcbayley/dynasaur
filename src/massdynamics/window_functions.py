@@ -4,8 +4,8 @@ from massdynamics.basis_functions import basis
 
 
 def fit_cheby_to_hann(times, order=6, basis_type="chebyshev"):
-    hwin = np.hanning(len(times))
-    hann_cheb = basis[basis_type]["fit"](times, hwin, order)
+    hwin = np.hanning(len(times))[np.newaxis, :]
+    hann_cheb = basis[basis_type]["fit"](times, hwin, order)[0]
     return hann_cheb
 
 def fit_cheby_to_tukey(times, alpha=0.5, order=6, basis_type="chebyshev"):
@@ -14,7 +14,7 @@ def fit_cheby_to_tukey(times, alpha=0.5, order=6, basis_type="chebyshev"):
     return tuk_cheb
 
 
-def chebint2(times, coeffs, basis_type="chebyshev", sub_mean=True):
+def chebint2(times, coeffs, basis_type="chebyshev", sub_mean=False):
     """compute the second integral correcting for offsets in the integrated values
 
     Args:
@@ -39,6 +39,7 @@ def chebint2(times, coeffs, basis_type="chebyshev", sub_mean=True):
         win_co_pos[0] -= np.mean(win_pos)
     else:
         win_co_pos = basis[basis_type]["integrate"](coeffs, m=2)
+        win_co_pos[np.isnan(win_co_pos)] = 0
 
     return win_co_pos
 
@@ -78,9 +79,9 @@ def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev"):
     #win_co_y = basis[basis_type]["integrate"](win_co_y_acc, m=2)
     #win_co_z = basis[basis_type]["integrate"](win_co_z_acc, m=2)
 
-    win_co_x = chebint2(times, win_co_x_acc)
-    win_co_y = chebint2(times, win_co_y_acc)
-    win_co_z = chebint2(times, win_co_z_acc)
+    win_co_x = chebint2(times, win_co_x_acc, basis_type=basis_type)
+    win_co_y = chebint2(times, win_co_y_acc, basis_type=basis_type)
+    win_co_z = chebint2(times, win_co_z_acc, basis_type=basis_type)
     
     coarr = np.array([win_co_x, win_co_y, win_co_z]).T
     return coarr
@@ -93,6 +94,10 @@ def perform_window(times, coeffs, window, order=6, basis_type="chebyshev"):
         coeffs (_type_): _description_
         window (_type_): _description_
     """
+
+    if basis_type == "fourier":
+        order = int(order/2) + 1
+        
     if window != "none":
         if window == "tukey":
             win_coeffs = fit_cheby_to_tukey(times, alpha=0.5, order=order, basis_type=basis_type)
@@ -101,8 +106,7 @@ def perform_window(times, coeffs, window, order=6, basis_type="chebyshev"):
         else:
             raise Exception(f"Window {window} does not Exist")
 
-        coeffs = window_coeffs(times, coeffs, win_coeffs)
-
+        coeffs = window_coeffs(times, coeffs, win_coeffs, basis_type=basis_type)
     else:
         win_coeffs = None
 

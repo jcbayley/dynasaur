@@ -95,6 +95,9 @@ def run_testing(config:dict) -> None:
     test_loader = DataLoader(dataset, batch_size=1)
 
 
+    upsample_times = np.linspace(np.min(times), np.max(times), config["plot_sample_rate"])
+
+
     if config["n_dimensions"] == 1:
         test_model_1d(
             model, 
@@ -120,8 +123,9 @@ def run_testing(config:dict) -> None:
         test_model_3d(
             model, 
             pre_model, 
-            test_loader, 
-            times, 
+            test_loader,
+            times,
+            upsample_times, 
             config["n_masses"], 
             acc_basis_order, 
             config["n_dimensions"], 
@@ -245,6 +249,7 @@ def test_model_3d(
     pre_model, 
     dataloader, 
     times, 
+    upsample_times,
     n_masses, 
     basis_order, 
     n_dimensions, 
@@ -287,12 +292,14 @@ def test_model_3d(
                 pre_model.label_norm_factor, 
                 pre_model.mass_norm_factor,
                 n_masses=n_masses)
+
             print("bmasstr",np.min(label.cpu().numpy()[:,-n_masses:]), np.min(label.cpu().numpy()[:,-n_masses:]))
             label, nf, mf = data_processing.unnormalise_labels(
                 label.cpu().numpy(), 
                 pre_model.label_norm_factor, 
                 pre_model.mass_norm_factor,
                 n_masses=n_masses)
+
             print("amasstr",np.min(label[:,-n_masses:]), np.min(label[:,-n_masses:]))
 
             mass_samples, coeff_samples = data_processing.samples_to_positions_masses(
@@ -301,6 +308,7 @@ def test_model_3d(
                 basis_order,
                 n_dimensions,
                 basis_type)
+
             #print("coeffsamp", np.shape(coeff_samples))
             #print(coeff_samples[0, 0, :, 0])
             #print(coeff_samples[0, 1, :, 0])
@@ -321,12 +329,12 @@ def test_model_3d(
 
             source_tseries = compute_waveform.get_time_dynamics(
                 source_coeffs,
-                times,  
+                upsample_times,  
                 basis_type=basis_type)
 
             recon_tseries = compute_waveform.get_time_dynamics(
                 recon_coeffs, 
-                times,  
+                upsample_times,  
                 basis_type=basis_type)
 
             """
@@ -338,13 +346,14 @@ def test_model_3d(
 
 
             recon_strain, recon_energy, recon_coeffs = data_processing.get_strain_from_samples(
-                times, 
+                upsample_times, 
                 recon_masses,
                 recon_coeffs, 
                 detectors=detectors,
                 return_windowed_coeffs=return_windowed_coeffs, 
                 window=window, 
                 basis_type=basis_type)
+
             """
             source_strain, source_energy = compute_waveform.get_waveform(
                 times, 
@@ -356,7 +365,7 @@ def test_model_3d(
             """
             
             source_strain, source_energy,source_coeffs = data_processing.get_strain_from_samples(
-                times, 
+                upsample_times, 
                 source_masses,  
                 source_coeffs, 
                 detectors=detectors,
@@ -366,12 +375,12 @@ def test_model_3d(
             
             recon_strain, _ = data_processing.normalise_data(recon_strain, pre_model.norm_factor)
             source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
-            source_plot_data = data[0].cpu().numpy()
+            source_plot_data = source_strain#data[0].cpu().numpy()
             #window = signal.windows.tukey(np.shape(source_strain)[-1], alpha=0.5)
             #recon_strain = recon_strain * window[None, :]
 
             fig = plotting.plot_reconstructions(
-                            times, 
+                            upsample_times, 
                             detectors, 
                             recon_strain, 
                             source_strain, 
@@ -380,8 +389,9 @@ def test_model_3d(
                             recon_energy,
                             fname = os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
+            """
             plotting.plot_positions(
-                times, 
+                upsample_times, 
                 source_tseries, 
                 recon_tseries, 
                 n_dimensions, 
@@ -393,7 +403,7 @@ def test_model_3d(
                 recon_tseries, 
                 fname = os.path.join(plot_out,f"z_projection_{batch}.png"))
 
-            """
+            
             make_animations.make_3d_animation(
                 plot_out, 
                 batch, 
@@ -428,21 +438,21 @@ def test_model_3d(
 
             #print("multishape", multi_coeffmass_samples.shape)
             m_recon_masses = np.zeros((nsamples, n_masses))
-            m_recon_tseries = np.zeros((nsamples, n_masses, n_dimensions, len(times)))
-            m_recon_strain = np.zeros((nsamples, len(detectors), len(times)))
+            m_recon_tseries = np.zeros((nsamples, n_masses, n_dimensions, len(upsample_times)))
+            m_recon_strain = np.zeros((nsamples, len(detectors), len(upsample_times)))
             #m_recon_energy = np.zeros((nsamples, len(times)))
             for i in range(nsamples):
                 #print(np.shape(multi_coeffmass_samples[i]))
                 t_co, t_mass = multi_coeff_samples[i], multi_mass_samples[i]
                 t_time = compute_waveform.get_time_dynamics(
                     t_co, 
-                    times, 
+                    upsample_times, 
                     basis_type=basis_type)
                 m_recon_tseries[i] = t_time
                 m_recon_masses[i] = t_mass
 
                 temp_recon_strain, temp_recon_energy, temp_m_recon_coeffs = data_processing.get_strain_from_samples(
-                    times, 
+                    upsample_times, 
                     t_mass,
                     t_co,  
                     detectors=["H1","L1","V1"],
@@ -483,24 +493,30 @@ def test_model_3d(
                     source_masses = new_source_masses
                     source_tseries = new_source_tseries
 
+            """
             plotting.plot_sample_positions(
-                times, 
+                upsample_times, 
                 source_tseries, 
                 m_recon_tseries, 
                 n_dimensions, 
                 n_masses,
                 fname = os.path.join(plot_out, f"samples_positions_{batch}.png"))
-            
-
+            """
+            plotting.plot_dimension_projection(
+                m_recon_tseries[:10], 
+                source_tseries, 
+                fname=os.path.join(plot_out, f"dim_projection_{batch}.png"), 
+                alpha=0.2)
+            """
             plotting.plot_sample_separations(
-                times, 
+                upsample_times, 
                 source_tseries, 
                 m_recon_tseries, 
                 fname=os.path.join(plot_out,f"separations_{batch}.png"))
-
+            """
             print("source_Strain", np.shape(source_strain))
             plotting.plot_sampled_reconstructions(
-                times, 
+                upsample_times, 
                 detectors, 
                 m_recon_strain, 
                 source_strain, 
@@ -511,6 +527,7 @@ def test_model_3d(
                 source_masses,
                 fname=os.path.join(plot_out,f"massdistributions_{batch}.png"))
             
+            """
             print("line of sight ani")
             make_animations.line_of_sight_animation(
                 m_recon_tseries, 
@@ -518,6 +535,26 @@ def test_model_3d(
                 source_tseries, 
                 source_masses, 
                 os.path.join(plot_out,f"2d_massdist_{batch}.gif"))
+            """
+            make_animations.heatmap_projections(
+                m_recon_tseries, 
+                m_recon_masses, 
+                source_tseries, 
+                source_masses, 
+                os.path.join(plot_out,f"heatmap_projections_{batch}.gif"),
+                duration=5)
+
+            make_animations.make_distribution_projections(
+                plot_out, 
+                batch, 
+                m_recon_tseries, 
+                m_recon_masses, 
+                source_tseries, 
+                source_masses,
+                strain=m_recon_strain,
+                true_strain=source_strain,
+                duration=8)
+            
             """
             print("3d dist")
             make_animations.make_3d_distribution(

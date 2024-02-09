@@ -261,3 +261,43 @@ def plot_1d_posteriors(samples, truths, fname=None):
         fig.savefig(fname)
 
 
+def plot_dimension_projection(positions, true_positions, fname=None, alpha=0.5):
+    """plot the three projections in dimensions and the third dimension from 45 degrees
+
+
+    Args:
+        positions (_type_): (nsamples, n_masses, n_dimensions, n_times)
+        alpha (float, optional): _description_. Defaults to 0.5.
+    """
+    fig, ax = plt.subplots(nrows=2, ncols=2)
+    ax3d = fig.add_subplot(2,2,4, projection="3d")
+    fig.delaxes(ax[1,1])
+    dind=0
+    alpha=0.5
+    ax[0,0].set_xlabel("x")
+    ax[0,0].set_ylabel("y")
+    ax[0,1].set_xlabel("x")
+    ax[0,1].set_ylabel("z")
+    ax[1,0].set_xlabel("y")
+    ax[1,0].set_ylabel("z")
+    for massind in range(np.shape(positions)[1]):
+        ax[0,0].plot(positions[:, massind, 0].T, positions[:, massind, 1].T, color=f"C{massind}", alpha=alpha)
+        ax[0,1].plot(positions[:, massind, 0].T, positions[:, massind, 2].T, color=f"C{massind}", alpha=alpha)
+        ax[1,0].plot(positions[:, massind, 1].T, positions[:, massind, 2].T, color=f"C{massind}", alpha=alpha)
+        for x,y,z in positions[:, massind, :]:
+            ax3d.plot3D(x,y,z, color=f"C{massind}", alpha=alpha)
+
+    for massind in range(np.shape(true_positions)[0]):
+        ax[0,0].plot(true_positions[massind, 0].T, true_positions[massind, 1].T, color=f"k")
+        ax[0,1].plot(true_positions[massind, 0].T, true_positions[massind, 2].T, color=f"k")
+        ax[1,0].plot(true_positions[massind, 1].T, true_positions[massind, 2].T, color=f"k")
+        x,y,z = true_positions[massind, :]
+        ax3d.plot3D(x,y,z, color=f"k",)
+
+    fig.tight_layout()
+
+    if fname is not None:
+        fig.savefig(fname)
+
+
+

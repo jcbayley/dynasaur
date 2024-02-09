@@ -38,7 +38,7 @@ def generate_random_coefficients(
 
 
 
-def generate_masses(n_masses: int) -> np.array:
+def generate_masses(n_masses: int, data_type="random-uniform") -> np.array:
     """generate masses 
 
     Args:
@@ -47,8 +47,11 @@ def generate_masses(n_masses: int) -> np.array:
     Returns:
         np.array: _description_
     """
-
+    
     masses = np.random.rand(n_masses)
+    if data_type.split("-")[1] == "equalmass":
+        masses[1] = masses[0]
+
     masses = masses/np.sum(masses)
 
     return masses
@@ -63,7 +66,8 @@ def generate_data(
     window="none", 
     return_windowed_coeffs=True, 
     basis_type="chebyshev",
-    fourier_weight=0.0) -> np.array:
+    fourier_weight=0.0,
+    data_type = "random-uniform") -> np.array:
     """_summary_
 
     Args:
@@ -94,10 +98,9 @@ def generate_data(
         fourier_weight=fourier_weight)
 
     if window != False and window != None or window != "none":
-        coeffs, win_coeffs = window_functions.perform_window(times, random_coeffs, window, basis_type=basis_type)
+        coeffs, window_coeffs = window_functions.perform_window(times, random_coeffs, window, basis_type=basis_type, order=basis_order)
     else:
         coeffs = random_coeffs
-
 
     if return_windowed_coeffs:  
         win_basis_order = np.shape(coeffs)[0]
@@ -122,7 +125,7 @@ def generate_data(
 
     for data_index in range(n_data):
 
-        masses = generate_masses(n_masses)
+        masses = generate_masses(n_masses, data_type=data_type)
         all_masses[data_index] = masses
 
         #all_dynamics = np.zeros((n_masses, n_dimensions, win_basis_order), dtype=dtype)
@@ -137,11 +140,11 @@ def generate_data(
                 fourier_weight=fourier_weight)
 
             if window != "none":
-                coeffs = window_coeffs(times, random_coeffs, win_coeffs, basis_type=basis_type)
+                coeffs  = window_functions.window_coeffs(times, random_coeffs, window_coeffs, basis_type=basis_type)
             else:
                 coeffs = random_coeffs
                 
-            all_basis_dynamics[data_index, mass_index] = random_coeffs.T 
+            all_basis_dynamics[data_index, mass_index] = coeffs.T 
         
         
     """
