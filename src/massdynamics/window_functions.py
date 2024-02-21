@@ -9,7 +9,7 @@ def fit_cheby_to_hann(times, order=6, basis_type="chebyshev"):
     return hann_cheb
 
 def fit_cheby_to_tukey(times, alpha=0.5, order=6, basis_type="chebyshev"):
-    hwin = signal.windows.tukey(len(times), alpha=alpha)
+    hwin = scipy.signal.windows.tukey(len(times), alpha=alpha)
     tuk_cheb = basis[basis_type]["fit"](times, hwin, order)
     return tuk_cheb
 
@@ -43,13 +43,13 @@ def chebint2(times, coeffs, basis_type="chebyshev", sub_mean=False):
 
     return win_co_pos
 
-def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev"):
+def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev", sub_mean=False):
     """window coefficients
 
     Args:
         times (_type_): array time timestamps
-        coeffs (_type_): _description_
-        window_coeffs (_type_): _description_
+        coeffs (_type_): (n_coeffs, n_dimensions)
+        window_coeffs (_type_): (n_coeffs)
         basis_type (str, optional): _description_. Defaults to "chebyshev".
 
     Returns:
@@ -61,6 +61,10 @@ def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev"):
     co_x_acc = basis[basis_type]["derivative"](coeffs[:,0], m=2)
     co_y_acc = basis[basis_type]["derivative"](coeffs[:,1], m=2)
     co_z_acc = basis[basis_type]["derivative"](coeffs[:,2], m=2)
+
+    #co_x_vel = basis[basis_type]["derivative"](coeffs[:,0], m=1)
+    #co_y_vel = basis[basis_type]["derivative"](coeffs[:,1], m=1)
+    #co_z_vel = basis[basis_type]["derivative"](coeffs[:,2], m=1)
 
     # window each dimension in acceleration according to hann window
     win_co_x_acc = basis[basis_type]["multiply"](co_x_acc, window_coeffs)
@@ -79,20 +83,20 @@ def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev"):
     #win_co_y = basis[basis_type]["integrate"](win_co_y_acc, m=2)
     #win_co_z = basis[basis_type]["integrate"](win_co_z_acc, m=2)
 
-    win_co_x = chebint2(times, win_co_x_acc, basis_type=basis_type)
-    win_co_y = chebint2(times, win_co_y_acc, basis_type=basis_type)
-    win_co_z = chebint2(times, win_co_z_acc, basis_type=basis_type)
+    win_co_x = chebint2(times, win_co_x_acc, basis_type=basis_type, sub_mean=sub_mean)
+    win_co_y = chebint2(times, win_co_y_acc, basis_type=basis_type, sub_mean=sub_mean)
+    win_co_z = chebint2(times, win_co_z_acc, basis_type=basis_type, sub_mean=sub_mean)
     
     coarr = np.array([win_co_x, win_co_y, win_co_z]).T
     return coarr
 
-def perform_window(times, coeffs, window, order=6, basis_type="chebyshev"):
+def perform_window(times, coeffs, window, order=6, basis_type="chebyshev", sub_mean=False, alpha=0.5):
     """_summary_
 
     Args:
-        times (_type_): _description_
-        coeffs (_type_): _description_
-        window (_type_): _description_
+        times (_type_):  n_times
+        coeffs (_type_):  (n_coeffs, n_dimensions)
+        window (_type_): (tukey or hann)
     """
 
     if basis_type == "fourier":
@@ -100,13 +104,13 @@ def perform_window(times, coeffs, window, order=6, basis_type="chebyshev"):
         
     if window != "none":
         if window == "tukey":
-            win_coeffs = fit_cheby_to_tukey(times, alpha=0.5, order=order, basis_type=basis_type)
+            win_coeffs = fit_cheby_to_tukey(times, alpha=alpha, order=order, basis_type=basis_type)
         elif window == "hann":
             win_coeffs = fit_cheby_to_hann(times, order=order, basis_type=basis_type)
         else:
             raise Exception(f"Window {window} does not Exist")
 
-        coeffs = window_coeffs(times, coeffs, win_coeffs, basis_type=basis_type)
+        coeffs = window_coeffs(times, coeffs, win_coeffs, basis_type=basis_type, sub_mean=sub_mean)
     else:
         win_coeffs = None
 
