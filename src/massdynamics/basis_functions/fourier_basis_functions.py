@@ -4,14 +4,14 @@ from scipy import fftpack, signal
 def multiply(amps1, amps2):
     if type(amps2) in [np.array, np.ndarray, list]:
         ift = np.fft.irfft(amps1)*np.fft.irfft(amps2)
-        window = signal.windows.tukey(np.shape(ift)[-1], alpha=1.0)
+        window = 1#signal.windows.tukey(np.shape(ift)[-1], alpha=1.0)
         return np.fft.rfft(ift*window)
     else:
         return amps1 * amps2
 
 def power(amps1):
     ift = np.fft.irfft(amps1)*np.fft.irfft(amps1)
-    window = signal.windows.tukey(np.shape(ift)[-1], alpha=1.0)
+    window = 1#signal.windows.tukey(np.shape(ift)[-1], alpha=1.0)
     return np.fft.rfft(ift*window)
 
 def subtract(amps1, amps2):

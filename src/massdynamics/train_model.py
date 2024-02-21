@@ -77,7 +77,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     if config["load_data"]:
         print("loading data ........")
-        times, labels, strain, cshape, positions = data_generation.load_data(
+        times, basis_dynamics, masses, strain, cshape, positions = data_generation.load_data(
             data_dir = config["data_dir"], 
             basis_order = config["basis_order"],
             n_masses = config["n_masses"],
@@ -93,7 +93,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         config["n_data"] = len(labels)
     else:
         print("making data ........")
-        times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
             n_data=config["n_data"], 
             basis_order=config["basis_order"], 
             n_masses=config["n_masses"], 
@@ -121,19 +121,33 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     if continue_train:
         pre_model, model = create_model.load_models(config, device=config["device"])
-        strain, norm_factor = data_processing.normalise_data(strain, pre_model.norm_factor)
-        labels, label_norm_factor, mass_norm_factor = data_processing.normalise_labels(labels, pre_model.label_norm_factor, n_masses=config["n_masses"])
+        pre_model, labels, strain = data_processing.preprocess_data(
+            pre_model, 
+            basis_dynamics,
+            masses, 
+            strain, 
+            window_strain=config["window_strain"], 
+            spherical_coords=config["spherical_coords"], 
+            initial_run=False,
+            n_masses=config["n_masses"],
+            device=config["device"],
+            basis_type=config["basis_type"])
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
-
         pre_model.to(config["device"])
         model.to(config["device"])
-        
-        strain, norm_factor = data_processing.normalise_data(strain, None)
-        pre_model.norm_factor = norm_factor
-        labels, label_norm_factor, mass_norm_factor = data_processing.normalise_labels(labels, None, n_masses=config["n_masses"])
-        pre_model.label_norm_factor = label_norm_factor
-        pre_model.mass_norm_factor = mass_norm_factor
+        pre_model, labels, strain = data_processing.preprocess_data(
+            pre_model, 
+            basis_dynamics,
+            masses, 
+            strain, 
+            window_strain=config["window_strain"], 
+            spherical_coords=config["spherical_coords"], 
+            initial_run=True,
+            n_masses=config["n_masses"],
+            device=config["device"],
+            basis_type=config["basis_type"])
+
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 

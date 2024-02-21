@@ -713,6 +713,8 @@ def run_chirp_test(config, mass1=5000, mass2=5000, rotate_angle=0.0):
                 m_recon_masses, 
                 source_tseries, 
                 source_masses,
+                strain=m_recon_strain,
+                true_strain=source_strain,
                 duration=5)
 
 

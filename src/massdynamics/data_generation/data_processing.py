@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import massdynamics.data_generation.compute_waveform as compute_waveform
 import massdynamics.window_functions as window_functions
+import scipy
 
 def normalise_data(strain, norm_factor = None):
     """normalise the data to the maximum strain in all data
@@ -174,10 +175,8 @@ def get_strain_from_samples(
 
     Args:
         times (_type_): _description_
-        recon_masses (_type_): _description_
-        source_masses (_type_): _description_
-        recon_coeffs (_type_): _description_
-        source_coeffs (_type_): _description_
+        masses (_type_): _description_
+        coeffs (_type_): (n_masses, n_coeffs, n_dimensions)
         detectors (list, optional): _description_. Defaults to ["H1"].
         return_windowed_coeffs (bool, optional): _description_. Defaults to False.
         window (bool, optional): _description_. Defaults to False.
@@ -188,7 +187,8 @@ def get_strain_from_samples(
     """
     # if there is a window and I and not predicting the windowed coefficients
    
-    n_masses, n_coeffs, n_dimensions = np.shape(coeffs)
+    n_masses, n_dimensions, n_coeffs = np.shape(coeffs)
+
     if not return_windowed_coeffs and window != "none":
         n_coeffs = []
         # for each mass perform the window on the xyz positions (acceleration)
@@ -212,6 +212,27 @@ def get_strain_from_samples(
 
     return strain, energy, coeffs
 
+def get_window_strain(strain, window_type="hann", alpha=0.1):
+    """Window the strain
+
+    Args:
+        strain (_type_): _description_
+        window_type (str, optional): _description_. Defaults to "hann".
+        alpha (float, optional): _description_. Defaults to 0.1.
+
+    Returns:
+        _type_: _description_
+    """
+    if window_type == "hann":
+        window = np.hanning(np.shape(strain)[-1])
+        win_strain = strain * window
+    elif window_type == "tukey":
+        window = scipy.signal.windows.tukey(np.shape(strain)[-1], alpha=0.1)
+        win_strain = strain * window
+    else:
+        win_strain = strain
+
+    return win_strain
 
 def subtract_center_of_mass(positions, masses):
     """
@@ -267,3 +288,94 @@ def spherical_to_cartesian(positions):
 
     return positions_spherical
 
+
+def preprocess_data(
+    pre_model, 
+    basis_dynamics,
+    masses, 
+    strain, 
+    window_strain=None, 
+    spherical_coords=None, 
+    initial_run=False,
+    n_masses=2,
+    device="cpu",
+    basis_type="fourier"):
+
+    if spherical_coords:
+        print("Spherical not implemented yet")
+        #time_dynamics = cartesian_to_spherical(time_dynamics)
+
+
+
+    if window_strain is not None or window != False:
+        strain = get_window_strain(strain, window_type=window_strain)
+    
+    
+    labels = positions_masses_to_samples(
+        basis_dynamics,
+        masses,
+        basis_type = basis_type
+        )
+
+    if initial_run:
+        strain, norm_factor = normalise_data(
+            strain, 
+            None)
+        pre_model.norm_factor = norm_factor
+        labels, label_norm_factor, mass_norm_factor = normalise_labels(
+            labels, 
+            None, 
+            None,
+            n_masses=n_masses)
+        pre_model.label_norm_factor = label_norm_factor
+        pre_model.mass_norm_factor = mass_norm_factor
+    else:
+        strain, norm_factor = normalise_data(
+            strain, 
+            pre_model.norm_factor)
+        labels, label_norm_factor, mass_norm_factor = normalise_labels(
+            labels, 
+            label_norm_factor=pre_model.label_norm_factor, 
+            mass_norm_factor=pre_model.mass_norm_factor, 
+            n_masses=n_masses)
+
+
+    return pre_model, labels, strain
+
+def unpreprocess_data(
+    pre_model, 
+    labels, 
+    strain,
+    window_strain=None, 
+    spherical_coords=None, 
+    initial_run=False,
+    n_masses=2,
+    n_dimensions=3,
+    basis_type="fourier",
+    basis_order=16,
+    device="cpu"):
+
+
+    if spherical_coords:
+        print("spherical not implemented yet")
+        #basis_dynamics = spherical_to_cartesian(basis_dynamics)
+    
+    strain, norm_factor = unnormalise_data(
+        strain, 
+        pre_model.norm_factor)
+
+    labels, label_norm_factor, mass_norm_factor = unnormalise_labels(
+        labels, 
+        label_norm_factor=pre_model.label_norm_factor, 
+        mass_norm_factor=pre_model.mass_norm_factor, 
+        n_masses=n_masses)
+
+    masses, basis_dynamics = samples_to_positions_masses(
+            labels,
+            n_masses,
+            basis_order,
+            n_dimensions,
+            basis_type
+        )
+
+    return pre_model, masses, basis_dynamics, strain

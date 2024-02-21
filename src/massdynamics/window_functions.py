@@ -9,8 +9,8 @@ def fit_cheby_to_hann(times, order=6, basis_type="chebyshev"):
     return hann_cheb
 
 def fit_cheby_to_tukey(times, alpha=0.5, order=6, basis_type="chebyshev"):
-    hwin = signal.windows.tukey(len(times), alpha=alpha)
-    tuk_cheb = basis[basis_type]["fit"](times, hwin, order)
+    hwin = scipy.signal.windows.tukey(len(times), alpha=alpha)[np.newaxis, :]
+    tuk_cheb = basis[basis_type]["fit"](times, hwin, order)[0]
     return tuk_cheb
 
 
@@ -100,7 +100,7 @@ def perform_window(times, coeffs, window, order=6, basis_type="chebyshev"):
         
     if window != "none":
         if window == "tukey":
-            win_coeffs = fit_cheby_to_tukey(times, alpha=0.5, order=order, basis_type=basis_type)
+            win_coeffs = fit_cheby_to_tukey(times, alpha=0.3, order=order, basis_type=basis_type)
         elif window == "hann":
             win_coeffs = fit_cheby_to_hann(times, order=order, basis_type=basis_type)
         else:

@@ -26,7 +26,7 @@ def run_testing(config:dict) -> None:
     """
     pre_model, model = load_models(config, config["device"])
 
-    times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
         config["n_test_data"], 
         config["basis_order"], 
         config["n_masses"], 
@@ -40,6 +40,20 @@ def run_testing(config:dict) -> None:
         fourier_weight=config["fourier_weight"]
         )
 
+
+    pre_model, labels, strain = data_processing.preprocess_data(
+        pre_model, 
+        basis_dynamics,
+        masses, 
+        strain, 
+        window_strain=config["window_strain"], 
+        spherical_coords=config["spherical_coords"], 
+        initial_run=False,
+        n_masses=config["n_masses"],
+        device=config["device"],
+        basis_type=config["basis_type"])
+
+    """
     strain, norm_factor = data_processing.normalise_data(
         strain, 
         pre_model.norm_factor)
@@ -48,7 +62,7 @@ def run_testing(config:dict) -> None:
         pre_model.label_norm_factor, 
         pre_model.mass_norm_factor, 
         n_masses=config["n_masses"])
-
+    """
 
     """
     print(labels)
@@ -120,20 +134,23 @@ def run_testing(config:dict) -> None:
             config["device"])
     elif config["n_dimensions"] == 3:
         test_model_3d(
-            model, 
-            pre_model, 
-            test_loader,
-            times,
-            upsample_times, 
-            config["n_masses"], 
-            acc_basis_order, 
-            config["n_dimensions"], 
-            config["detectors"], 
-            config["window"], 
-            config["root_dir"], 
-            config["device"], 
-            config["return_windowed_coeffs"],
+            model=model, 
+            pre_model=pre_model, 
+            dataloader=test_loader,
+            times=times,
+            upsample_times=upsample_times, 
+            n_masses=config["n_masses"], 
+            basis_order=acc_basis_order, 
+            n_dimensions=config["n_dimensions"], 
+            detectors=config["detectors"], 
+            window=config["window"], 
+            root_dir=config["root_dir"], 
+            device=config["device"], 
+            return_windowed_coeffs=config["return_windowed_coeffs"],
+            window_strain=config["window_strain"],
+            spherical_coords=config["spherical_coords"],
             basis_type=config["basis_type"])
+
 
 
 def test_model_1d(model, dataloader, times, n_masses, basis_order, n_dimensions, root_dir, device, basis_type="chebyshev"):
@@ -257,7 +274,9 @@ def test_model_3d(
     root_dir, 
     device, 
     return_windowed_coeffs=True, 
-    basis_type="chebyshev"):
+    basis_type="chebyshev",
+    window_strain=None,
+    spherical_coords=False,):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -283,14 +302,21 @@ def test_model_3d(
             label, data = label.to(device), data.to(device)
             input_data = pre_model(data)
           
-            coeffmass_samples = model(input_data).sample().cpu()
+            coeffmass_samples = model(input_data).sample().cpu().numpy()
       
-            print("labelshape",np.shape(label))
-            coeffmass_samples, nf, mf = data_processing.unnormalise_labels(
+            pre_model, mass_samples, coeff_samples, _ = data_processing.unpreprocess_data(
+                pre_model, 
                 coeffmass_samples, 
-                pre_model.label_norm_factor, 
-                pre_model.mass_norm_factor,
-                n_masses=n_masses)
+                data.cpu().numpy(), 
+                window_strain=window_strain, 
+                spherical_coords=spherical_coords, 
+                initial_run=False,
+                n_masses=n_masses,
+                n_dimensions=n_dimensions,
+                device=device,
+                basis_type=basis_type,
+                basis_order=basis_order)
+    
 
             print("bmasstr",np.min(label.cpu().numpy()[:,-n_masses:]), np.min(label.cpu().numpy()[:,-n_masses:]))
             label, nf, mf = data_processing.unnormalise_labels(
@@ -301,13 +327,14 @@ def test_model_3d(
 
             print("amasstr",np.min(label[:,-n_masses:]), np.min(label[:,-n_masses:]))
 
+            """
             mass_samples, coeff_samples = data_processing.samples_to_positions_masses(
                 coeffmass_samples, 
                 n_masses,
                 basis_order,
                 n_dimensions,
                 basis_type)
-
+            """
             #print("coeffsamp", np.shape(coeff_samples))
             #print(coeff_samples[0, 0, :, 0])
             #print(coeff_samples[0, 1, :, 0])
@@ -341,9 +368,9 @@ def test_model_3d(
             ax.plot(source_tseries[0][0], color="k", label="truth")
             #ax.plot(recon_tseries[0][0], ls="--", color="r", label="remake")
             fig.savefig(os.path.join(root_dir, "test_pos2.png"))
+            
+
             """
-
-
             recon_strain, recon_energy, recon_coeffs = data_processing.get_strain_from_samples(
                 upsample_times, 
                 recon_masses,
@@ -352,8 +379,8 @@ def test_model_3d(
                 return_windowed_coeffs=return_windowed_coeffs, 
                 window=window, 
                 basis_type=basis_type)
-
             """
+            
             source_strain, source_energy = compute_waveform.get_waveform(
                 times, 
                 source_masses, 
@@ -372,8 +399,31 @@ def test_model_3d(
                 window=window, 
                 basis_type=basis_type)
             
-            recon_strain, _ = data_processing.normalise_data(recon_strain, pre_model.norm_factor)
-            source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
+            
+            _, _, recon_strain = data_processing.preprocess_data(
+                pre_model, 
+                coeff_samples, 
+                mass_samples,
+                recon_strain, 
+                window_strain=window_strain, 
+                spherical_coords=spherical_coords, 
+                initial_run=False,
+                n_masses=n_masses,
+                device=device)
+
+            _, _, source_strain = data_processing.preprocess_data(
+                pre_model, 
+                coeff_samples, 
+                mass_samples,
+                source_strain, 
+                window_strain=window_strain, 
+                spherical_coords=spherical_coords, 
+                initial_run=False,
+                n_masses=n_masses,
+                device=device)
+
+            #recon_strain, _ = data_processing.normalise_data(recon_strain, pre_model.norm_factor)
+            #source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
             source_plot_data = source_strain#data[0].cpu().numpy()
             #window = signal.windows.tukey(np.shape(source_strain)[-1], alpha=0.5)
             #recon_strain = recon_strain * window[None, :]
@@ -416,6 +466,20 @@ def test_model_3d(
             n_animate_samples = 50
             multi_coeffmass_samples = model(input_data).sample((nsamples, )).cpu().numpy()
 
+            pre_model, multi_mass_samples, multi_coeff_samples, _ = data_processing.unpreprocess_data(
+                pre_model, 
+                multi_coeffmass_samples[:,0], 
+                data.cpu().numpy(), 
+                window_strain=window_strain, 
+                spherical_coords=spherical_coords, 
+                initial_run=False,
+                n_masses=n_masses,
+                n_dimensions=n_dimensions,
+                device=device,
+                basis_type=basis_type,
+                basis_order=basis_order)
+
+            """
             print("b",np.min(multi_coeffmass_samples), np.max(multi_coeffmass_samples), pre_model.label_norm_factor, np.shape(multi_coeffmass_samples))
             multi_coeffmass_samples, nf, mf = data_processing.unnormalise_labels(
                 multi_coeffmass_samples[:,0], 
@@ -423,10 +487,11 @@ def test_model_3d(
                 pre_model.mass_norm_factor,
                 n_masses=n_masses)
             print("a",np.min(multi_coeffmass_samples), np.max(multi_coeffmass_samples))
-
+            """
             
             #plotting.plot_1d_posteriors(multi_coeffmass_samples, label[0], fname=os.path.join(plot_out,f"posterior_1d_{batch}.png"))
 
+            """
             print("mmsamples", multi_coeffmass_samples.shape, multi_coeffmass_samples.dtype)
             multi_mass_samples, multi_coeff_samples = data_processing.samples_to_positions_masses(
                 multi_coeffmass_samples, 
@@ -434,6 +499,7 @@ def test_model_3d(
                 basis_order,
                 n_dimensions,
                 basis_type)
+            """
 
             #print("multishape", multi_coeffmass_samples.shape)
             m_recon_masses = np.zeros((nsamples, n_masses))
@@ -459,7 +525,19 @@ def test_model_3d(
                     window=window, 
                     basis_type=basis_type)
 
-                temp_recon_strain, _ = data_processing.normalise_data(temp_recon_strain, pre_model.norm_factor)
+                
+                _, _, temp_recon_strain = data_processing.preprocess_data(
+                    pre_model, 
+                    coeff_samples, 
+                    mass_samples,
+                    temp_recon_strain, 
+                    window_strain=window_strain, 
+                    spherical_coords=spherical_coords, 
+                    initial_run=False,
+                    n_masses=n_masses,
+                    device=device)
+                
+                #temp_recon_strain, _ = data_processing.normalise_data(temp_recon_strain, pre_model.norm_factor)
 
                 m_recon_strain[i] = temp_recon_strain
                 #m_recon_energy[i] = temp_recon_energy
