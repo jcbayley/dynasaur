@@ -173,23 +173,11 @@ def generate_data(
 
         #print(np.max(all_time_dynamics))
 
-    
-    if coordinate_type == "cartesian":
-        output_coeffs_mass = data_processing.positions_masses_to_samples(
-            all_basis_dynamics,
-            all_masses,
-            basis_type = basis_type
-            )
-    else:
-        output_coeffs_mass = data_processing.positions_masses_to_samples(
-            all_basis_dynamics_coord,
-            all_masses,
-            basis_type = basis_type
-            )
 
-    samples_shape, feature_shape = np.shape(output_coeffs_mass)
+    feature_shape = np.prod(np.shape(all_basis_dynamics)[1:]) + len(all_masses[0])
+    #samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    return times, output_coeffs_mass, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics, all_basis_dynamics_coord
+    return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
 
 
 def get_data_path(

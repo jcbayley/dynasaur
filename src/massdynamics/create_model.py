@@ -35,7 +35,8 @@ def create_models(config, device):
         tuple of models: (pre_model, model)
     """
 
-    times, labels, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
+    """
+    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 
@@ -46,7 +47,12 @@ def create_models(config, device):
         return_windowed_coeffs=config["return_windowed_coeffs"],
         basis_type=config["basis_type"],
         data_type=config["data_type"])
+    """
 
+    n_basis = config["basis_order"]
+    if config["basis_type"] == "fourier":
+        n_basis += 2
+    feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
 
     n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
@@ -134,7 +140,7 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, labels, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 

@@ -109,8 +109,8 @@ def make_3d_animation(
     index, 
     timeseries, 
     masses, 
-    true_timeseries, 
-    true_masses):
+    true_timeseries=None, 
+    true_masses=None):
     """_summary_
 
     Args:
@@ -359,14 +359,17 @@ def line_of_sight_animation(
                 binsy[-1]])
     
     
-    point = ax.scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=8, color="r")
+    if true_timeseries is not None:
+        point = ax.scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=8, color="r")
+    
     def update_plot(frame):
 
         hst, xedge, yedge = np.histogram2d(concat_ts[:, 0, frame], concat_ts[:, 1, frame], bins=np.array([binsx, binsy]))
 
         image.set_array(hst.T)
-        tx, ty = true_timeseries[:, 0, frame], true_timeseries[:, 1, frame]
-        point.set_offsets(np.c_[tx, ty])
+        if true_timeseries is not None:
+            tx, ty = true_timeseries[:, 0, frame], true_timeseries[:, 1, frame]
+            point.set_offsets(np.c_[tx, ty])
 
     interval = 1000*duration/nframes
 
@@ -451,9 +454,10 @@ def heatmap_projections(
                 bins[2][-1]])
         
         
-    point1 = ax[0,0].scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=8, color="r")
-    point2 = ax[0,1].scatter(true_timeseries[:, 0, 0], true_timeseries[:, 2, 0], s=8, color="r")
-    point3 = ax[1,0].scatter(true_timeseries[:, 1, 0], true_timeseries[:, 2, 0], s=8, color="r")
+    if true_timeseries is not None:
+        point1 = ax[0,0].scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=8, color="r")
+        point2 = ax[0,1].scatter(true_timeseries[:, 0, 0], true_timeseries[:, 2, 0], s=8, color="r")
+        point3 = ax[1,0].scatter(true_timeseries[:, 1, 0], true_timeseries[:, 2, 0], s=8, color="r")
 
     ax[0,0].set_xlabel("xdim")
     ax[0,0].set_ylabel("ydim")
@@ -476,13 +480,15 @@ def heatmap_projections(
         image1.set_array(hst1.T)
         image2.set_array(hst2.T)
         image3.set_array(hst3.T)
-        tx1, ty1 = true_timeseries[:, 0, frame], true_timeseries[:, 1, frame]
-        tx2, ty2 = true_timeseries[:, 0, frame], true_timeseries[:, 2, frame]
-        tx3, ty3 = true_timeseries[:, 1, frame], true_timeseries[:, 2, frame]
+        
+        if true_timeseries is not None:
+            tx1, ty1 = true_timeseries[:, 0, frame], true_timeseries[:, 1, frame]
+            tx2, ty2 = true_timeseries[:, 0, frame], true_timeseries[:, 2, frame]
+            tx3, ty3 = true_timeseries[:, 1, frame], true_timeseries[:, 2, frame]
 
-        point1.set_offsets(np.c_[tx1, ty1])
-        point2.set_offsets(np.c_[tx2, ty2])
-        point3.set_offsets(np.c_[tx3, ty3])
+            point1.set_offsets(np.c_[tx1, ty1])
+            point2.set_offsets(np.c_[tx2, ty2])
+            point3.set_offsets(np.c_[tx3, ty3])
 
     interval = 1000*duration/nframes
 

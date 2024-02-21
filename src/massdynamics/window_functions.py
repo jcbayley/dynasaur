@@ -9,8 +9,8 @@ def fit_cheby_to_hann(times, order=6, basis_type="chebyshev"):
     return hann_cheb
 
 def fit_cheby_to_tukey(times, alpha=0.5, order=6, basis_type="chebyshev"):
-    hwin = scipy.signal.windows.tukey(len(times), alpha=alpha)
-    tuk_cheb = basis[basis_type]["fit"](times, hwin, order)
+    hwin = scipy.signal.windows.tukey(len(times), alpha=alpha)[np.newaxis, :]
+    tuk_cheb = basis[basis_type]["fit"](times, hwin, order)[0]
     return tuk_cheb
 
 

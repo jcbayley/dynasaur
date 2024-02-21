@@ -78,10 +78,10 @@ def fit_positions_with_polynomial(
 
     return basis_dynamics
 
-def run_chirp_test(config, mass1=5000, mass2=5000, rotate_angle=0.0):
+def run_chirp_test(config, mass1=500, mass2=500, rotate_angle=0.0):
 
     
-    plot_out = os.path.join(config["root_dir"], f"test_chirp_m1-{mass1}_m2-{mass2}_rotate{rotate_angle}")
+    plot_out = os.path.join(config["root_dir"], f"test_imrphenom_m1-{mass1}_m2-{mass2}_rotate{rotate_angle}")
 
     if not os.path.isdir(plot_out):
         os.makedirs(plot_out)
@@ -95,14 +95,14 @@ def run_chirp_test(config, mass1=5000, mass2=5000, rotate_angle=0.0):
 
     basis_order = config["basis_order"]
 
-    srate = 16
+    srate = config["sample_rate"]
     n_masses=2
     n_dimensions=3
     batch=0
 
     hp, hc = get_td_waveform(approximant="IMRPhenomPv2",
-                        mass1 = 500,
-                        mass2 = 500,
+                        mass1 = mass1,
+                        mass2 = mass2,
                         delta_t = 1./srate,
                         f_lower=5
                         )
@@ -110,13 +110,17 @@ def run_chirp_test(config, mass1=5000, mass2=5000, rotate_angle=0.0):
     source_masses = np.array([0.5,0.5])
     
     det_data = []
-    alpha, delta = np.pi, np.pi/2 # arbritrary values for now
-    gpstime = 1381142123 # set to current time (when written)
     for det in config["detectors"]:
-        strain = compute_waveform.compute_strain(np.array([[hp,hc]]), detector=det)
-        det_data.append(strain[10*srate:11*srate])
+        strain = compute_waveform.compute_strain(np.array([[hp,hc]]), detector=det)[10*srate:11*srate]
+        det_data.append(strain)
 
-    data = det_data / (2*np.max(det_data))
+    data = np.array(det_data) / (0.5*np.max(det_data))
+
+    print("datashape", np.shape(data))
+    freq_strain = basis[config["basis_type"]]["fit"](times, data, basis_order)
+    source_strain = basis[config["basis_type"]]["val"](upsample_times, freq_strain)
+
+
 
     norm_data, norm_factor = data_processing.normalise_data(data, pre_model.norm_factor)    
     print("normfactor", norm_factor, np.max(data), np.max(norm_data))
@@ -184,36 +188,13 @@ def run_chirp_test(config, mass1=5000, mass2=5000, rotate_angle=0.0):
         m_recon_tseries = new_recon_tseries
 
 
-        if source_masses[0] - source_masses[1] < 0:
-            new_source_tseries = copy.copy(source_tseries)
-            new_source_tseries[0] = source_tseries[1]
-            new_source_tseries[1] = source_tseries[0]
-
-            new_source_masses = copy.copy(source_masses)
-            new_source_masses[0] = source_masses[1]
-            new_source_masses[1] = source_masses[0]
-
-            source_masses = new_source_masses
-            source_tseries = new_source_tseries
-
+    print(np.shape(upsample_times), np.shape(m_recon_strain), np.shape(norm_data))
     plotting.plot_sampled_reconstructions(
                 upsample_times, 
                 config["detectors"], 
                 m_recon_strain, 
-                None, 
+                source_strain, 
                 fname = os.path.join(plot_out,f"recon_strain_dist_{batch}.png"))
-
-    plotting.plot_dimension_projection(
-                m_recon_tseries[:10], 
-                source_tseries, 
-                fname=os.path.join(plot_out, f"dim_projection_{batch}.png"), 
-                alpha=0.2)
-
-    plotting.plot_sample_separations(
-                upsample_times, 
-                source_tseries, 
-                m_recon_tseries, 
-                fname=os.path.join(plot_out,f"separations_{batch}.png"))
 
 
     plotting.plot_mass_distributions(
@@ -225,25 +206,24 @@ def run_chirp_test(config, mass1=5000, mass2=5000, rotate_angle=0.0):
     make_animations.line_of_sight_animation(
                 m_recon_tseries, 
                 m_recon_masses, 
-                source_tseries, 
+                None, 
                 source_masses, 
                 os.path.join(plot_out,f"2d_massdist_{batch}.gif"))
 
-    print("source", np.shape(source_tseries), np.shape(source_masses))
 
     
     make_animations.make_3d_distribution(
                 plot_out, 
                 m_recon_tseries[:n_animate_samples], 
                 m_recon_masses[:n_animate_samples], 
-                source_tseries, 
+                None, 
                 source_masses,
                 fname = os.path.join(plot_out,f"3d_distribution_{batch}.png"))
 
     make_animations.heatmap_projections(
                 m_recon_tseries, 
                 m_recon_masses, 
-                source_tseries, 
+                None, 
                 source_masses, 
                 os.path.join(plot_out,f"heatmap_projections_{batch}.gif"),
                 duration=5)
@@ -256,7 +236,7 @@ def run_chirp_test(config, mass1=5000, mass2=5000, rotate_angle=0.0):
                 None, 
                 source_masses,
                 strain=m_recon_strain,
-                true_strain=norm_data,
+                true_strain=source_strain,
                 duration=5)
 
 
@@ -278,4 +258,3 @@ if __name__ == "__main__":
 
 
     run_chirp_test(config, args.mass1, args.mass2, rotate_angle=0.0)
-    run_chirp_test(config, args.mass1, args.mass2, rotate_angle=np.pi/4)
