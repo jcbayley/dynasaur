@@ -14,29 +14,41 @@ def fit_cheby_to_tukey(times, alpha=0.5, order=6, basis_type="chebyshev"):
     return tuk_cheb
 
 
-def chebint2(times, coeffs, basis_type="chebyshev", sub_mean=False):
+def chebint2(times, coeffs, basis_type="chebyshev", vel_pos_offsets=None):
     """compute the second integral correcting for offsets in the integrated values
 
     Args:
         times (_type_): _description_
         coeffs (_type_): _description_
+        basis_type (string): type of basis used
+        vel_pos_offsets (list): [position coefficients, velocity coefficients]
 
     Returns:
         _type_: _description_
     """
-    if sub_mean:
+    if vel_pos_offsets is not None:
+        # get coefficients for position and velocity before windowing
+        pos_offset_co, vel_offset_co = vel_pos_offsets
         win_co_vel = basis[basis_type]["integrate"](coeffs, m=1)
         # compute the values and subtract the mean from the first coefficient
         # this is so that there is not a velocity offset
+        win_co_vel[np.isnan(win_co_vel)] = 0
         win_vel = basis[basis_type]["val"](times, win_co_vel)
-        win_co_vel[0] -= np.mean(win_vel)
+        old_win_vel = basis[basis_type]["val"](times, vel_offset_co)
+        # find difference in velocity at center of timeseries
+        diff_vel = win_vel[int(0.5*len(win_vel))] - old_win_vel[int(0.5*len(old_win_vel))]
+        win_co_vel[0] += diff_vel*len(win_vel)
 
         # now find the position
         win_co_pos = basis[basis_type]["integrate"](win_co_vel, m=1)
         # compute the values and subtract the mean from the first coefficient
         # this is so that there is not a position offset
+        win_co_pos[np.isnan(win_co_pos)] = 0
         win_pos = basis[basis_type]["val"](times, win_co_pos)
-        win_co_pos[0] -= np.mean(win_pos)
+        old_win_pos = basis[basis_type]["val"](times, pos_offset_co)
+        # find difference between positions at center of timeseries
+        diff_pos = win_pos[int(0.5*len(win_pos))] - old_win_pos[int(0.5*len(old_win_pos))]
+        win_co_pos[0] += diff_pos*len(win_pos)
     else:
         win_co_pos = basis[basis_type]["integrate"](coeffs, m=2)
         win_co_pos[np.isnan(win_co_pos)] = 0
@@ -55,12 +67,19 @@ def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev"):
     Returns:
         _type_: _description_
     """
+
+    subtract_offset = True
     #hann_coeffs = np.array([ 3.47821791e-01,  1.52306260e-16, -4.85560481e-01, -5.11827799e-17, 1.51255010e-01,  2.65316279e-17, -1.48207898e-02])
 
     # find the acceleration components for each dimension
     co_x_acc = basis[basis_type]["derivative"](coeffs[:,0], m=2)
     co_y_acc = basis[basis_type]["derivative"](coeffs[:,1], m=2)
     co_z_acc = basis[basis_type]["derivative"](coeffs[:,2], m=2)
+
+    if subtract_offset:
+        co_x_vel = basis[basis_type]["derivative"](coeffs[:,0], m=1)
+        co_y_vel = basis[basis_type]["derivative"](coeffs[:,1], m=1)
+        co_z_vel = basis[basis_type]["derivative"](coeffs[:,2], m=1)
 
     # window each dimension in acceleration according to hann window
     win_co_x_acc = basis[basis_type]["multiply"](co_x_acc, window_coeffs)
@@ -79,9 +98,21 @@ def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev"):
     #win_co_y = basis[basis_type]["integrate"](win_co_y_acc, m=2)
     #win_co_z = basis[basis_type]["integrate"](win_co_z_acc, m=2)
 
-    win_co_x = chebint2(times, win_co_x_acc, basis_type=basis_type)
-    win_co_y = chebint2(times, win_co_y_acc, basis_type=basis_type)
-    win_co_z = chebint2(times, win_co_z_acc, basis_type=basis_type)
+    win_co_x = chebint2(
+        times, 
+        win_co_x_acc, 
+        basis_type=basis_type,
+        vel_pos_offsets=[coeffs[:,0], co_x_vel])
+    win_co_y = chebint2(
+        times, 
+        win_co_y_acc, 
+        basis_type=basis_type,
+        vel_pos_offsets=[coeffs[:,1], co_y_vel])
+    win_co_z = chebint2(
+        times, 
+        win_co_z_acc, 
+        basis_type=basis_type,
+        vel_pos_offsets=[coeffs[:,2], co_z_vel])
     
     coarr = np.array([win_co_x, win_co_y, win_co_z]).T
     return coarr
