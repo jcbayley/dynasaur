@@ -130,8 +130,8 @@ def generate_data(
 
         if coordinate_type == "spherical":
             positions_coord = data_processing.cartesian_to_spherical(positions[data_index])
-        elif coordinate_type == "cartiesian":
-            positions_coord == positions[data_index]
+        elif coordinate_type == "cartesian":
+            positions_coord = positions[data_index]
         else:
             raise Exception(f"Coordinate type {coordinate_type} is not supported")
 

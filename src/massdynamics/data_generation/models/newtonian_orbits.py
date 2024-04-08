@@ -7,6 +7,16 @@ import timeit
 from massdynamics.basis_functions import basis
 from massdynamics.data_generation import orbits_functions, data_processing
 
+def compute_gw_correction(m0, m1, r, v, rvect, vvect, G, c):
+
+    prefact = 4*(G**2)/(5*(c**5)*(r**3))*m0*m1*(m1/(m0 + m1))
+    fact1 = rvect*np.dot(rvect, vvect)*((34/3)*G*(m0+m1)/r + 6*v**2)
+
+    fact2 = vvect*(-6*G*(m0+m1)/r - 2*v**2)
+    print(prefact* (fact1+ fact2), r, v)
+    #print(c,G,m0,m1, r, v)
+    return prefact * (fact1 + fact2)
+
 def newton_derivative(
     t, 
     x_posvels, 
@@ -18,7 +28,8 @@ def newton_derivative(
     mass_scale=1.989e30,
     distance_scale=1.4e11,
     G=6.67e-11,
-    c=3e8
+    c=3e8,
+    correction=False
     ):
     """compute the derivative of the position and velocity
 
@@ -33,7 +44,6 @@ def newton_derivative(
     #c = 3e8
     # compute G in gaussian gravitational units to prevent overflows
     # G * (s/day)/(m/Au) * Msun(kg)
-
     G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
     c_ggravunits = c * ((second_scale**2)/(distance_scale))
 
@@ -48,12 +58,20 @@ def newton_derivative(
     for i, mass_1 in enumerate(masses):
         x_derivative[i][0:n_dimensions] = x_vels[i]
         for j, mass_2 in enumerate(masses):
-            if i == j: continue
-            separation_cubed = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)**3
+            if i == j: 
+                continue
+            separation = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)
+            separation_cubed = separation**3
             #seps[i,j] = separation_cubed
             diff = x_positions[j] - x_positions[i]
             x_derivative[i][n_dimensions:2*n_dimensions] += G_ggravunits*mass_2*diff/separation_cubed
          
+            if correction:
+                veldiff = x_vels[i] - x_vels[j]
+                absvel = np.sqrt(np.sum((x_vels[i] - x_vels[j])**2))
+                corr = compute_gw_correction(mass_1, mass_2, separation, absvel, diff, veldiff, G_ggravunits, c_ggravunits)
+                
+                x_derivative[i][n_dimensions:2*n_dimensions] += corr
         """
         # get all other masses but this one
         other_positions = np.delete(x_positions, i)
@@ -477,7 +495,8 @@ def solve_ode(
     initial_velocities,
     G=6.67e-11,
     c=3e8,
-    n_samples=128):
+    n_samples=128,
+    correction=False):
 
     # scalings for the ode solver
     # scale to 1 year
@@ -517,7 +536,9 @@ def solve_ode(
         second_scale=second_scale,
         distance_scale=distance_scale,
         mass_scale=mass_scale,
-        G=G)
+        G=G,
+        c=c,
+        correction=correction)
     
     #too_close_event.terminal = True
 

@@ -75,8 +75,9 @@ def newton_derivative(
                 G, 
                 c)
             #print(acceleration, gw_acceleration)
-            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration + gw_acceleration
-         
+            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration #+ gw_acceleration
+            #x_derivative[i][n_dimensions:2*n_dimensions] += acceleration #- gw_acceleration
+
         """
         # get all other masses but this one
         other_positions = np.delete(x_positions, i)
@@ -369,8 +370,9 @@ def get_initial_conditions(
         _type_: _description_
     """
     if data_type == "equalmass_3d":
-        masses = np.array([0.5,0.5])*mass_scale*1e-2
+        masses = np.array([0.5,0.5])*mass_scale*1e2
         initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
+        
     elif data_type == "kepler_fixedperiod":
         M = 1e30
         duration = np.max(times) - np.min(times)
@@ -434,12 +436,13 @@ def get_initial_conditions(
         n_samples = len(times)
         period = duration
         min_period = 2.*duration/n_samples
+        max_period = duration/10
 
         M = mass_scale
 
-        masses = np.array([M, np.random.uniform(1e-3*M, 1e-2*M)])
+        masses = 10*np.array([M, np.random.uniform(1e-3*M, 1e-2*M)])
 
-        period = np.random.uniform(duration/4, duration)
+        period = np.random.uniform(min_period, max_period)
 
         semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = 0.0
@@ -454,18 +457,20 @@ def get_initial_conditions(
             arg_periapsis, 
             masses, 
             G)
+        
     elif data_type == "circularbinary":
         M = 1e30
         duration = np.max(times) - np.min(times)
         n_samples = len(times)
         period = duration
         min_period = 2.*duration/n_samples
-
+        max_period = min_period*2
         M = mass_scale
 
-        masses = np.random.uniform(1, 10)*np.array([M, M])
+        masses = np.random.uniform(20, 30)*np.array([M, M])
+        #masses = np.random.uniform(2, 1000)*np.array([M, M])
 
-        period = np.random.uniform(duration/2, duration/0.5)
+        period = np.random.uniform(min_period, max_period)
 
         semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = 0.0
@@ -620,6 +625,7 @@ def solve_ode(
     """
     # y is shape (nvals, ntimes, )
 
+    print(outputs.y)
 
     positions = outputs.y.reshape(n_masses, 2*n_dimensions, len(outputs.t))[:,:3] # get positions only
     positions = positions.reshape(n_masses*n_dimensions, len(outputs.t))
@@ -627,10 +633,13 @@ def solve_ode(
     ode_interp_positions = interpolate_positions(outputs.t, ode_times, positions).T # ntimes, nvals
     ode_interp_positions = ode_interp_positions.reshape(len(ode_times), n_masses, n_dimensions)
     ode_interp_positions = ode_interp_positions #- np.mean(ode_interp_positions, axis=(0, 1))[None,None,:]
-
+    
     #scaled_interp_positions = ode_interp_positions*distance_scale/position_scale
     scaled_interp_positions = ode_interp_positions*distance_scale                # now in AU
     scaled_masses = masses*mass_scale
+
+    times = outputs.t
+    scaled_interp_positions = positions*distance_scale
     
     return times, scaled_interp_positions, scaled_masses
 
@@ -670,7 +679,7 @@ def generate_data(
     second = 1./(24*3600)
     n_samples = sample_rate
     times = np.linspace(0,1,sample_rate) #in days for ode
-    solve_times = np.linspace(0,10000,sample_rate)
+    solve_times = np.linspace(0,2,sample_rate)
 
     G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
     c = 3e8
