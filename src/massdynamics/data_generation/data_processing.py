@@ -3,6 +3,7 @@ import numpy as np
 import massdynamics.data_generation.compute_waveform as compute_waveform
 import massdynamics.window_functions as window_functions
 import scipy
+import copy
 
 def normalise_data(strain, norm_factor = None):
     """normalise the data to the maximum strain in all data
@@ -42,17 +43,18 @@ def normalise_labels(label, label_norm_factor = None, mass_norm_factor=None,n_ma
         _type_: normalised strain
     """
     if label_norm_factor is None:
-        label_norm_factor = np.max(label[:,:-n_masses])
+        label_norm_factor = np.max(np.abs(label[:,:-n_masses]))
         #print("nf",norm_factor, label.shape, np.max(label))
 
     if mass_norm_factor is None:
         mass_norm_factor = np.max(label[:,-n_masses:])
-    
-    label[:,:-n_masses] /= label_norm_factor
 
-    label[:,-n_masses:] /= mass_norm_factor
+    label2 = copy.copy(label)
+    label2[:,:-n_masses] /= label_norm_factor
 
-    return np.array(label), label_norm_factor, mass_norm_factor
+    label2[:,-n_masses:] /= mass_norm_factor
+
+    return np.array(label2), label_norm_factor, mass_norm_factor
 
 def unnormalise_labels(label, label_norm_factor=None, mass_norm_factor=None, n_masses=2):
     """normalise the data to the maximum strain in all data
@@ -64,16 +66,17 @@ def unnormalise_labels(label, label_norm_factor=None, mass_norm_factor=None, n_m
         _type_: normalised strain
     """
     if label_norm_factor is None:
-        label_norm_factor = np.max(label[:,:-n_masses])
+        label_norm_factor = np.max(np.abs(label[:,:-n_masses]))
 
     if mass_norm_factor is None:
         mass_norm_factor = np.max(label[:,-n_masses:])
 
-    label[:,:-n_masses] *= label_norm_factor
+    label2 = copy.copy(label)
+    label2[:,:-n_masses] *= label_norm_factor
 
-    label[:,-n_masses:] *= mass_norm_factor
+    label2[:,-n_masses:] *= mass_norm_factor
     
-    return np.array(label), label_norm_factor, mass_norm_factor
+    return np.array(label2), label_norm_factor, mass_norm_factor
 
 def complex_to_real(input_array):
 
@@ -364,14 +367,14 @@ def unpreprocess_data(
         strain, 
         pre_model.norm_factor)
 
-    labels, label_norm_factor, mass_norm_factor = unnormalise_labels(
+    labels2, label_norm_factor, mass_norm_factor = unnormalise_labels(
         labels, 
         label_norm_factor=pre_model.label_norm_factor, 
         mass_norm_factor=pre_model.mass_norm_factor, 
         n_masses=n_masses)
 
     masses, basis_dynamics = samples_to_positions_masses(
-            labels,
+            labels2,
             n_masses,
             basis_order,
             n_dimensions,

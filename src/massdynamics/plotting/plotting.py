@@ -83,7 +83,8 @@ def plot_reconstructions(
     for i in range(len(detectors)):
         ax[i].plot(times, recon_strain[i], label="recon")
         ax[i].plot(times, source_strain[i], label="source")
-        ax[i].plot(times, source_data[i], label="source data")
+        dattimes = np.linspace(0,np.max(times), len(source_data[i])) 
+        ax[i].plot(dattimes, source_data[i], label="source data")
         ax[i].legend()
         ax[i].set_ylabel(f"{detectors[i]} Strain")
 
