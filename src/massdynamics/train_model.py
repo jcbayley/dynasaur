@@ -87,7 +87,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             window = config["window"],
             return_windowed_coeffs = config["return_windowed_coeffs"],
             basis_type = config["basis_type"],
-            data_type = config["data_type"]
+            data_type = config["data_type"],
+            add_noise=config["add_noise"]
             )
 
         config["n_data"] = len(labels)
@@ -104,7 +105,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             return_windowed_coeffs=config["return_windowed_coeffs"],
             basis_type = config["basis_type"],
             data_type = config["data_type"],
-            fourier_weight=config["fourier_weight"])
+            fourier_weight=config["fourier_weight"],
+            add_noise=config["add_noise"])
 
     acc_basis_order = cshape
 
@@ -224,6 +226,8 @@ if __name__ == "__main__":
     parser.add_argument("--train", type=bool, required=False, default=False)
     parser.add_argument("--test", type=bool, required=False, default=False)
     parser.add_argument("--continuetrain", type=bool, required=False, default=False)
+    parser.add_argument("--makeplots", type=bool, required=False, default=True)
+    parser.add_argument("--ntest", type=int, required=False, default=None)
     args = parser.parse_args()
 
     if args.config == "none":
@@ -257,6 +261,7 @@ if __name__ == "__main__":
     continue_train = args.continuetrain
     train_model = args.train
     test_model = args.test
+    args.makeplots = True
 
     if "custom_flow" not in config.keys():
         config["custom_flow"] = False
@@ -271,4 +276,4 @@ if __name__ == "__main__":
         run_training(config, continue_train=continue_train)
 
     if test_model:
-        run_testing(config)
+        run_testing(config, make_plots=args.makeplots, n_test=args.ntest)

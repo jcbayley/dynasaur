@@ -285,6 +285,41 @@ def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, vel
     """
     return initial_positions, initial_velocities
 
+def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
+    """generate initial conditionss for a kepler orbit in 2d plane starting at apoapsis
+
+    Args:
+        semi_major_axis (_type_): _description_
+        eccentricity (_type_): _description_
+        theta (_type_): _description_
+        masses (_type_): _description_
+        G (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    ra = semi_major_axis*(1+eccentricity)
+    velocity = np.sqrt(G*np.sum(masses)/ra*(1-eccentricity))
+
+    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
+                                [np.sin(theta), np.cos(theta), 0],
+                                [0,0,0]])
+
+    r0 = np.array([-ra, 0, 0])
+    v0 = np.array([0,-velocity, 0])
+
+    r1 = np.array([ra,0,0])
+    v1 = np.array([0,velocity,0])
+
+    r0 = rotation_matrix.dot(masses[1]/np.sum(masses) * r0)
+    r1 = rotation_matrix.dot(masses[0]/np.sum(masses) * r1)
+
+    v0 = rotation_matrix.dot(masses[1]/np.sum(masses) * v0)
+    v1 = rotation_matrix.dot(masses[0]/np.sum(masses) * v1)
+
+    return np.concatenate([[r0],[r1]], axis=0), np.concatenate([[v0],[v1]], axis=0)
+
+
 def get_initial_conditions(
     times, 
     G,  
@@ -400,6 +435,34 @@ def get_initial_conditions(
             arg_periapsis, 
             masses, 
             G)
+    elif data_type == "circularbinary":
+        M = 1e30
+        duration = np.max(times) - np.min(times)
+        n_samples = len(times)
+        period = duration
+        min_period = 2.*duration/n_samples
+
+        M = mass_scale
+
+        masses = np.random.uniform(1, 10)*np.array([M, M])
+
+        period = np.random.uniform(duration/2, duration/0.5)
+
+        semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
+        eccentricities = 0.0
+        #inclinations = np.array([0.0])
+        #long_ascending_node = 0.0#np.random.uniform(0.0, 2*np.pi, size=1) # Longitude of the ascending node in degrees
+        arg_periapsis = np.random.uniform(0.0, 2*np.pi) # Argument of periapsis in degrees
+        #true_anomoly = np.random.uniform(0.0, 2*np.pi, size=1) # True anomaly in degrees
+
+        initial_positions, initial_velocities = kepler_apoapsis_binary(
+            semi_major_axes, 
+            eccentricities, 
+            arg_periapsis, 
+            masses, 
+            G)
+    else:
+        raise Exception(f"Model {data_type} not implemented")
 
     return masses, initial_positions, initial_velocities
 
