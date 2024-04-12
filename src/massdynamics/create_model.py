@@ -24,7 +24,7 @@ import torch.nn as nn
 import os
 
 
-def create_models(config, device):
+def create_models(config, device=None):
     """create a convolutional to linear model with n_context outputs and a 
     flow model taking in n_context parameters and layers defined in config file
 
@@ -56,6 +56,9 @@ def create_models(config, device):
 
     n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
+
+    if device is not None:
+        config["device"] = device
 
     # pre processing creation
     pre_model = nn.Sequential()

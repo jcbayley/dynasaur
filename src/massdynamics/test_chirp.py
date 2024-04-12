@@ -385,7 +385,7 @@ def chirp_positions(
     basis_order=10, 
     window="none", 
     basis_type="chebyshev", 
-    root_dir="./",
+    root_dir=None,
     rotate_angle=0.0):
 
     norm_masses, positions, masses = generate_m1m2_pos(times, m1, m2, tc)
@@ -427,12 +427,12 @@ def chirp_positions(
         times, 
         basis_type=basis_type
         )
-
-    fig, ax = plt.subplots(nrows=3)
-    ax[0].plot(times, timeseries_dynamics[0,0])
-    ax[1].plot(times, timeseries_dynamics[0,1])
-    ax[2].plot(times, timeseries_dynamics[0,2])
-    fig.savefig(os.path.join(root_dir, "chirp_positions.png"))
+    if root_dir is not None:
+        fig, ax = plt.subplots(nrows=3)
+        ax[0].plot(times, timeseries_dynamics[0,0])
+        ax[1].plot(times, timeseries_dynamics[0,1])
+        ax[2].plot(times, timeseries_dynamics[0,2])
+        fig.savefig(os.path.join(root_dir, "chirp_positions.png"))
 
 
     strain_timeseries, energy = compute_waveform.get_waveform(
@@ -442,12 +442,12 @@ def chirp_positions(
         detectors, 
         basis_type=basis_type,
         compute_energy=True)
-
-    fig, ax = plt.subplots(nrows=3)
-    ax[0].plot(times, strain_timeseries[0])
-    ax[1].plot(times, strain_timeseries[1])
-    ax[2].plot(times, strain_timeseries[2])
-    fig.savefig(os.path.join(root_dir, "chirp_strain.png"))
+    if root_dir is not None:
+        fig, ax = plt.subplots(nrows=3)
+        ax[0].plot(times, strain_timeseries[0])
+        ax[1].plot(times, strain_timeseries[1])
+        ax[2].plot(times, strain_timeseries[2])
+        fig.savefig(os.path.join(root_dir, "chirp_strain.png"))
 
 
     return positions, norm_basis_dynamics, timeseries_dynamics, strain_timeseries, energy, max_dyn
