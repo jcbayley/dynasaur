@@ -75,6 +75,9 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         configstring = json.dumps(config, indent=4)
         f.write(configstring)
 
+    device = torch.device(config["device"])
+    print(torch.cuda.get_device_name(device))
+
     if config["load_data"]:
         print("loading data ........")
         times, basis_dynamics, masses, strain, cshape, positions = data_generation.load_data(
@@ -122,7 +125,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
 
     if continue_train:
-        pre_model, model = create_model.load_models(config, device=config["device"])
+        pre_model, model, weights = create_model.load_models(config, device=config["device"])
         pre_model, labels, strain = data_processing.preprocess_data(
             pre_model, 
             basis_dynamics,
@@ -163,12 +166,15 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config["learning_rate"])
 
+
     if continue_train:
         with open(os.path.join(config["root_dir"], "train_losses.txt"), "r") as f:
             losses = np.loadtxt(f)
         train_losses = list(losses[0])
         val_losses = list(losses[1])
         start_epoch = len(train_losses)
+
+        optimiser.load_state_dict(weights["optimiser_state_dict"])
     else:
         train_losses = []
         val_losses = []
@@ -223,11 +229,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-c", "--config", type=str, required=False, default="none")
-    parser.add_argument("--train", type=bool, required=False, default=False)
-    parser.add_argument("--test", type=bool, required=False, default=False)
-    parser.add_argument("--continuetrain", type=bool, required=False, default=False)
-    parser.add_argument("--makeplots", type=bool, required=False, default=True)
-    parser.add_argument("--ntest", type=int, required=False, default=None)
+    parser.add_argument('--train', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--test', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--continuetrain', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--makeplots', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--ntest", type=int, required=False, default=10)
     args = parser.parse_args()
 
     if args.config == "none":
@@ -261,7 +267,7 @@ if __name__ == "__main__":
     continue_train = args.continuetrain
     train_model = args.train
     test_model = args.test
-    args.makeplots = True
+    print("makeplots", args.makeplots)
 
     if "custom_flow" not in config.keys():
         config["custom_flow"] = False

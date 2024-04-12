@@ -25,7 +25,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
     Args:
         config (dict): _description_
     """
-    pre_model, model = load_models(config, config["device"])
+    pre_model, model, weights = load_models(config, config["device"])
 
 <<<<<<< HEAD
 <<<<<<< HEAD

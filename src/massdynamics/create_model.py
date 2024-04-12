@@ -182,7 +182,7 @@ def load_models(config, device):
     else:
         pre_model.norm_factor = 1.0
     """
-    return pre_model, model
+    return pre_model, model, weights
 
 
 def backwards_pass(pre_model, model, data):
