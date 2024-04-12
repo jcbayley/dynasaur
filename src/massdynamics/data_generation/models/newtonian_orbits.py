@@ -440,13 +440,13 @@ def get_initial_conditions(
         duration = np.max(times) - np.min(times)
         n_samples = len(times)
         period = duration
-        min_period = 2.*duration/n_samples
+        min_period = 4.*duration/n_samples
 
         M = mass_scale
 
         masses = np.random.uniform(1, 10)*np.array([M, M])
 
-        period = np.random.uniform(duration/2, duration/0.5)
+        period = np.random.uniform(duration/4, duration)
 
         semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = 0.0

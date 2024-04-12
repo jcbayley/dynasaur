@@ -7,7 +7,7 @@ import timeit
 from massdynamics.basis_functions import basis
 from massdynamics.data_generation import orbits_functions, data_processing
 
-def compute_gw_acc(m0, m1, r, v, rvect, vvect, G, c):
+def acceleration_1pn(m0, m1, r, v, rvect, vvect, G, c):
 
     prefact = 4*(G**2)/(5*(c**5)*(r**3))*m0*m1*(m1/(m0 + m1))
 
@@ -17,6 +17,113 @@ def compute_gw_acc(m0, m1, r, v, rvect, vvect, G, c):
     #print(prefact, fact1, fact2)
     #print(c,G,m0,m1, r, v)
     return prefact * (fact1 + fact2)
+
+def acceleration_c2(m1, m2, r12, v12, r1, r2, v1, v2, G, c):
+    """taken from https://doi.org/10.12942/lrr-2014-2
+
+    Args:
+        m1: 
+        m2: 
+        r1 (_type_): _description_
+        r2 (_type_): _description_
+        v1 (_type_): _description_
+        v2 (_type_): _description_
+        G (_type_): _description_
+        c (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    #r12 = np.sum((r1 - r2)**2)
+    n12 = (r1 - r2)/r12
+    #v12 = v1 - v2
+
+    fact1 = 5*(G**2)*m1*m2/(r12**3)
+
+    fact2 = 4*(G**2)*(m2**2)/(r12**2)
+
+    fact3 = G*m2/(r12**2)
+
+    bracket1 = (3/2)*np.dot(n21*v2)**2 - np.dot(v1, v1) + 4*np.dot(v1,v2) - 2*np.dot(v2, v2)
+
+    term1 = fact1 + fact2 + fact3*bracket2
+
+    fact4 = G*m2/(r12**2)
+
+    bracket2 = 2*np.dot(n12, v1) - 2*np.dot(n12,v2)
+
+    term2 = fact4*bracket2
+
+    return 1/c^2*(term1*n12 + term2*v12)
+
+def acceleration_c4(m1, m2, r12, v12, r1, r2, v1, v2, G, c):
+    """taken from https://doi.org/10.12942/lrr-2014-2
+
+    Args:
+        r1 (_type_): _description_
+        r2 (_type_): _description_
+        v1 (_type_): _description_
+        v2 (_type_): _description_
+        G (_type_): _description_
+        c (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    #r12 = np.sum((r1 - r2)**2)
+    n12 = (r1 - r2)/r12
+    #v12 = v1 - v2
+    term1 = (
+        (-57 * G ** 3 * m1 ** 2 * m2 ** 2 / (4 * r12 ** 4)) +
+        (-69 * G ** 3 * m1 * m2 ** 2 / (2 * r12 ** 4)) +
+        (-9 * G ** 3 * m2 ** 2 / (r12 ** 4)) +
+        (G * m2 / (r12 ** 2)) * (
+            (-15 / 8) * (np.dot(n12,v2) ** 4) +
+            (3 / 2) * (np.dot(n12, v2) ** 2 * np.dot(v1, v1)) -
+            6 * (np.dot(n1, v2) ** 2 * np.dot(v1, v2)) -
+            2 * np.dot(v1, v2) ** 2 +
+            (9 / 2) * (np.dot(n1, v2) ** 2 * np.dot(v2, v2)) +
+            4 * np.dot(v1, v2) * np.dot(v2, v2) -
+            2 * (np.dot(v2, v2) ** 4)
+        ) +
+        (G ** 2 * m1 * m2 / (r12 ** 3)) * (
+            (39 / 2) * (np.dot(n12, v1) ** 2) -
+            39 * (np.dot(n12 , v1) * np.dot(n12, v2)) +
+            (17 / 2) * (np.dot(n12, v2) ** 2) -
+            (15 / 4) * np.dot(v1, v1) -
+            (5 / 2) * np.dot(v1 , v2) +
+            (5 / 4) * np.dot(v2, v2)
+        ) +
+        (G ** 2 * m2 ** 2 / (r12 ** 3)) * (
+            2 * (np.dot(n12, v1) ** 2) -
+            4 * (np.dot(n12, v1) * np.dot(n12 , v2)) -
+            6 * (np.dot(n12, v2) ** 2) -
+            8 * np.dot(v1, v2) +
+            4 * np.dot(v2, v2)
+        )
+    )
+
+    term2 = (
+        (G ** 2 * m2 ** 2 / (r12 ** 3)) * (
+            -2 * (np.dot(n12, v1)) -
+            2 * np.dot(n12, v2)
+        ) +
+        (G ** 2 * m1 * m2 / (r12 ** 3)) * (
+            (-63 / 4) * np.dot(n12, v1) +
+            (55 / 4) * np.dot(n12, v2)
+        ) +
+        (G * m2 / (r12 ** 2)) * (
+            -6 * (np.dot(n12 * v1) * np.dot(n12, v2) ** 2) +
+            (9 / 2) * (np.dot(n12, v2) ** 3) +
+            (np.dot(n12, v2) * np.pdot(v1, v1)) -
+            4 * (np.dot(n12, v1) * np.dot(v2, v2)) +
+            4 * (np.dot(n12, v2) * np.dot(v2, v2)) +
+            4 * (np.dot(n12, v1) * np.dot(v2, v2)) -
+            5 * (np.dot(n12, v2) * np.dot(v2, v2))
+        )
+    )
+
+    return (1/c**4) * (term1 * n12 + term2 * v12)
 
 def newton_derivative(
     t, 
@@ -65,7 +172,8 @@ def newton_derivative(
             diff = x_positions[j] - x_positions[i]
             veldiff = x_vels[i] - x_vels[j]
             acceleration = G*mass_2*diff/separation_cubed
-            gw_acceleration = compute_gw_acc(
+            """
+            acc_1pn = acceleration_1pn(
                 mass_1, 
                 mass_2, 
                 separation, 
@@ -74,8 +182,11 @@ def newton_derivative(
                 veldiff, 
                 G, 
                 c)
+            """
+            acc_c2 = acceleration_c2(mass_1, mass_2, separation, veldiff, x_position[i], x_position[j], x_vels[i], x_vels[j], G, c)
+            acc_c4 = acceleration_c2(m1, m2, separation, veldiff, x_position[i], x_position[j], x_vels[i], x_vels[j], G, c)
             #print(acceleration, gw_acceleration)
-            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration + gw_acceleration
+            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration + acc_c2 + acc_c4
          
         """
         # get all other masses but this one
