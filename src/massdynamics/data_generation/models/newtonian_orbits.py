@@ -6,129 +6,7 @@ import time
 import timeit
 from massdynamics.basis_functions import basis
 from massdynamics.data_generation import orbits_functions, data_processing
-
-def compute_gw_correction(m0, m1, r, v, rvect, vvect, G, c):
-
-    prefact = 4*(G**2)/(5*(c**5)*(r**3))*m0*m1*(m1/(m0 + m1))
-    fact1 = rvect*np.dot(rvect, vvect)*((34/3)*G*(m0+m1)/r + 6*v**2)
-
-    fact2 = vvect*(-6*G*(m0+m1)/r - 2*v**2)
-    print(prefact* (fact1+ fact2), r, v)
-    #print(c,G,m0,m1, r, v)
-    return prefact * (fact1 + fact2)
-
-def newton_derivative(
-    t, 
-    x_posvels, 
-    masses, 
-    factor=1, 
-    n_dimensions=3, 
-    EPS=1e-13,
-    second_scale=86400,
-    mass_scale=1.989e30,
-    distance_scale=1.4e11,
-    G=6.67e-11,
-    c=3e8,
-    correction=False
-    ):
-    """compute the derivative of the position and velocity
-
-    Args:
-        x_positions (_type_): _description_
-        masses (_type_): _description_
-    """
-    n_masses = len(masses)
-
-    # define some constants 
-    #G = 6.67e-11
-    #c = 3e8
-    # compute G in gaussian gravitational units to prevent overflows
-    # G * (s/day)/(m/Au) * Msun(kg)
-    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
-    c_ggravunits = c * ((second_scale**2)/(distance_scale))
-
-    # reshape posvels to more useful shape
-    x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
-    x_positions = x_posvels[:, 0:n_dimensions]
-    x_vels = x_posvels[:, n_dimensions:2*n_dimensions]
-
-    seps = np.zeros((n_masses, n_masses))
-
-    x_derivative = np.zeros((n_masses, 2*n_dimensions))
-    for i, mass_1 in enumerate(masses):
-        x_derivative[i][0:n_dimensions] = x_vels[i]
-        for j, mass_2 in enumerate(masses):
-            if i == j: 
-                continue
-            separation = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)
-            separation_cubed = separation**3
-            #seps[i,j] = separation_cubed
-            diff = x_positions[j] - x_positions[i]
-            x_derivative[i][n_dimensions:2*n_dimensions] += G_ggravunits*mass_2*diff/separation_cubed
-         
-            if correction:
-                veldiff = x_vels[i] - x_vels[j]
-                absvel = np.sqrt(np.sum((x_vels[i] - x_vels[j])**2))
-                corr = compute_gw_correction(mass_1, mass_2, separation, absvel, diff, veldiff, G_ggravunits, c_ggravunits)
-                
-                x_derivative[i][n_dimensions:2*n_dimensions] += corr
-        """
-        # get all other masses but this one
-        other_positions = np.delete(x_positions, i)
-        other_vels = np.delete(x_vels, i)
-        # compute separations
-        rs = np.sqrt(np.sum((other_positions - x_positions[j])**2))
-        """
-    #energy_loss_term = x_derivative[i][3:6] * factor
-
-    return x_derivative.flatten()
-
-def newton_derivative_vect(
-    t, 
-    x_posvels, 
-    masses, 
-    factor=1, 
-    n_dimensions=3, 
-    EPS=1e-11,
-    second_scale=86400,
-    mass_scale=1.989e30,
-    distance_scale=1.4e11,
-    G=6.67e-11,
-    c=3e8):
-    """compute the derivative of the position and velocity
-
-    Args:
-        x_positions (_type_): (Nmasses*6, )
-        masses (_type_): _description_
-    """
-    n_masses = len(masses)
-
-    # define some constants 
-    # compute G in gaussian gravitational units to prevent overflows
-    # G * (s/day)/(m/Au) * Msun(kg)
-    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
-    c_ggravunits = c * ((second_scale**2)/(distance_scale))
-
-    x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
-    x_derivative = np.zeros((n_masses, 2*n_dimensions))
-
-    # compute separations of each object and the absolute distance
-    diff_xyz = x_posvels[:,0:3,None].T - x_posvels[:,0:3,None] # Nx3xxN matrix
-    #inv_r_cubed = (np.sum(diff_xyz**2, axis=1) + EPS)**(-1.5) # NxN matrix
-    inv_r_cubed = (np.einsum("ijk,ijk->ik", diff_xyz, diff_xyz) + EPS)**-1.5
-    #print("invdiff", np.sum(diff_xyz**2, axis=1) - inv_r_cubed2)
-
-    # below two lines are the same
-    # take matrix multiplication of masses with last dimensions
-    #acceleration = G*(dxyz * inv_r_cubed) @ masses
-    #acceleration = np.einsum("ijk,k", G*(dxyz * inv_r_cubed), masses)
-
-    x_derivative[:, 0:3] = x_posvels[:, 3:6]
-    #div_r_cubed = np.einsum("ijk, ik->ijk", G_ggravunits*diff_xyz, inv_r_cubed)
-    x_derivative[:, 3:6] = np.einsum("ijk, ik, k->ij", G_ggravunits*diff_xyz, inv_r_cubed, masses)
-    #x_derivative[:, 3:6] = np.einsum("ijk,k->ij", div_r_cubed, masses)
-
-    return x_derivative.flatten()
+from massdynamics.data_generation.models.newtonian_eom import newton_derivative
 
 
 def get_masses(n_masses):
@@ -341,12 +219,14 @@ def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
 def get_initial_conditions(
     times, 
     G,  
+    c,
     n_masses, 
     n_dimensions,
     position_scale, 
     mass_scale, 
     velocity_scale,
-    data_type = "kepler"):
+    data_type = "kepler",
+    prior_args={}):
     """return initial positions, velocities and masses
        these should be in units of 
        mass: kg
@@ -453,20 +333,33 @@ def get_initial_conditions(
             arg_periapsis, 
             masses, 
             G)
-    elif data_type == "circularbinary":
-        M = 1e30
+    elif data_type == "circularbinary_old":
+        ## should all be in normalised units
+        prior_args.setdefault("mass_min", 10)
+        prior_args.setdefault("mass_max", 100)
+        prior_args.setdefault("cycles_min", 1)
+        prior_args.setdefault("cycles_max", 4)
+        prior_args.setdefault("semi_maj_ax_min", 1e-6)
+        prior_args.setdefault("semi_maj_ax_max", 1e-1)
+        M = 1e30 # solar masses
         duration = np.max(times) - np.min(times)
         n_samples = len(times)
         period = duration
-        min_period = 4.*duration/n_samples
-
+        min_period = 2.*duration/n_samples
+        if duration/prior_args["cycles_max"] < min_period:
+            raise Exception("number of cycles larger than half the sample rate")
         M = mass_scale
 
-        masses = np.random.uniform(1, 10)*np.array([M, M])
+        # in M_sun
+        masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
 
-        period = np.random.uniform(duration/4, duration)
+        # days
+        period = np.random.uniform(duration/prior_args["cycles_max"], duration/prior_args["cycles_min"])
 
-        semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
+        semi_major_axes = ((G*(np.sum(masses))/(4*np.pi**2)) * period**2)**(1/3)
+
+        semi_major_axes = np.random.uniform(prior_args["semi_maj_ax_min"], prior_args["semi_maj_ax_max"])
+
         eccentricities = 0.0
         #inclinations = np.array([0.0])
         #long_ascending_node = 0.0#np.random.uniform(0.0, 2*np.pi, size=1) # Longitude of the ascending node in degrees
@@ -479,6 +372,33 @@ def get_initial_conditions(
             arg_periapsis, 
             masses, 
             G)
+        print(initial_positions)
+        print(semi_major_axes)
+    elif data_type == "circularbinary":
+
+        prior_args.setdefault("mass_min", 1)
+        prior_args.setdefault("mass_max", 10)
+        prior_args.setdefault("cycles_min", 1)
+        prior_args.setdefault("cycles_max", 4)
+        prior_args.setdefault("separation_add_min", 6)
+        prior_args.setdefault("separation_add_max", 10)
+
+        masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
+
+        schwarz_rad = 2*G*masses/(c**2)
+        min_sep = np.sum(schwarz_rad)
+        semi_major_axes = min_sep*np.random.uniform(prior_args["separation_add_min"],prior_args["separation_add_max"])
+
+        eccentricities = 0.0
+        arg_periapsis = np.random.uniform(0.0, 2*np.pi)
+
+        initial_positions, initial_velocities = kepler_apoapsis_binary(
+            semi_major_axes, 
+            eccentricities, 
+            arg_periapsis, 
+            masses, 
+            G)
+
     else:
         raise Exception(f"Model {data_type} not implemented")
 
@@ -487,23 +407,27 @@ def get_initial_conditions(
 def resample_initial_conditions(
     times, 
     G, 
+    c,
     n_masses, 
     n_dimensions, 
     position_scale, 
     mass_scale, 
     velocity_scale,
-    data_type = "kepler_fixedperiod"
+    data_type = "kepler_fixedperiod",
+    prior_args = {}
     ):
 
     masses, initial_positions, initial_velocities = get_initial_conditions(
         times, 
         G, 
+        c,
         n_masses, 
         n_dimensions, 
         position_scale, 
         mass_scale, 
         velocity_scale,
-        data_type = data_type)
+        data_type = data_type,
+        prior_args = prior_args)
 
 
     """
@@ -559,17 +483,19 @@ def solve_ode(
     G=6.67e-11,
     c=3e8,
     n_samples=128,
-    correction=False):
+    correction=False,
+    newtoniandecay=False,
+    interpolate=True):
 
     # scalings for the ode solver
     # scale to 1 year
-    second_scale = 86400
+    second_scale = 1
     # scale to 1 au
     distance_scale = 1.4e11
     #  solar masses
     mass_scale = 1.989e30
 
-    ode_times = times/second_scale
+    ode_times = times#/second_scale
 
     n_masses, n_dimensions = np.shape(initial_positions)
 
@@ -578,10 +504,13 @@ def solve_ode(
 
     initial_positions = data_processing.subtract_center_of_mass(initial_positions[:,:,np.newaxis], masses)[:,:,0]
 
-    ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
-    ode_initial_positions = initial_positions/distance_scale                # now in AU
-    ode_masses = masses/mass_scale
+    #ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
+    #ode_initial_positions = initial_positions/distance_scale                # now in AU
+    #ode_masses = masses/mass_scale
 
+    ode_initial_velocities = initial_velocities
+    ode_initial_positions = initial_positions
+    ode_masses = masses
 
     #print(ode_initial_positions, initial_positions)
     #print(ode_initial_velocities, initial_velocities)
@@ -589,19 +518,16 @@ def solve_ode(
 
     initial_conditions = np.concatenate([ode_initial_positions, ode_initial_velocities], axis=-1)
 
-    #print(initial_conditions)
+    print("ndec", newtoniandecay, "G: ", G, "C:", c)
     ode = lambda t, x: newton_derivative(
         t, 
         x, 
         masses=ode_masses, 
-        factor=1, 
         n_dimensions=n_dimensions,
-        second_scale=second_scale,
-        distance_scale=distance_scale,
-        mass_scale=mass_scale,
         G=G,
         c=c,
-        correction=correction)
+        correction_1pn=newtoniandecay,
+        correction_2pn=newtoniandecay)
     
     #too_close_event.terminal = True
 
@@ -610,9 +536,9 @@ def solve_ode(
         t_span=[min(ode_times), max(ode_times)], 
         y0=initial_conditions.flatten(), 
         tfirst=True,
-        method="LSODA",
-        rtol=1e-6,
-        atol=1e-6)
+        method="RK45",
+        rtol=1e-14,
+        atol=1e-14)
     
     """
     if max(outputs.t) < max(times):
@@ -621,13 +547,13 @@ def solve_ode(
     """
     # y is shape (nvals, ntimes, )
 
-
     positions = outputs.y.reshape(n_masses, 2*n_dimensions, len(outputs.t))[:,:3] # get positions only
     positions = positions.reshape(n_masses*n_dimensions, len(outputs.t))
 
-    ode_interp_positions = interpolate_positions(outputs.t, ode_times, positions).T # ntimes, nvals
-    ode_interp_positions = ode_interp_positions.reshape(len(ode_times), n_masses, n_dimensions)
-    ode_interp_positions = ode_interp_positions #- np.mean(ode_interp_positions, axis=(0, 1))[None,None,:]
+    if interpolate:
+        ode_interp_positions = interpolate_positions(outputs.t, ode_times, positions).T # ntimes, nvals
+        ode_interp_positions = ode_interp_positions.reshape(len(ode_times), n_masses, n_dimensions)
+        ode_interp_positions = ode_interp_positions #- np.mean(ode_interp_positions, axis=(0, 1))[None,None,:]
 
     #scaled_interp_positions = ode_interp_positions*distance_scale/position_scale
     scaled_interp_positions = ode_interp_positions*distance_scale                # now in AU
@@ -646,7 +572,8 @@ def generate_data(
     window="none", 
     return_windowed_coeffs=True, 
     basis_type="chebyshev",
-    data_type="newtonian-kepler") -> np.array:
+    data_type="newtonian-kepler",
+    prior_args = {}) -> np.array:
     """_summary_
 
     Args:
@@ -664,24 +591,33 @@ def generate_data(
     else:
         dtype = np.float64
 
+    newtoniandecay = True if data_type.split("-")[0] in ["newtoniandecay", "newtonian_decay"] else False
+
     ntimeseries = [0, 1, 3, 6, 10]
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
 
+    prior_args.setdefault("sample_rate", sample_rate)
+    prior_args.setdefault("n_samples", sample_rate)
+    prior_args.setdefault("duration", 1)
+
     second = 1./(24*3600)
     n_samples = sample_rate
-    times = np.linspace(0,1,sample_rate) #in days for ode
-    solve_times = np.linspace(0,10000,sample_rate)
+    times = np.linspace(0,1,prior_args["n_samples"]) #in days for ode
+    solve_times = np.linspace(0,prior_args["duration"],prior_args["n_samples"])
 
     G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
     c = 3e8
 
-    # scale to 1 year
-    second_scale = 86400
-    # between 0 and au/100
+    # seconds
+    second_scale = 1
+    # au
     distance_scale = 1.4e11
-    # between 0 and 100 solar masses
+    # solar masses
     mass_scale = 1.989e30
+
+    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
+    c_ggravunits = c * ((second_scale)/(distance_scale))
 
     position_scale = 2*distance_scale                             # in m
     velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
@@ -691,13 +627,15 @@ def generate_data(
     for i in range(n_data):
         masses, initial_positions, initial_velocities = resample_initial_conditions(
             solve_times, 
-            G, 
+            G_ggravunits, 
+            c_ggravunits,
             n_masses, 
             n_dimensions, 
             position_scale, 
             mass_scale, 
             velocity_scale,
-            data_type = data_type.split("-")[1]
+            data_type = data_type.split("-")[1],
+            prior_args = prior_args
             )
 
         t_times, positions, masses = solve_ode(
@@ -705,7 +643,10 @@ def generate_data(
             masses=masses, 
             initial_positions=initial_positions,
             initial_velocities=initial_velocities,
-            n_samples=len(times))
+            n_samples=len(times),
+            newtoniandecay=newtoniandecay,
+            G=G_ggravunits,
+            c=c_ggravunits)
 
         print(f"solved: {i}")
         all_positions[i] = np.transpose(positions, (1,2,0))

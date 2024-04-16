@@ -33,7 +33,8 @@ def generate_data(
     data_type = "random",
     fourier_weight=0.0,
     coordinate_type="cartesian",
-    add_noise = False):
+    add_noise = False,
+    prior_args={}):
 
     if data_type.split("-")[0] == "random":
         times, positions, masses, position_coeffs = random_orbits.generate_data(
@@ -48,7 +49,7 @@ def generate_data(
                 basis_type=basis_type,
                 fourier_weight=fourier_weight,
                 data_type=data_type)
-    elif data_type.split("-")[0] == "newtonian":
+    elif data_type.split("-")[0] in ["newtonian", "newtonian_decay", "newtoniandecay"]:
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
                 n_data, 
                 basis_order, 
@@ -59,19 +60,8 @@ def generate_data(
                 window=window, 
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type,
-                data_type=data_type)
-    elif data_type.split("-")[0] == "newtonian_decay":
-        times, positions, masses, position_coeffs = newtonian_orbits_decay.generate_data(
-                n_data, 
-                basis_order, 
-                n_masses, 
-                sample_rate, 
-                n_dimensions, 
-                detectors=detectors, 
-                window=window, 
-                return_windowed_coeffs=return_windowed_coeffs, 
-                basis_type=basis_type,
-                data_type=data_type)
+                data_type=data_type,
+                prior_args=prior_args)
     elif data_type == "kepler":
         times, positions, masses, position_coeffs = kepler_orbits.generate_data(
                 n_data,

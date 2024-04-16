@@ -109,7 +109,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             basis_type = config["basis_type"],
             data_type = config["data_type"],
             fourier_weight=config["fourier_weight"],
-            add_noise=config["add_noise"])
+            add_noise=config["add_noise"],
+            prior_args=config["prior_args"])
 
     acc_basis_order = cshape
 
