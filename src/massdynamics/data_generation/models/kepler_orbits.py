@@ -137,7 +137,8 @@ def generate_kepler_orbit(times, semi_major_axes, eccentricities, inclinations, 
         v_r = np.sqrt(G * M * (2 / r - 1 / a))
 
         # Calculate tangential velocity
-        v_t = np.sqrt(2 * G * M / r - G * M / a)
+        #v_t = np.sqrt(2 * G * M / r - G * M / a)
+        v_t = np.sqrt(2 * G * M / r)
 
         # Convert polar velocities to Cartesian velocities
         vx = v_r * np.cos(theta) - v_t * np.sin(theta)
@@ -258,16 +259,26 @@ def generate_data(
     else:
         max_semi_major_axis = (G*M/(4*np.pi**2) * min_period**2)**(1/3)
         semi_major_axes = np.random.uniform(0.3,1,size=n_samples)*distance_scale
+
     eccentricities = np.random.uniform(0.0,0.9,size=n_samples)
     inclinations = np.random.uniform(0.0,2*np.pi,size=n_samples)
 
-    positions, velocities = generate_kepler_orbit(
-        times, 
+    initial_positions, initial_velocities = generate_kepler_orbit(
+        times[0], 
         semi_major_axes, 
         eccentricities, 
         inclinations, 
         G, 
         M)
+
+    masses, initial_positions, = solve_ode(
+        times, 
+        n_masses=2, 
+        n_dimensions=3, 
+        n_samples=128,
+        initial_conditions=None,
+        masses=None
+        )
 
     positions = np.array(positions)/distance_scale
     velocities = np.array(velocities)*second_scale/distance_scale

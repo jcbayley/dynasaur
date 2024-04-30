@@ -24,7 +24,7 @@ import torch.nn as nn
 import os
 
 
-def create_models(config, device):
+def create_models(config, device=None):
     """create a convolutional to linear model with n_context outputs and a 
     flow model taking in n_context parameters and layers defined in config file
 
@@ -35,7 +35,8 @@ def create_models(config, device):
         tuple of models: (pre_model, model)
     """
 
-    times, labels, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
+    """
+    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 
@@ -46,10 +47,18 @@ def create_models(config, device):
         return_windowed_coeffs=config["return_windowed_coeffs"],
         basis_type=config["basis_type"],
         data_type=config["data_type"])
+    """
 
+    n_basis = config["basis_order"]
+    if config["basis_type"] == "fourier":
+        n_basis += 2
+    feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
 
     n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
+
+    if device is not None:
+        config["device"] = device
 
     # pre processing creation
     pre_model = nn.Sequential()
@@ -134,7 +143,7 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, labels, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 
@@ -166,13 +175,14 @@ def load_models(config, device):
 
     pre_model.norm_factor = weights["norm_factor"]
     pre_model.label_norm_factor = weights["label_norm_factor"]
+    pre_model.mass_norm_factor = weights["mass_norm_factor"]
     """
     if "norm_factor" in weights:
         pre_model.norm_factor = weights["norm_factor"]
     else:
         pre_model.norm_factor = 1.0
     """
-    return pre_model, model
+    return pre_model, model, weights
 
 
 def backwards_pass(pre_model, model, data):

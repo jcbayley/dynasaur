@@ -14,6 +14,7 @@ from massdynamics.data_generation import (
 from massdynamics.data_generation.models import (
     random_orbits,
     newtonian_orbits,
+    newtonian_orbits_decay,
     kepler_orbits
 )
 from massdynamics.basis_functions import basis
@@ -30,9 +31,12 @@ def generate_data(
     return_windowed_coeffs=True, 
     basis_type="chebyshev",
     data_type = "random",
-    fourier_weight=0.0):
+    fourier_weight=0.0,
+    coordinate_type="cartesian",
+    add_noise = False,
+    prior_args={}):
 
-    if data_type == "random":
+    if data_type.split("-")[0] == "random":
         times, positions, masses, position_coeffs = random_orbits.generate_data(
                 n_data, 
                 basis_order, 
@@ -43,8 +47,9 @@ def generate_data(
                 window=window, 
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type,
-                fourier_weight=fourier_weight)
-    elif data_type == "newton":
+                fourier_weight=fourier_weight,
+                data_type=data_type)
+    elif data_type.split("-")[0] in ["newtonian", "newtonian_decay", "newtoniandecay"]:
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
                 n_data, 
                 basis_order, 
@@ -54,7 +59,9 @@ def generate_data(
                 detectors=detectors, 
                 window=window, 
                 return_windowed_coeffs=return_windowed_coeffs, 
-                basis_type=basis_type)
+                basis_type=basis_type,
+                data_type=data_type,
+                prior_args=prior_args)
     elif data_type == "kepler":
         times, positions, masses, position_coeffs = kepler_orbits.generate_data(
                 n_data,
@@ -65,7 +72,7 @@ def generate_data(
                 n_dimensions = n_dimensions,
                 sample_rate = sample_rate)
     else:
-        raise Exception(f"No data with name {data_type}")
+        raise Exception(f"No data with name {data_type.split('-')[0]}")
     
     if basis_type == "fourier":
         dtype = complex
@@ -77,8 +84,12 @@ def generate_data(
     strain_timeseries = np.zeros((n_data, len(detectors), len(times)))
     if basis_type == "fourier":
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
+        all_basis_dynamics_coord = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
+
     else:
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
+        all_basis_dynamics_coord = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
+
 
     if positions is None:
         no_positions = True
@@ -100,12 +111,21 @@ def generate_data(
                 times,
                 position_coeffs[data_index]
             )
-            if n_masses > 1:
-                positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
+            #if n_masses > 1:
+            #    positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
         # move to center of mass frane 
         if n_masses > 1:
             positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
+            
+
+        if coordinate_type == "spherical":
+            positions_coord = data_processing.cartesian_to_spherical(positions[data_index])
+        elif coordinate_type == "cartesian":
+            positions_coord = positions[data_index]
+        else:
+            raise Exception(f"Coordinate type {coordinate_type} is not supported")
+
 
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
@@ -117,6 +137,16 @@ def generate_data(
             # if windowing applied create coeffs which are windowed else just use the random coeffs
             
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
+
+            if coordinate_type != "cartesian":
+    
+                temp_coeffs2 = basis[basis_type]["fit"](
+                    times,
+                    positions_coord[mass_index, :, :][np.newaxis,:],
+                    t_basis_order
+                    )
+                
+                all_basis_dynamics_coord[data_index, mass_index] = temp_coeffs2
 
         
         strain_timeseries[data_index], energy = compute_waveform.get_waveform(
@@ -134,17 +164,14 @@ def generate_data(
 
         #print(np.max(all_time_dynamics))
 
-    
-    
-    output_coeffs_mass = data_processing.positions_masses_to_samples(
-        all_basis_dynamics,
-        all_masses,
-        basis_type = basis_type
-        )
 
-    samples_shape, feature_shape = np.shape(output_coeffs_mass)
+    feature_shape = np.prod(np.shape(all_basis_dynamics)[1:]) + len(all_masses[0])
+    #samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    return times, output_coeffs_mass, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
+    if add_noise:
+        strain_timeseries = strain_timeseries + np.random.normal(0, 1, size=np.shape(strain_timeseries))
+
+    return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
 
 
 def get_data_path(
@@ -177,7 +204,8 @@ def save_data(
     basis_type: str = "chebyshev",
     data_type: str = "random",
     start_index: int = 0,
-    fourier_weight:float=0.0
+    fourier_weight:float=0.0,
+    add_noise=False
     ):
 
 
@@ -208,7 +236,8 @@ def save_data(
         return_windowed_coeffs=return_windowed_coeffs,
         basis_type=basis_type,
         data_type=data_type,
-        fourier_weight=fourier_weight)
+        fourier_weight=fourier_weight,
+        add_noise=add_noise)
 
 
     if n_examples < data_split:
@@ -234,7 +263,8 @@ def save_data(
             return_windowed_coeffs=return_windowed_coeffs,
             basis_type=basis_type,
             data_type=data_type,
-            fourier_weight=fourier_weight)
+            fourier_weight=fourier_weight,
+            add_noise=add_noise)
 
         #t_label = np.array(labels)[split_ind*data_split : (split_ind + 1)*data_split]
         #t_positions = np.array(positions)[split_ind*data_split : (split_ind + 1)*data_split]
@@ -335,7 +365,8 @@ if __name__ == "__main__":
             return_windowed_coeffs=True, 
             basis_type="fourier",
             data_type = "kepler",
-            fourier_weight=0.0)
+            fourier_weight=0.0,
+            add_noise=add_noise)
     else:
         save_data(
             data_dir = args.datadir, 

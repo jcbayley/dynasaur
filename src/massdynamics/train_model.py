@@ -75,9 +75,12 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         configstring = json.dumps(config, indent=4)
         f.write(configstring)
 
+    device = torch.device(config["device"])
+    print(torch.cuda.get_device_name(device))
+
     if config["load_data"]:
         print("loading data ........")
-        times, labels, strain, cshape, positions = data_generation.load_data(
+        times, basis_dynamics, masses, strain, cshape, positions = data_generation.load_data(
             data_dir = config["data_dir"], 
             basis_order = config["basis_order"],
             n_masses = config["n_masses"],
@@ -87,13 +90,14 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             window = config["window"],
             return_windowed_coeffs = config["return_windowed_coeffs"],
             basis_type = config["basis_type"],
-            data_type = config["data_type"]
+            data_type = config["data_type"],
+            add_noise=config["add_noise"]
             )
 
         config["n_data"] = len(labels)
     else:
         print("making data ........")
-        times, labels, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
             n_data=config["n_data"], 
             basis_order=config["basis_order"], 
             n_masses=config["n_masses"], 
@@ -104,7 +108,9 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             return_windowed_coeffs=config["return_windowed_coeffs"],
             basis_type = config["basis_type"],
             data_type = config["data_type"],
-            fourier_weight=config["fourier_weight"])
+            fourier_weight=config["fourier_weight"],
+            add_noise=config["add_noise"],
+            prior_args=config["prior_args"])
 
     acc_basis_order = cshape
 
@@ -120,23 +126,34 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
 
     if continue_train:
-        pre_model, model = create_model.load_models(config, device=config["device"])
-        strain, norm_factor = data_processing.normalise_data(strain, pre_model.norm_factor)
-        labels, label_norm_factor = data_processing.normalise_labels(labels, pre_model.label_norm_factor, n_masses=config["n_masses"])
+        pre_model, model, weights = create_model.load_models(config, device=config["device"])
+        pre_model, labels, strain = data_processing.preprocess_data(
+            pre_model, 
+            basis_dynamics,
+            masses, 
+            strain, 
+            window_strain=config["window_strain"], 
+            spherical_coords=config["spherical_coords"], 
+            initial_run=False,
+            n_masses=config["n_masses"],
+            device=config["device"],
+            basis_type=config["basis_type"])
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
-
         pre_model.to(config["device"])
         model.to(config["device"])
-        
-        strain, norm_factor = data_processing.normalise_data(strain, None)
-        pre_model.norm_factor = norm_factor
-        print("lm", np.min(labels[:,:-config["n_masses"]]), np.max(labels[:,:-config["n_masses"]]), np.shape(labels))
-        print("lmas", np.min(labels[:,-config["n_masses"]:]), np.max(labels[:,-config["n_masses"]:]), np.shape(labels))
-        labels, label_norm_factor = data_processing.normalise_labels(labels, None, n_masses=config["n_masses"])
-        print("am", np.min(labels[:,:-config["n_masses"]]), np.max(labels[:,:-config["n_masses"]]), np.shape(labels))
-        print("amas", np.min(labels[:,-config["n_masses"]:]), np.max(labels[:,-config["n_masses"]:]), np.shape(labels))
-        pre_model.label_norm_factor = label_norm_factor
+        pre_model, labels, strain = data_processing.preprocess_data(
+            pre_model, 
+            basis_dynamics,
+            masses, 
+            strain, 
+            window_strain=config["window_strain"], 
+            spherical_coords=config["spherical_coords"], 
+            initial_run=True,
+            n_masses=config["n_masses"],
+            device=config["device"],
+            basis_type=config["basis_type"])
+
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 
@@ -150,12 +167,15 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config["learning_rate"])
 
+
     if continue_train:
         with open(os.path.join(config["root_dir"], "train_losses.txt"), "r") as f:
             losses = np.loadtxt(f)
         train_losses = list(losses[0])
         val_losses = list(losses[1])
         start_epoch = len(train_losses)
+
+        optimiser.load_state_dict(weights["optimiser_state_dict"])
     else:
         train_losses = []
         val_losses = []
@@ -185,13 +205,20 @@ def run_training(config: dict, continue_train:bool = False) -> None:
                 "pre_model_state_dict": pre_model.state_dict(),
                 "optimiser_state_dict":optimiser.state_dict(),
                 "norm_factor": pre_model.norm_factor,
-                "label_norm_factor": pre_model.label_norm_factor
+                "label_norm_factor": pre_model.label_norm_factor,
+                "mass_norm_factor": pre_model.mass_norm_factor
             },
             os.path.join(config["root_dir"],"test_model.pt"))
 
-        fig, ax = plt.subplots()
-        ax.plot(train_losses)
-        ax.plot(val_losses)
+        fig, ax = plt.subplots(nrows=2)
+        ax[0].plot(train_losses)
+        ax[0].plot(val_losses)
+        ax[1].plot(train_losses)
+        ax[1].plot(val_losses)
+        ax[1].set_xscale("log")
+        ax[1].set_xlabel("Time")
+        ax[0].set_ylabel("Loss")
+        ax[1].set_ylabel("Loss")
         fig.savefig(os.path.join(config["root_dir"], "lossplot.png"))
 
     print("Completed Training")
@@ -203,9 +230,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-c", "--config", type=str, required=False, default="none")
-    parser.add_argument("--train", type=bool, required=False, default=False)
-    parser.add_argument("--test", type=bool, required=False, default=False)
-    parser.add_argument("--continuetrain", type=bool, required=False, default=False)
+    parser.add_argument('--train', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--test', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--continuetrain', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--makeplots', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--ntest", type=int, required=False, default=10)
     args = parser.parse_args()
 
     if args.config == "none":
@@ -239,6 +268,7 @@ if __name__ == "__main__":
     continue_train = args.continuetrain
     train_model = args.train
     test_model = args.test
+    print("makeplots", args.makeplots)
 
     if "custom_flow" not in config.keys():
         config["custom_flow"] = False
@@ -253,4 +283,4 @@ if __name__ == "__main__":
         run_training(config, continue_train=continue_train)
 
     if test_model:
-        run_testing(config)
+        run_testing(config, make_plots=args.makeplots, n_test=args.ntest)

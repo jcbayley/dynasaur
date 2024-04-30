@@ -1,7 +1,10 @@
 import os
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
+
 
 def make_2d_animation(
     root_dir, 
@@ -106,8 +109,8 @@ def make_3d_animation(
     index, 
     timeseries, 
     masses, 
-    true_timeseries, 
-    true_masses):
+    true_timeseries=None, 
+    true_masses=None):
     """_summary_
 
     Args:
@@ -161,12 +164,13 @@ def make_3d_animation(
 
 def make_3d_distribution(
     root_dir, 
-    index, 
     timeseries, 
     masses, 
     true_timeseries, 
     true_masses,
-    duration = 5):
+    duration = 5,
+    fname=None,
+    center_of_mass=True):
     """make animation in 3d of marticle movements
 
     Args:
@@ -198,6 +202,16 @@ def make_3d_distribution(
         #true_particles = [ax.plot(true_timeseries[mind,0,0], true_timeseries[mind,1,0], true_timeseries[mind,2,0], marker="o", ls="none", color="k", markersize=true_masses[mind]*10) for mind in range(num_masses)]
         true_particles = ax.scatter(true_timeseries[:,0,0], true_timeseries[:,1,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
 
+    if center_of_mass:
+        centermass_timeseries = []
+        for i in range(len(timeseries)):
+            cmass = np.average(timeseries[i], axis=0, weights=masses[i])
+            centermass_timeseries.append(cmass)
+        centermass_timeseries = np.array(centermass_timeseries)
+
+        center_particles = ax.scatter(centermass_timeseries[:,0,0], centermass_timeseries[:,1,0],centermass_timeseries[:,2,0],s=np.sum(masses, axis=1), color="C2") 
+
+
     def update_plot(frame):
         for mind in range(num_masses):
             # Set new positions for each particle based on the current frame
@@ -213,12 +227,21 @@ def make_3d_distribution(
             #true_particles[mind][0].set_3d_properties(zt)
             true_particles._offsets3d = (xt, yt, zt)
 
+        if center_of_mass:
+            xc, yc, zc = np.transpose(centermass_timeseries[:,:,frame], (1,0))
+            center_particles._offsets3d = (xc, yc, zc)
+
+
 
     ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
-
+    print("made animation")
+    #fps = int(n_frames/duration)
+    #writergif = animation.PillowWriter(fps=fps) 
+    #ani.save(fname, writer="imagemagick")
     fps = int(n_frames/duration)
     writergif = animation.PillowWriter(fps=fps) 
-    ani.save(os.path.join(root_dir, f"multi_animation_{index}.gif"), writer=writergif)
+    ani.save(fname, writer=writergif)
+    print("saved")
 
 def make_3d_distribution_zproj(
     root_dir, 
@@ -287,6 +310,16 @@ def line_of_sight_animation(
     true_masses, 
     fname,
     duration=5):
+    """make a 2d heatmap of the samples in the xy plane
+
+    Args:
+        timeseries (_type_): _description_
+        masses (_type_): _description_
+        true_timeseries (_type_): _description_
+        true_masses (_type_): _description_
+        fname (_type_): _description_
+        duration (int, optional): _description_. Defaults to 5.
+    """
 
     nsamples, nmasses, ndimensions, nframes = np.shape(timeseries)
 
@@ -305,10 +338,18 @@ def line_of_sight_animation(
     # timeseries shape now: nsamples, ndims, ntimes
     fig, ax = plt.subplots()
 
-    print(np.shape(concat_ts[:, 0, 0]))
+    #print(np.shape(concat_ts[:, 0, 0]))
     hst, xedge, yedge = np.histogram2d(concat_ts[:, 0, 0], concat_ts[:, 1, 0], bins=np.array([binsx, binsy]))
+    """
+    X,Y = np.meshgrid(binsx, binsy)
+    image = ax.pcolormesh(
+        X,
+        Y,
+        hst.T
+    )
+    """
     image = ax.imshow(
-        hst, 
+        hst.T, 
         origin="lower", 
         aspect="auto", 
         interpolation="gaussian", 
@@ -316,21 +357,289 @@ def line_of_sight_animation(
                 binsx[-1],
                 binsy[0],
                 binsy[-1]])
-    point = ax.scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=5, color="k")
-    point2 = ax.scatter(true_timeseries[:, 1, 0], true_timeseries[:, 0, 0], s=5, color="r")
-
+    
+    
+    if true_timeseries is not None:
+        point = ax.scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=8, color="r")
+    
     def update_plot(frame):
 
         hst, xedge, yedge = np.histogram2d(concat_ts[:, 0, frame], concat_ts[:, 1, frame], bins=np.array([binsx, binsy]))
 
-        image.set_array(hst)
-        tx, ty = true_timeseries[:, 0, frame], true_timeseries[:, 1, frame]
-        point.set_offsets(np.c_[tx, ty])
-        point2.set_offsets(np.c_[ty, tx])
+        image.set_array(hst.T)
+        if true_timeseries is not None:
+            tx, ty = true_timeseries[:, 0, frame], true_timeseries[:, 1, frame]
+            point.set_offsets(np.c_[tx, ty])
 
-    ani = animation.FuncAnimation(fig, update_plot, frames=nframes, interval=1)
+    interval = 1000*duration/nframes
 
-    fps = int(nframes/duration)
+    ani = animation.FuncAnimation(fig, update_plot, frames=nframes, interval=interval)
+    #fps = int(nframes/duration)
+    #writergif = animation.PillowWriter(fps=fps) 
+    ani.save(fname, writer="imagemagick")
+    return ani
+
+def heatmap_projections(
+    timeseries, 
+    masses, 
+    true_timeseries, 
+    true_masses, 
+    fname,
+    duration=5):
+    """make a 2d heatmap of the samples in the xy plane
+
+    Args:
+        timeseries (_type_): _description_
+        masses (_type_): _description_
+        true_timeseries (_type_): _description_
+        true_masses (_type_): _description_
+        fname (_type_): _description_
+        duration (int, optional): _description_. Defaults to 5.
+    """
+
+    nsamples, nmasses, ndimensions, nframes = np.shape(timeseries)
+
+    xmin, xmax = np.min(timeseries[:,:,0,:]),np.max(timeseries[:,:,0,:])
+    ymin, ymax = np.min(timeseries[:,:,1,:]),np.max(timeseries[:,:,1,:])
+    zmin, zmax = np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])
+
+    nbins = 60
+    binsx = np.linspace(xmin, xmax, nbins)
+    binsy = np.linspace(ymin, ymax, nbins)
+    binsz = np.linspace(zmin, zmax, nbins)
+    binwidthx = binsx[1] - binsx[0]
+    binwidthy = binsy[1] - binsy[0]
+    binwidthz = binsz[1] - binsz[0]
+
+    bins = [binsx, binsy, binsz]
+
+    concat_ts = timeseries.reshape(nsamples*nmasses, ndimensions, nframes)
+    #concat_ts = np.concatenate(timeseries, 1)
+
+    # timeseries shape now: nsamples, ndims, ntimes
+    fig, ax = plt.subplots(nrows=2, ncols=2)
+        
+    #print(np.shape(concat_ts[:, 0, 0]))
+    hst1, xedge1, yedge1 = np.histogram2d(concat_ts[:, 0, 0], concat_ts[:, 1, 0], bins=np.array([bins[0], bins[1]]))
+    hst2, xedge2, yedge2 = np.histogram2d(concat_ts[:, 0, 0], concat_ts[:, 2, 0], bins=np.array([bins[0], bins[2]]))
+    hst3, xedge3, yedge3 = np.histogram2d(concat_ts[:, 1, 0], concat_ts[:, 2, 0], bins=np.array([bins[1], bins[2]]))
+
+
+    image1 = ax[0,0].imshow(
+        hst1.T, 
+        origin="lower", 
+        aspect="auto", 
+        interpolation="gaussian", 
+        extent=[bins[0][0],
+                bins[0][-1],
+                bins[1][0],
+                bins[1][-1]])
+    image2 = ax[0,1].imshow(
+        hst2.T, 
+        origin="lower", 
+        aspect="auto", 
+        interpolation="gaussian", 
+        extent=[bins[0][0],
+                bins[0][-1],
+                bins[2][0],
+                bins[2][-1]])
+    image3 = ax[1,0].imshow(
+        hst3.T, 
+        origin="lower", 
+        aspect="auto", 
+        interpolation="gaussian", 
+        extent=[bins[1][0],
+                bins[1][-1],
+                bins[2][0],
+                bins[2][-1]])
+        
+        
+    if true_timeseries is not None:
+        point1 = ax[0,0].scatter(true_timeseries[:, 0, 0], true_timeseries[:, 1, 0], s=8, color="r")
+        point2 = ax[0,1].scatter(true_timeseries[:, 0, 0], true_timeseries[:, 2, 0], s=8, color="r")
+        point3 = ax[1,0].scatter(true_timeseries[:, 1, 0], true_timeseries[:, 2, 0], s=8, color="r")
+
+    ax[0,0].set_xlabel("xdim")
+    ax[0,0].set_ylabel("ydim")
+
+    ax[0,1].set_xlabel("xdim")
+    ax[0,1].set_ylabel("zdim")
+
+    ax[1,0].set_xlabel("ydim")
+    ax[1,0].set_ylabel("zdim")
+
+    fig.tight_layout()
+
+    def update_plot(frame):
+
+        hst1, xedge, yedge = np.histogram2d(concat_ts[:, 0, frame], concat_ts[:, 1, frame], bins=np.array([bins[0], bins[1]]))
+        hst2, xedge, yedge = np.histogram2d(concat_ts[:, 0, frame], concat_ts[:, 2, frame], bins=np.array([bins[0], bins[2]]))
+        hst3, xedge, yedge = np.histogram2d(concat_ts[:, 1, frame], concat_ts[:, 2, frame], bins=np.array([bins[1], bins[2]]))
+
+
+        image1.set_array(hst1.T)
+        image2.set_array(hst2.T)
+        image3.set_array(hst3.T)
+        
+        if true_timeseries is not None:
+            tx1, ty1 = true_timeseries[:, 0, frame], true_timeseries[:, 1, frame]
+            tx2, ty2 = true_timeseries[:, 0, frame], true_timeseries[:, 2, frame]
+            tx3, ty3 = true_timeseries[:, 1, frame], true_timeseries[:, 2, frame]
+
+            point1.set_offsets(np.c_[tx1, ty1])
+            point2.set_offsets(np.c_[tx2, ty2])
+            point3.set_offsets(np.c_[tx3, ty3])
+
+    interval = 1000*duration/nframes
+
+    ani = animation.FuncAnimation(fig, update_plot, frames=nframes, interval=interval)
+    #fps = int(nframes/duration)
+    #writergif = animation.PillowWriter(fps=fps) 
+    ani.save(fname, writer="imagemagick")
+    return ani
+
+
+def make_distribution_projections(
+    root_dir, 
+    index, 
+    timeseries, 
+    masses, 
+    true_timeseries, 
+    true_masses,
+    strain=None,
+    true_strain=None,
+    duration=5,
+    center_of_mass=True):
+    """make animation in 3d of marticle movements
+
+    Args:
+        root_dir (_type_): _description_
+        index (_type_): _description_
+        timeseries (_type_): shape [sample, masses, dimension, timestep]
+        masses (_type_): _description_
+        true_timeseries (_type_): shape [sample, masses, dimension, timestep]
+        true_masses (_type_): _description_
+    """
+    #n_frames = np.shape(timeseries)[-1]
+    #num_masses = np.shape(masses)[-1]
+    n_samples, n_masses, n_dimensions, n_frames = np.shape(timeseries)
+
+    n_samples_strain, n_detectors, n_times = np.shape(strain)
+
+    # Create a figure and axis
+    fig, ax = plt.subplots(nrows=2, ncols=3)
+
+    ax[0,0].set_xlim([np.min(timeseries[:,:,0,:]),np.max(timeseries[:,:,0,:])])
+    ax[0,0].set_ylim([np.min(timeseries[:,:,1,:]),np.max(timeseries[:,:,1,:])])
+
+    ax[0,1].set_xlim([np.min(timeseries[:,:,0,:]),np.max(timeseries[:,:,0,:])])
+    ax[0,1].set_ylim([np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])])
+
+    ax[0,2].set_xlim([np.min(timeseries[:,:,1,:]),np.max(timeseries[:,:,1,:])])
+    ax[0,2].set_ylim([np.min(timeseries[:,:,2,:]),np.max(timeseries[:,:,2,:])])
+
+    ax[1,0].set_xlim([0,n_frames])
+    ax[1,1].set_xlim([0,n_frames])
+    ax[1,2].set_xlim([0,n_frames])
+
+    ax[1,0].set_ylim([np.min(strain[:,0,:]),np.max(strain[:,0,:])])
+    ax[1,1].set_ylim([np.min(strain[:,1,:]),np.max(strain[:,1,:])])
+    ax[1,2].set_ylim([np.min(strain[:,2,:]),np.max(strain[:,2,:])])
+
+
+    print("anishape", np.shape(timeseries))
+    print("axshape",np.shape(ax))
+    # Create particles as lines
+    #particles = [ax.plot(timeseries[:,mind,0,0], timeseries[:,mind,1,0], timeseries[:,mind,2,0], marker="o", ls="none",markersize=masses[0,mind]*10) for mind in range(num_masses)]
+    particlesxy = [ax[0,0].scatter(timeseries[:,mind,0,0], timeseries[:,mind,1,0],s=masses[:,mind]*10, alpha=0.5) for mind in range(n_masses)]
+    particlesxz = [ax[0,1].scatter(timeseries[:,mind,0,0], timeseries[:,mind,2,0],s=masses[:,mind]*10, alpha=0.5) for mind in range(n_masses)]
+    particlesyz = [ax[0,2].scatter(timeseries[:,mind,1,0], timeseries[:,mind,2,0],s=masses[:,mind]*10, alpha=0.5) for mind in range(n_masses)]
+
+    if true_timeseries is not None:
+        #true_particles = [ax.plot(true_timeseries[mind,0,0], true_timeseries[mind,1,0], true_timeseries[mind,2,0], marker="o", ls="none", color="k", markersize=true_masses[mind]*10) for mind in range(num_masses)]
+        true_particlesxy = ax[0,0].scatter(true_timeseries[:,0,0], true_timeseries[:,1,0],s=true_masses*10, color="k")
+        true_particlesxz = ax[0,1].scatter(true_timeseries[:,0,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
+        true_particlesyz = ax[0,2].scatter(true_timeseries[:,1,0], true_timeseries[:,2,0],s=true_masses*10, color="k")
+
+    if center_of_mass:
+        centermass_timeseries = []
+        for i in range(len(timeseries)):
+            cmass = np.average(timeseries[i], axis=0, weights=masses[i])
+            centermass_timeseries.append(cmass)
+        centermass_timeseries = np.array(centermass_timeseries)
+
+        center_particlesxy = ax[0,0].scatter(centermass_timeseries[:,0,0], centermass_timeseries[:,1,0],s=np.sum(masses, axis=1), color="C2") 
+        center_particlesxz = ax[0,1].scatter(centermass_timeseries[:,0,0], centermass_timeseries[:,2,0],s=np.sum(masses, axis=1), color="C2") 
+        center_particlesyz = ax[0,2].scatter(centermass_timeseries[:,1,0], centermass_timeseries[:,2,0],s=np.sum(masses, axis=1), color="C2") 
+
+    if strain is not None:
+        strain_xdata = np.arange(len(strain[0,0]))
+        strain_plots = [ax[1,i].plot(strain_xdata[:1], strain[:,i,:1].T, alpha=0.3, color=f"C{i}") for i in range(n_detectors)]
+
+    if true_strain is not None:
+        true_strain_xdata = np.arange(len(strain[0,0]))
+        true_strain_plot = [ax[1,i].plot(true_strain_xdata[:1],true_strain[i,:1], color="k")[0] for i in range(n_detectors)]
+
+    ax[0,0].set_xlabel("X dimension")
+    ax[0,0].set_ylabel("Y dimension")
+    ax[0,1].set_xlabel("X dimension")
+    ax[0,1].set_ylabel("Z dimension")
+    ax[0,2].set_xlabel("Y dimension")
+    ax[0,2].set_ylabel("Z dimension")
+
+    ax[1,0].set_xlabel("Time")
+    ax[1,1].set_xlabel("Time")
+    ax[1,2].set_xlabel("Time")
+
+    ax[1,0].set_ylabel("Strain [H1]")
+    ax[1,1].set_ylabel("Strain [L1]")
+    ax[1,2].set_ylabel("Strain [V1]")
+
+    def update_plot(frame):
+        print(n_frames, frame)
+        for mind in range(n_masses):
+            # Set new positions for each particle based on the current frame
+            #print(np.shape(timeseries[:,mind][:,:,frame]))
+            x, y, z = np.transpose(timeseries[:,mind,:,frame], (1,0))
+            #particles[mind][0].set_data(x, y)
+            #particles[mind][0].set_3d_properties(z)
+            particlesxy[mind].set_offsets(np.c_[x, y])
+            particlesxz[mind].set_offsets(np.c_[x, z])
+            particlesyz[mind].set_offsets(np.c_[y, z])
+
+        if true_timeseries is not None:
+            xt, yt, zt = np.transpose(true_timeseries[:,:,frame], (1,0))
+            #true_particles[mind][0].set_data(xt, yt)
+            #true_particles[mind][0].set_3d_properties(zt)
+            true_particlesxy.set_offsets(np.c_[xt, yt])
+            true_particlesxz.set_offsets(np.c_[xt, zt])
+            true_particlesyz.set_offsets(np.c_[yt, zt])
+
+        if center_of_mass:
+            xc, yc, zc = np.transpose(centermass_timeseries[:,:,frame], (1,0))
+            center_particlesxy.set_offsets(np.c_[xc, yc])
+            center_particlesxz.set_offsets(np.c_[xc, zc])
+            center_particlesyz.set_offsets(np.c_[yc, zc])
+        
+        
+        if frame > 1:
+            
+            if strain is not None:
+                for det, line in enumerate(strain_plots):
+                    for lind, lns in enumerate(line):
+                        lns.set_data(strain_xdata[:frame],strain[lind,det,:frame].T)
+            
+            if true_strain is not None:
+                for det, line in enumerate(true_strain_plot):
+                    line.set_data(true_strain_xdata[:frame], true_strain[det,:frame])
+        
+
+    fig.tight_layout()
+
+    ani = animation.FuncAnimation(fig, update_plot, frames=n_frames, interval=1)
+
+    fps = int(n_frames/duration)
     writergif = animation.PillowWriter(fps=fps) 
-    ani.save(fname, writer=writergif)
+    ani.save(os.path.join(root_dir, f"multi_animation_projections{index}.gif"), writer=writergif)
+
 
