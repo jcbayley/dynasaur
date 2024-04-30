@@ -382,6 +382,8 @@ def get_initial_conditions(
         prior_args.setdefault("cycles_max", 4)
         prior_args.setdefault("separation_add_min", 6)
         prior_args.setdefault("separation_add_max", 10)
+        prior_args.setdefault("arg_periapsis_min", 0)
+        prior_args.setdefault("arg_periapsis_max", 2*np.pi)
 
         masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
 
@@ -390,7 +392,7 @@ def get_initial_conditions(
         semi_major_axes = min_sep*np.random.uniform(prior_args["separation_add_min"],prior_args["separation_add_max"])
 
         eccentricities = 0.0
-        arg_periapsis = np.random.uniform(0.0, 2*np.pi)
+        arg_periapsis = np.random.uniform(prior_args["arg_periapsis_min"], prior_args["arg_periapsis_max"])
 
         initial_positions, initial_velocities = kepler_apoapsis_binary(
             semi_major_axes, 
