@@ -105,7 +105,7 @@ def generate_data(
 
         #temp_output_coeffs = np.zeros((n_masses, n_dimensions, acc_basis_order))
         t_basis_order = int(0.5*basis_order + 1) if basis_type == "fourier" else basis_order-1
-
+        print(np.shape(position_coeffs))
         if position_coeffs is not None:
             positions[data_index] = basis[basis_type]["val"](
                 times,
@@ -126,7 +126,7 @@ def generate_data(
         else:
             raise Exception(f"Coordinate type {coordinate_type} is not supported")
 
-
+        print(np.shape(position_coeffs))
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
                 times,
@@ -135,7 +135,7 @@ def generate_data(
                 )
             #print(np.max(positions[data_index, mass_index]),np.max(temp_coeffs))
             # if windowing applied create coeffs which are windowed else just use the random coeffs
-            
+            print(np.shape(positions), np.shape(temp_coeffs))
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
 
             if coordinate_type != "cartesian":
