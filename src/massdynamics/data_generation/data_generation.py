@@ -48,7 +48,8 @@ def generate_data(
                 return_windowed_coeffs=return_windowed_coeffs, 
                 basis_type=basis_type,
                 fourier_weight=fourier_weight,
-                data_type=data_type)
+                data_type=data_type,
+                prior_args=prior_args)
     elif data_type.split("-")[0] in ["newtonian", "newtonian_decay", "newtoniandecay"]:
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
                 n_data, 
@@ -70,7 +71,8 @@ def generate_data(
                 basis_order = basis_order,
                 basis_type = basis_type,
                 n_dimensions = n_dimensions,
-                sample_rate = sample_rate)
+                sample_rate = sample_rate,
+                prior_args=prior_args)
     else:
         raise Exception(f"No data with name {data_type.split('-')[0]}")
     

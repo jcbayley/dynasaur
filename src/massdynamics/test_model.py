@@ -27,19 +27,13 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
     """
     pre_model, model, weights = load_models(config, config["device"])
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-    times, labels, strain, cshape, positions, all_dynamics, all_dynamics_coord = data_generation.generate_data(
-=======
-    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
->>>>>>> 25b52cdfc765da6addb500686dd2091e62c0287b
-        config["n_test_data"], 
-=======
+    config.setdefault("coordinate_type", "cartesian")
+
+
     n_test = config["n_test_data"] if n_test is None else n_test
 
     times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
         n_test, 
->>>>>>> 96eb3a75bca6b3e49461cc4eeb356ffd450db28b
         config["basis_order"], 
         config["n_masses"], 
         config["sample_rate"], 
@@ -50,11 +44,8 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         basis_type = config["basis_type"],
         data_type = config["data_type"],
         fourier_weight=config["fourier_weight"],
-<<<<<<< HEAD
-        coordinate_type=config["coordinate_type"]
-=======
+        coordinate_type=config["coordinate_type"],
         add_noise=config["add_noise"]
->>>>>>> 96eb3a75bca6b3e49461cc4eeb356ffd450db28b
         )
 
 
@@ -559,6 +550,7 @@ def test_model_3d(
             m_recon_tseries = np.zeros((n_samples, n_masses, n_dimensions, len(upsample_times)))
 
             m_recon_strain = np.zeros((n_samples, len(detectors), len(upsample_times)))
+            m_recon_strain_coeffs = np.zeros((n_samples, len(detectors), int(0.5*len(upsample_times))))
             #m_recon_energy = np.zeros((nsamples, len(times)))
 
             #multi_coeff_samples[:,:,2] = 0
@@ -673,6 +665,8 @@ def test_model_3d(
                 f.create_dataset("source_timeseries", data=source_tseries)
                 f.create_dataset("source_strain", data=source_strain)
                 f.create_dataset("source_masses", data=source_masses)
+                f.create_dataset("source_basis", data=source_coeffs)
+                f.create_dataset("recon_basis", data=multi_coeff_samples)
 
             if make_plots:
                 """

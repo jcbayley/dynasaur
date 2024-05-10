@@ -38,7 +38,7 @@ def generate_random_coefficients(
 
 
 
-def generate_masses(n_masses: int, data_type="random-uniform") -> np.array:
+def generate_masses(n_masses: int, data_type="random-uniform", prior_args={}) -> np.array:
     """generate masses 
 
     Args:
@@ -48,10 +48,15 @@ def generate_masses(n_masses: int, data_type="random-uniform") -> np.array:
         np.array: _description_
     """
     
-    masses = np.random.rand(n_masses)
+    masses = np.random.uniform(prior_args["masses_min"], prior_args["masses_max"], n_masses)
     if data_type.split("-")[1] == "equalmass":
         masses[1] = masses[0]
 
+    if data_type.split("-")[1] == "2masstriangle":
+        m1 = masses[0]
+        m2 = masses[1]
+        if m2 > m1:
+            masses = np.array([m2, m1])
     masses = masses/np.sum(masses)
 
     return masses
@@ -67,7 +72,8 @@ def generate_data(
     return_windowed_coeffs=True, 
     basis_type="chebyshev",
     fourier_weight=0.0,
-    data_type = "random-uniform") -> np.array:
+    data_type = "random-uniform",
+    prior_args = {}) -> np.array:
     """_summary_
 
     Args:
@@ -85,6 +91,9 @@ def generate_data(
     else:
         dtype = np.float64
 
+    prior_args.setdefault("masses_min", 0)
+    prior_args.setdefault("masses_max", 1)
+    prior_args.setdefault("fourier_weight", 0.0)
     ntimeseries = [0, 1, 3, 6, 10]
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
@@ -125,7 +134,7 @@ def generate_data(
 
     for data_index in range(n_data):
 
-        masses = generate_masses(n_masses, data_type=data_type)
+        masses = generate_masses(n_masses, data_type=data_type, prior_args=prior_args)
         all_masses[data_index] = masses
 
         #all_dynamics = np.zeros((n_masses, n_dimensions, win_basis_order), dtype=dtype)
