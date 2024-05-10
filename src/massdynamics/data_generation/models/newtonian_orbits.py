@@ -358,7 +358,7 @@ def get_initial_conditions(
 
         semi_major_axes = ((G*(np.sum(masses))/(4*np.pi**2)) * period**2)**(1/3)
 
-        semi_major_axes = np.random.uniform(prior_args["semi_maj_ax_min"], prior_args["semi_maj_ax_max"])
+        #semi_major_axes = np.random.uniform(prior_args["semi_maj_ax_min"], prior_args["semi_maj_ax_max"])
 
         eccentricities = 0.0
         #inclinations = np.array([0.0])
