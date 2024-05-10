@@ -113,8 +113,8 @@ def generate_data(
                 times,
                 position_coeffs[data_index]
             )
-            if n_masses > 1:
-                positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
+            #if n_masses > 1:
+            #    positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
         # move to center of mass frane 
         if n_masses > 1:
