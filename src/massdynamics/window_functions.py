@@ -69,8 +69,9 @@ def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev", sub_mean
     """
 
     subtract_offset = True
+    if np.shape(coeffs)[1] != 3:
+        raise Exception(f"Second dimensions of coeffs must be 3 dimensions not {np.shape(coeffs)[1]}")
     #hann_coeffs = np.array([ 3.47821791e-01,  1.52306260e-16, -4.85560481e-01, -5.11827799e-17, 1.51255010e-01,  2.65316279e-17, -1.48207898e-02])
-
     # find the acceleration components for each dimension
     co_x_acc = basis[basis_type]["derivative"](coeffs[:,0], m=2)
     co_y_acc = basis[basis_type]["derivative"](coeffs[:,1], m=2)
@@ -137,6 +138,7 @@ def perform_window(times, coeffs, window, order=6, basis_type="chebyshev", sub_m
         else:
             raise Exception(f"Window {window} does not Exist")
 
+    
         coeffs = window_coeffs(times, coeffs, win_coeffs, basis_type=basis_type, sub_mean=sub_mean)
     else:
         win_coeffs = None
