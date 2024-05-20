@@ -411,7 +411,8 @@ def test_model_3d(
                 detectors=detectors,
                 window_acceleration=window_acceleration, 
                 window=window, 
-                basis_type=basis_type)
+                basis_type=basis_type,
+                basis_order=basis_order)
             """
             source_strain, source_energy = compute_waveform.get_waveform(
                 times, 
@@ -429,7 +430,8 @@ def test_model_3d(
                 detectors=detectors,
                 window_acceleration=window_acceleration, 
                 window=window, 
-                basis_type=basis_type)
+                basis_type=basis_type,
+                basis_order=basis_order)
             
             
             # preprocess the strain again
@@ -575,7 +577,8 @@ def test_model_3d(
                     detectors=detectors,
                     window_acceleration=window_acceleration, 
                     window=window, 
-                    basis_type=basis_type)
+                    basis_type=basis_type,
+                    basis_order=basis_order)
 
                 _, _, temp_recon_strain = data_processing.preprocess_data(
                     pre_model, 
