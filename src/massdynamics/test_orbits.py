@@ -143,7 +143,7 @@ def generate_m1m2_pos_1d(times, m1, m2, tc, orientation="xy"):
 
     return norm_masses, positions
 
-def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="none", poly_type="chebyshev"):
+def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window_acceleration="none", poly_type="chebyshev"):
     """fit the 3d positions with a polynomial
 
     Args:
@@ -159,7 +159,7 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="n
   
     n_masses, n_dimensions, n_cheby = np.shape(positions)
 
-    if not window or window == "none":
+    if window_acceleration not in [False, None,"none"]:
         cheb_dynamics = np.zeros((n_masses, n_dimensions, chebyshev_order))
     else:
         cheb_dynamics = []
@@ -172,11 +172,11 @@ def fit_positions_with_polynomial(times, positions, chebyshev_order=8, window="n
                 positions[mind, dimind], 
                 chebyshev_order-1)
 
-        if window != "none":
+        if window_acceleration not in [False, None,"none"]:
             temp_dyn2, win_coeffs = perform_window(
                 times, 
                 temp_dyn, 
-                window, 
+                window_acceleration, 
                 order=chebyshev_order, 
                 poly_type=poly_type)
             print(np.shape(temp_dyn), np.shape(temp_dyn2))

@@ -40,7 +40,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         n_dimensions=config["n_dimensions"], 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"],
+        window_acceleration=config["window_acceleration"],
         basis_type = config["basis_type"],
         data_type = config["data_type"],
         fourier_weight=config["fourier_weight"],
@@ -154,7 +154,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             window=config["window"], 
             root_dir=config["root_dir"], 
             device=config["device"], 
-            return_windowed_coeffs=config["return_windowed_coeffs"],
+            window_acceleration=config["window_acceleration"],
             window_strain=config["window_strain"],
             spherical_coords=config["spherical_coords"],
             basis_type=config["basis_type"],
@@ -284,7 +284,7 @@ def test_model_3d(
     device, 
     n_samples=2000,
     n_animate_samples=50,
-    return_windowed_coeffs=True, 
+    window_acceleration=True, 
     basis_type="chebyshev",
     window_strain=None,
     spherical_coords=False,
@@ -409,7 +409,7 @@ def test_model_3d(
                 recon_masses,
                 recon_coeffs, 
                 detectors=detectors,
-                return_windowed_coeffs=return_windowed_coeffs, 
+                window_acceleration=window_acceleration, 
                 window=window, 
                 basis_type=basis_type)
             """
@@ -427,7 +427,7 @@ def test_model_3d(
                 source_masses,  
                 source_coeffs, 
                 detectors=detectors,
-                return_windowed_coeffs=return_windowed_coeffs, 
+                window_acceleration=window_acceleration, 
                 window=window, 
                 basis_type=basis_type)
             
@@ -573,7 +573,7 @@ def test_model_3d(
                     t_mass,
                     t_co,  
                     detectors=detectors,
-                    return_windowed_coeffs=return_windowed_coeffs, 
+                    window_acceleration=window_acceleration, 
                     window=window, 
                     basis_type=basis_type)
 

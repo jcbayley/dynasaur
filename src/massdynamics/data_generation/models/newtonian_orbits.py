@@ -610,7 +610,7 @@ def generate_data(
     n_dimensions: int = 3, 
     detectors=["H1"], 
     window="none", 
-    return_windowed_coeffs=True, 
+    window_acceleration=True, 
     basis_type="chebyshev",
     data_type="newtonian-kepler",
     prior_args = {}) -> np.array:

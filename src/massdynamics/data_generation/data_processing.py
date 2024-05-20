@@ -171,7 +171,7 @@ def get_strain_from_samples(
     masses, 
     coeffs, 
     detectors=["H1"],
-    return_windowed_coeffs=False, 
+    window_acceleration=False, 
     window="none", 
     basis_type="chebyshev"):
     """_summary_
@@ -181,7 +181,7 @@ def get_strain_from_samples(
         masses (_type_): _description_
         coeffs (_type_): (n_masses, n_coeffs, n_dimensions)
         detectors (list, optional): _description_. Defaults to ["H1"].
-        return_windowed_coeffs (bool, optional): _description_. Defaults to False.
+        window_acceleration (bool, optional): _description_. Defaults to False.
         window (bool, optional): _description_. Defaults to False.
         basis_type (str, optional): _description_. Defaults to "chebyshev".
 
@@ -192,11 +192,11 @@ def get_strain_from_samples(
    
     n_masses, n_dimensions, n_coeffs = np.shape(coeffs)
 
-    if not return_windowed_coeffs and window != "none":
+    if window_acceleration not in [False, None, "none"]:
         n_coeffs = []
         # for each mass perform the window on the xyz positions (acceleration)
         for mass in range(n_masses):
-            temp_recon, win_coeffs = window_functions.perform_window(times, coeffs[mass], window, basis_type=basis_type)
+            temp_recon, win_coeffs = window_functions.perform_window(times, coeffs[mass], window_acceleration, basis_type=basis_type)
             n_coeffs.append(temp_recon)
         
         # update the coefficients with the windowed version
