@@ -148,7 +148,7 @@ def generate_data(
                 basis_type = basis_type,
                 fourier_weight=fourier_weight)
 
-            if window != "none":
+            if window_acceleration not in [False, None, "none"]:
                 coeffs  = window_functions.window_coeffs(times, random_coeffs, window_coeffs, basis_type=basis_type)
             else:
                 coeffs = random_coeffs
