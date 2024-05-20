@@ -15,7 +15,9 @@ from massdynamics.data_generation.models import (
     random_orbits,
     newtonian_orbits,
     newtonian_orbits_decay,
-    kepler_orbits
+    kepler_orbits,
+    inspiral_orbits,
+    oscillating_orbits
 )
 from massdynamics.basis_functions import basis
 
@@ -28,7 +30,7 @@ def generate_data(
     n_dimensions: int = 1, 
     detectors=["H1"], 
     window="none", 
-    return_windowed_coeffs=True, 
+    window_acceleration=True, 
     basis_type="chebyshev",
     data_type = "random",
     fourier_weight=0.0,
@@ -45,7 +47,7 @@ def generate_data(
                 n_dimensions, 
                 detectors=detectors, 
                 window=window, 
-                return_windowed_coeffs=return_windowed_coeffs, 
+                window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 fourier_weight=fourier_weight,
                 data_type=data_type,
@@ -59,7 +61,33 @@ def generate_data(
                 n_dimensions, 
                 detectors=detectors, 
                 window=window, 
-                return_windowed_coeffs=return_windowed_coeffs, 
+                window_acceleration=window_acceleration, 
+                basis_type=basis_type,
+                data_type=data_type,
+                prior_args=prior_args)
+    elif data_type.split("-")[0] in ["inspiral"]:
+        times, positions, masses, position_coeffs = inspiral_orbits.generate_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                window_acceleration=window_acceleration, 
+                basis_type=basis_type,
+                data_type=data_type,
+                prior_args=prior_args)
+    elif data_type.split("-")[0] in ["oscillatex"]:
+        times, positions, masses, position_coeffs = oscillating_orbits.generate_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 data_type=data_type,
                 prior_args=prior_args)
@@ -128,7 +156,6 @@ def generate_data(
         else:
             raise Exception(f"Coordinate type {coordinate_type} is not supported")
 
-
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
                 times,
@@ -137,7 +164,7 @@ def generate_data(
                 )
             #print(np.max(positions[data_index, mass_index]),np.max(temp_coeffs))
             # if windowing applied create coeffs which are windowed else just use the random coeffs
-            
+            print(np.shape(positions), np.shape(temp_coeffs))
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
 
             if coordinate_type != "cartesian":
@@ -184,7 +211,7 @@ def get_data_path(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
-    return_windowed_coeffs = False,
+    window_acceleration = False,
     data_type: str = "random"
     ):
 
@@ -202,7 +229,7 @@ def save_data(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
-    return_windowed_coeffs = False,
+    window_acceleration = False,
     basis_type: str = "chebyshev",
     data_type: str = "random",
     start_index: int = 0,
@@ -219,7 +246,7 @@ def save_data(
         n_dimensions = n_dimensions,
         detectors = detectors,
         window = window,
-        return_windowed_coeffs = False,
+        window_acceleration = False,
         data_type = data_type)
 
     data_dir = os.path.join(data_dir, data_path)
@@ -235,7 +262,7 @@ def save_data(
         n_dimensions=n_dimensions, 
         detectors=detectors, 
         window=window, 
-        return_windowed_coeffs=return_windowed_coeffs,
+        window_acceleration=window_acceleration,
         basis_type=basis_type,
         data_type=data_type,
         fourier_weight=fourier_weight,
@@ -262,7 +289,7 @@ def save_data(
             n_dimensions=n_dimensions, 
             detectors=detectors, 
             window=window, 
-            return_windowed_coeffs=return_windowed_coeffs,
+            window_acceleration=window_acceleration,
             basis_type=basis_type,
             data_type=data_type,
             fourier_weight=fourier_weight,
@@ -289,7 +316,7 @@ def load_data(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window = False,
-    return_windowed_coeffs = False,
+    window_acceleration = False,
     basis_type = "chebyshev",
     data_type: str = "random"
     ):
@@ -302,7 +329,7 @@ def load_data(
         n_dimensions = n_dimensions,
         detectors = detectors,
         window = window,
-        return_windowed_coeffs = False,
+        window_acceleration = False,
         data_type=data_type)
 
     data_dir = os.path.join(data_dir, data_path)
@@ -364,7 +391,7 @@ if __name__ == "__main__":
             n_dimensions = 1, 
             detectors=["H1"], 
             window="none", 
-            return_windowed_coeffs=True, 
+            window_acceleration=True, 
             basis_type="fourier",
             data_type = "kepler",
             fourier_weight=0.0,
@@ -380,7 +407,7 @@ if __name__ == "__main__":
             n_dimensions = args.ndimensions,
             detectors = dets[:int(args.ndetectors)],
             window = args.window,
-            return_windowed_coeffs = args.returnwindowedcoeffs,
+            window_acceleration = args.returnwindowedcoeffs,
             basis_type = args.basis_type,
             data_type = args.data_type,
             fourier_weight = args.fourier_weight
@@ -395,7 +422,7 @@ if __name__ == "__main__":
             n_dimensions = args.ndimensions,
             detectors = dets[:int(args.ndetectors)],
             window = args.window,
-            return_windowed_coeffs = args.returnwindowedcoeffs
+            window_acceleration = args.returnwindowedcoeffs
             )
         """
 

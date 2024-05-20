@@ -610,7 +610,7 @@ def generate_data(
     n_dimensions: int = 3, 
     detectors=["H1"], 
     window="none", 
-    return_windowed_coeffs=True, 
+    window_acceleration=True, 
     basis_type="chebyshev",
     data_type="newtonian-kepler",
     prior_args = {}) -> np.array:
@@ -642,7 +642,6 @@ def generate_data(
     prior_args.setdefault("duration", 1)
 
     second = 1./(24*3600)
-    n_samples = sample_rate
     times = np.linspace(0,1,prior_args["n_samples"]) #in days for ode
     solve_times = np.linspace(0,prior_args["duration"],prior_args["n_samples"])
 
@@ -662,7 +661,7 @@ def generate_data(
     position_scale = 2*distance_scale                             # in m
     velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
 
-    all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
+    all_positions = np.zeros((n_data, n_masses, n_dimensions, prior_args["n_samples"]))
     all_masses = np.zeros((n_data, n_masses))
     for i in range(n_data):
         masses, initial_positions, initial_velocities = resample_initial_conditions(

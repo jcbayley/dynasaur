@@ -60,7 +60,7 @@ def create_models(config, device=None):
         n_dimensions=config["n_dimensions"], 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"],
+        window_acceleration=config["window_acceleration"],
         basis_type=config["basis_type"],
         data_type=config["data_type"])
     """
@@ -180,7 +180,7 @@ def load_models(config, device):
         n_dimensions=config["n_dimensions"], 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"],
+        window_acceleration=config["window_acceleration"],
         basis_type=config["basis_type"],
         data_type=config["data_type"])
 

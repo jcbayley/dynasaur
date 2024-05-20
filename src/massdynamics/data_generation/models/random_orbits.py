@@ -69,7 +69,7 @@ def generate_data(
     n_dimensions: int = 1, 
     detectors=["H1"], 
     window="none", 
-    return_windowed_coeffs=True, 
+    window_acceleration=True, 
     basis_type="chebyshev",
     fourier_weight=0.0,
     data_type = "random-uniform",
@@ -106,12 +106,12 @@ def generate_data(
         basis_type=basis_type,
         fourier_weight=fourier_weight)
 
-    if window != False and window != None or window != "none":
-        coeffs, window_coeffs = window_functions.perform_window(times, random_coeffs, window, basis_type=basis_type, order=basis_order)
+    if window_acceleration not in [False, None, "none"]:
+        coeffs, window_coeffs = window_functions.perform_window(times, random_coeffs, window_acceleration, basis_type=basis_type, order=basis_order)
     else:
         coeffs = random_coeffs
 
-    if return_windowed_coeffs:  
+    if window_acceleration:  
         win_basis_order = np.shape(coeffs)[0]
         acc_basis_order = np.shape(coeffs)[0]
     else:

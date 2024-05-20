@@ -165,7 +165,7 @@ def run_chirp_test(config, mass1=500, mass2=500, rotate_angle=0.0):
             t_mass,
             np.array(t_co), 
             detectors=["H1","L1","V1"],
-            return_windowed_coeffs=config["return_windowed_coeffs"], 
+            window_acceleration=config["window_acceleration"], 
             window=config["window"], 
             basis_type=config["basis_type"])
 

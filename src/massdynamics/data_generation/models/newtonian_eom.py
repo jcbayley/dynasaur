@@ -158,7 +158,8 @@ def newton_derivative(
     for i, mass_1 in enumerate(masses):
         x_derivative[i][0:n_dimensions] = x_vels[i]
         for j, mass_2 in enumerate(masses):
-            if i == j: continue
+            if i == j: 
+                continue
             separation = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)
             separation_cubed = separation**3
             #seps[i,j] = separation_cubed
