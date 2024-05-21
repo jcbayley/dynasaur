@@ -192,7 +192,7 @@ def get_strain_from_samples(
     # if there is a window and I and not predicting the windowed coefficients
    
     n_masses, n_dimensions, n_coeffs = np.shape(coeffs)
-
+    """
     if window_acceleration not in [False, None, "none"]:
         n_coeffs = []
         # for each mass perform the window on the xyz positions (acceleration)
@@ -202,7 +202,7 @@ def get_strain_from_samples(
         
         # update the coefficients with the windowed version
         coeffs = np.array(n_coeffs)
-
+    """
 
     strain, energy = compute_waveform.get_waveform(
         times, 
