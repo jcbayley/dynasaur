@@ -78,14 +78,17 @@ def create_models(config, device=None):
         config["device"] = device
 
     # pre processing creation
-    if config["transformer_layers"] is not None:
+    if "transformer_layers" in config:
+        if config["transformer_layers"]:
 
-        pre_model = PreNetworkAttention(
-            n_input, 
-            n_context, 
-            config["transformer_layers"]["embed_dim"], 
-            num_heads=config["transformer_layers"]["num_heads"], 
-            num_layers=config["transformer_layers"]["num_layers"])
+            pre_model = PreNetworkAttention(
+                n_input, 
+                n_context, 
+                config["transformer_layers"]["embed_dim"], 
+                num_heads=config["transformer_layers"]["num_heads"], 
+                num_layers=config["transformer_layers"]["num_layers"])
+        else:
+            raise Exception("Please define either transformer or convolution not both")
     else:
         pre_model = nn.Sequential()
 
