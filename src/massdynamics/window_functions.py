@@ -118,6 +118,20 @@ def window_coeffs(times, coeffs, window_coeffs, basis_type="chebyshev", sub_mean
     coarr = np.array([win_co_x, win_co_y, win_co_z]).T
     return coarr
 
+def get_window_coeffs(times, window, order=6, basis_type="fourier", alpha=0.5):
+
+    if basis_type == "fourier":
+        order = int(order/2) + 1
+
+    if window == "tukey":
+        win_coeffs = fit_cheby_to_tukey(times, alpha=alpha, order=order, basis_type=basis_type)
+    elif window == "hann":
+        win_coeffs = fit_cheby_to_hann(times, order=order, basis_type=basis_type)
+    else:
+        raise Exception(f"Window {window} does not Exist")
+    
+    return win_coeffs
+
 def perform_window(times, coeffs, window, order=6, basis_type="chebyshev", sub_mean=False, alpha=0.5):
     """_summary_
 
@@ -127,17 +141,11 @@ def perform_window(times, coeffs, window, order=6, basis_type="chebyshev", sub_m
         window (_type_): (tukey or hann)
     """
 
-    if basis_type == "fourier":
-        order = int(order/2) + 1
+    #if basis_type == "fourier":
+    #    order = int(order/2) + 1
         
     if window != "none":
-        if window == "tukey":
-            win_coeffs = fit_cheby_to_tukey(times, alpha=alpha, order=order, basis_type=basis_type)
-        elif window == "hann":
-            win_coeffs = fit_cheby_to_hann(times, order=order, basis_type=basis_type)
-        else:
-            raise Exception(f"Window {window} does not Exist")
-
+        win_coeffs = get_window_coeffs(times, window, order=order, basis_type=basis_type, alpha=alpha)
     
         coeffs = window_coeffs(times, coeffs, win_coeffs, basis_type=basis_type, sub_mean=sub_mean)
     else:

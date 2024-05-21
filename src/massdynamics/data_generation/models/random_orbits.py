@@ -106,16 +106,16 @@ def generate_data(
         basis_type=basis_type,
         fourier_weight=fourier_weight)
 
-    if window_acceleration not in [False, None, "none"]:
-        coeffs, window_coeffs = window_functions.perform_window(times, random_coeffs, window_acceleration, basis_type=basis_type, order=basis_order)
-    else:
-        coeffs = random_coeffs
+    #if window_acceleration not in [False, None, "none"]:
+    #    coeffs, window_coeffs = window_functions.perform_window(times, random_coeffs, window_acceleration, basis_type=basis_type, order=basis_order)
+    #else:
+    #    coeffs = random_coeffs
 
     if window_acceleration:  
-        win_basis_order = np.shape(coeffs)[0]
-        acc_basis_order = np.shape(coeffs)[0]
+        win_basis_order = np.shape(random_coeffs)[0]
+        acc_basis_order = np.shape(random_coeffs)[0]
     else:
-        win_basis_order = np.shape(coeffs)[0]
+        win_basis_order = np.shape(random_coeffs)[0]
         acc_basis_order = basis_order
 
         if basis_type == "fourier":
@@ -148,10 +148,10 @@ def generate_data(
                 basis_type = basis_type,
                 fourier_weight=fourier_weight)
 
-            if window != "none":
-                coeffs  = window_functions.window_coeffs(times, random_coeffs, window_coeffs, basis_type=basis_type)
-            else:
-                coeffs = random_coeffs
+            #if window_acceleration not in [False, None, "none"]:
+            #    coeffs  = window_functions.window_coeffs(times, random_coeffs, window_coeffs, basis_type=basis_type)
+            #else:
+            coeffs = random_coeffs
                 
             all_basis_dynamics[data_index, mass_index] = coeffs.T 
         

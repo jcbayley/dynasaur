@@ -7,6 +7,7 @@ import argparse
 import h5py
 import os
 import torch
+from massdynamics import window_functions
 from massdynamics.data_generation import (
     compute_waveform,
     data_processing,
@@ -127,6 +128,10 @@ def generate_data(
     else:
         no_positions = False
 
+    if window_acceleration not in [False, None, "none"]:
+        window_coeffs = window_functions.get_window_coeffs(times, window_acceleration, order=basis_order, basis_type=basis_type, alpha=0.5)
+
+
     all_masses = np.zeros((n_data, n_masses))
 
     for data_index in range(n_data):
@@ -162,9 +167,15 @@ def generate_data(
                 positions[data_index,mass_index, :, :],
                 t_basis_order
                 )
+            
+            if window_acceleration not in [False, None, "none"]:
+                print(np.shape(temp_coeffs), np.shape(window_coeffs))
+                temp_coeffs  = window_functions.window_coeffs(times, temp_coeffs.T, window_coeffs, basis_type=basis_type).T
+            else:
+                temp_coeffs = temp_coeffs
             #print(np.max(positions[data_index, mass_index]),np.max(temp_coeffs))
             # if windowing applied create coeffs which are windowed else just use the random coeffs
-            print(np.shape(positions), np.shape(temp_coeffs))
+            #print(np.shape(positions), np.shape(temp_coeffs))
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
 
             if coordinate_type != "cartesian":
