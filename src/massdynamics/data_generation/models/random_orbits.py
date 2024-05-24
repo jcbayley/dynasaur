@@ -33,6 +33,10 @@ def generate_random_coefficients(
         for i in range(halforder):
             coefficients[i] = np.exp(-fourier_weight*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
 
+    # if ndim is 2 than set all z dimension movement to 0
+    if n_dimensions == 2:
+        coefficients[:,2] *= 0 + 0j
+
     return coefficients
 
 

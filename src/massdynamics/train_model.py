@@ -78,6 +78,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     device = torch.device(config["device"])
     print(torch.cuda.get_device_name(device))
 
+    data_dimensions = 3
+
     if config["load_data"]:
         print("loading data ........")
         times, basis_dynamics, masses, strain, cshape, positions = data_generation.load_data(
@@ -85,7 +87,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             basis_order = config["basis_order"],
             n_masses = config["n_masses"],
             sample_rate = config["sample_rate"],
-            n_dimensions = config["n_dimensions"],
+            n_dimensions = data_dimensions,
             detectors = config["detectors"],
             window = config["window"],
             window_acceleration = config["window_acceleration"],
@@ -102,7 +104,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             basis_order=config["basis_order"], 
             n_masses=config["n_masses"], 
             sample_rate=config["sample_rate"], 
-            n_dimensions=config["n_dimensions"], 
+            n_dimensions=data_dimensions, 
             detectors=config["detectors"], 
             window=config["window"], 
             window_acceleration=config["window_acceleration"],

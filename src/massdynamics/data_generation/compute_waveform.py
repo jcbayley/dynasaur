@@ -322,6 +322,40 @@ def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebys
 
     return strain_timeseries
 
+def compute_hplus_hcross(times, basis_dynamics, masses, basis_type):
+
+    norm_factor = 1
+
+    x = basis_dynamics
+    xdot = basis[basis_type]["derivative"](times, basis_dynamics, n=1)
+    xddot = basis[basis_type]["derivative"](times, basis_dynamics, n=2)
+
+    plus_t1 = masses[0]*(
+        xddot[:,0,0]*x[:,0,0] 
+        + xdot[:,0,0]**2 
+        - xddot[:,0,1]*x[:,0,1] 
+        - xdot[:,0,1]**2)
+    plus_t2 = masses[1]*(
+        xddot[:,1,0]*x[:,1,0] 
+        + xdot[:,1,0]**2 
+        - xddot[:,1,1]*x[:,1,1] 
+        - xdot[:,1,1]**2)
+    hplus = norm_factor*(plus_t1 + plus_t2)
+
+    cross_t1 = masses[0]*(
+        xddot[:,0,0]*x[:,0,1] 
+        + 2*xdot[:,0,0]*xdot[:,0,1] 
+        + x[:,0,0]*xddot[:,0,1])
+    cross_t2 = masses[1]*(
+        xddot[:,1,0]*x[:,1,1] 
+        + 2*xdot[:,1,0]*xdot[:,1,1] 
+        + x[:,1,0]*xddot[:,1,1])
+    hcross = 4*norm_factor*(cross_t1 + cross_t2)
+
+    pols = np.array([[hplus, hcross], [hcross, -hplus]])
+
+    return pols
+
 def get_waveform(
     times, 
     norm_masses, 

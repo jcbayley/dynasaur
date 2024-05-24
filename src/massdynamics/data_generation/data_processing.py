@@ -303,7 +303,8 @@ def preprocess_data(
     initial_run=False,
     n_masses=2,
     device="cpu",
-    basis_type="fourier"):
+    basis_type="fourier",
+    n_dimensions=3):
 
     if spherical_coords:
         print("Spherical not implemented yet")
@@ -311,9 +312,11 @@ def preprocess_data(
 
 
 
-    if window_strain is not None or window != False:
+    if window_strain is not None:
         strain = get_window_strain(strain, window_type=window_strain)
     
+    # get only the required dimensions for training
+    basis_dynamics = basis_dynamics[...,:n_dimensions,:]
     
     labels = positions_masses_to_samples(
         basis_dynamics,
@@ -381,5 +384,10 @@ def unpreprocess_data(
             n_dimensions,
             basis_type
         )
+    
+    if n_dimensions != 3:
+        bd_shape = list(np.shape(basis_dynamics))
+        bd_shape[-2] = 3 - n_dimensions
+        basis_dynamics = np.cat([basis_dynamics, np.zeros(bd_shape)], dim=-2)
 
     return pre_model, masses, basis_dynamics, strain
