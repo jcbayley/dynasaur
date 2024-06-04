@@ -139,7 +139,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             initial_run=False,
             n_masses=config["n_masses"],
             device=config["device"],
-            basis_type=config["basis_type"])
+            basis_type=config["basis_type"],
+            n_dimensions=config["n_dimensions"])
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
         pre_model.to(config["device"])
@@ -154,7 +155,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             initial_run=True,
             n_masses=config["n_masses"],
             device=config["device"],
-            basis_type=config["basis_type"])
+            basis_type=config["basis_type"],
+            n_dimensions=config["n_dimensions"])
 
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])

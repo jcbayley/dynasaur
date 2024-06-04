@@ -177,19 +177,21 @@ def load_models(config, device):
         config["basis_order"], 
         config["n_masses"], 
         config["sample_rate"], 
-        n_dimensions=config["n_dimensions"], 
+        n_dimensions=3, 
         detectors=config["detectors"], 
         window=config["window"], 
         window_acceleration=config["window_acceleration"],
         basis_type=config["basis_type"],
         data_type=config["data_type"])
 
+    n_basis = config["basis_order"]
     if config["basis_type"] == "fourier":
-        n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    else:
-        n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+        n_basis += 2
+    feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
 
+    n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
+    n_input = config["sample_rate"]*config["duration"]
 
     pre_model, model = create_models(config, device)
 

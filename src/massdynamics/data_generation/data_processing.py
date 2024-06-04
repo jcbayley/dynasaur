@@ -316,7 +316,9 @@ def preprocess_data(
         strain = get_window_strain(strain, window_type=window_strain)
     
     # get only the required dimensions for training
+    #print("b1", np.shape(basis_dynamics))
     basis_dynamics = basis_dynamics[...,:n_dimensions,:]
+    #print("b2", np.shape(basis_dynamics))
     
     labels = positions_masses_to_samples(
         basis_dynamics,
@@ -388,6 +390,6 @@ def unpreprocess_data(
     if n_dimensions != 3:
         bd_shape = list(np.shape(basis_dynamics))
         bd_shape[-2] = 3 - n_dimensions
-        basis_dynamics = np.cat([basis_dynamics, np.zeros(bd_shape)], dim=-2)
+        basis_dynamics = np.concatenate([basis_dynamics, np.zeros(bd_shape)], axis=-2)
 
     return pre_model, masses, basis_dynamics, strain
