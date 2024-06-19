@@ -181,7 +181,7 @@ def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, vel
     """
     return initial_positions, initial_velocities
 
-def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
+def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G, handed_orbit=False):
     """generate initial conditionss for a kepler orbit in 2d plane starting at apoapsis
 
     Args:
@@ -196,7 +196,10 @@ def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
     """
     ra = semi_major_axis*(1+eccentricity)
     velocity = np.sqrt(G*np.sum(masses)/ra*(1-eccentricity))
-
+    if not handed_orbit:
+        # randomly switch the handedness of the orbit
+        if np.random.uniform(0,1) > 0.5:
+            velocity = -velocity 
     rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
                                 [np.sin(theta), np.cos(theta), 0],
                                 [0,0,0]])
@@ -384,6 +387,7 @@ def get_initial_conditions(
         prior_args.setdefault("separation_add_max", 10)
         prior_args.setdefault("arg_periapsis_min", 0)
         prior_args.setdefault("arg_periapsis_max", 2*np.pi)
+        prior_args.setdefault("handed_orbit", False)
 
         masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
 
@@ -399,7 +403,8 @@ def get_initial_conditions(
             eccentricities, 
             arg_periapsis, 
             masses, 
-            G)
+            G,
+            handed_orbit=prior_args["handed_orbit"])
 
     elif data_type == "circularbinarymasstriangle":
 
@@ -411,6 +416,7 @@ def get_initial_conditions(
         prior_args.setdefault("separation_add_max", 10)
         prior_args.setdefault("arg_periapsis_min", 0)
         prior_args.setdefault("arg_periapsis_max", 2*np.pi)
+        prior_args.setdefault("handed_orbit", False)
 
         masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
 
@@ -437,7 +443,8 @@ def get_initial_conditions(
             eccentricities, 
             arg_periapsis, 
             masses, 
-            G)
+            G,
+            handed_orbit=prior_args["handed_orbit"])
 
     else:
         raise Exception(f"Model {data_type} not implemented")
@@ -687,7 +694,7 @@ def generate_data(
             G=G_ggravunits,
             c=c_ggravunits)
 
-        print(f"solved: {i}")
+        #print(f"solved: {i}")
         all_positions[i] = np.transpose(positions, (1,2,0))
         all_masses[i] = masses
 
