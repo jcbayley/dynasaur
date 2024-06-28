@@ -45,7 +45,8 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         data_type = config["data_type"],
         fourier_weight=config["fourier_weight"],
         coordinate_type=config["coordinate_type"],
-        add_noise=config["add_noise"]
+        noise_variance=config["noise_variance"],
+        prior_args=config["prior_args"]
         )
 
 
@@ -167,6 +168,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             window_strain=config["window_strain"],
             spherical_coords=config["spherical_coords"],
             basis_type=config["basis_type"],
+            sky_position=config["sky_position"],
             make_plots=make_plots)
 
 
@@ -334,7 +336,8 @@ def test_model_2d(
                 window_acceleration=window_acceleration, 
                 window=window, 
                 basis_type=basis_type,
-                basis_order=basis_order)
+                basis_order=basis_order,
+                sky_position=sky_position)
             
             source_strain, source_energy,source_coeffs = data_processing.get_strain_from_samples(
                 upsample_times, 
@@ -344,7 +347,8 @@ def test_model_2d(
                 window_acceleration=window_acceleration, 
                 window=window, 
                 basis_type=basis_type,
-                basis_order=basis_order)
+                basis_order=basis_order,
+                sky_position=sky_position)
             
             
             # preprocess the strain again
@@ -447,7 +451,8 @@ def test_model_2d(
                     window_acceleration=window_acceleration, 
                     window=window, 
                     basis_type=basis_type,
-                    basis_order=basis_order)
+                    basis_order=basis_order,
+                    sky_position=sky_position)
 
                 _, _, temp_recon_strain = data_processing.preprocess_data(
                     pre_model, 
@@ -592,6 +597,7 @@ def test_model_3d(
     basis_type="chebyshev",
     window_strain=None,
     spherical_coords=False,
+    sky_position=(np.pi, np.pi/2),
     make_plots=True):
     """test a 3d model sampling from the flow and producing possible trajectories
 
@@ -716,7 +722,8 @@ def test_model_3d(
                 window_acceleration=window_acceleration, 
                 window=window, 
                 basis_type=basis_type,
-                basis_order=basis_order)
+                basis_order=basis_order,
+                sky_position=sky_position)
             """
             source_strain, source_energy = compute_waveform.get_waveform(
                 times, 
@@ -735,7 +742,8 @@ def test_model_3d(
                 window_acceleration=window_acceleration, 
                 window=window, 
                 basis_type=basis_type,
-                basis_order=basis_order)
+                basis_order=basis_order,
+                sky_position=sky_position)
             
             
             # preprocess the strain again
@@ -882,7 +890,8 @@ def test_model_3d(
                     window_acceleration=window_acceleration, 
                     window=window, 
                     basis_type=basis_type,
-                    basis_order=basis_order)
+                    basis_order=basis_order,
+                    sky_position=sky_position)
 
                 _, _, temp_recon_strain = data_processing.preprocess_data(
                     pre_model, 

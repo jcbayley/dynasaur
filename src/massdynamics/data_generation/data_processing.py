@@ -174,7 +174,8 @@ def get_strain_from_samples(
     window_acceleration=False, 
     window="none", 
     basis_type="chebyshev",
-    basis_order=16):
+    basis_order=16,
+    sky_position=(np.pi, np.pi/2)):
     """_summary_
 
     Args:
@@ -210,7 +211,8 @@ def get_strain_from_samples(
         coeffs, 
         detectors, 
         basis_type=basis_type,
-        compute_energy=True
+        compute_energy=True,
+        sky_position=sky_position
     )
 
 
@@ -257,6 +259,38 @@ def subtract_center_of_mass(positions, masses):
     relative_positions = positions - center_of_mass_positions[np.newaxis, :, :]
 
     return relative_positions
+
+def compute_angular_momentum(m1, m2, positions, velocities):
+    """
+    Compute the total angular momentum of the system.
+    
+    Parameters:
+    m1, m2: masses of the two particles
+    positions: array of shape (N, 2, 3) representing the positions of the particles over time
+    velocities: array of shape (N, 2, 3) representing the velocities of the particles over time
+    
+    Returns:
+    L: array of shape (N, 3) representing the angular momentum at each time step
+    """
+    r1, r2 = positions[:, 0, :], positions[:, 1, :]
+    v1, v2 = velocities[:, 0, :], velocities[:, 1, :]
+    
+    # Calculate the angular momentum for each particle and sum them up
+    L = m1 * np.cross(r1, v1) + m2 * np.cross(r2, v2)
+    return L
+
+def conserve_angular_momentum(m1, m2, positions, velocities):
+    """shift the positions such that they conserve angular momentum
+
+    Args:
+        m1 (_type_): _description_
+        m2 (_type_): _description_
+        positions (_type_): _description_
+        velocities (_type_): _description_
+    """
+
+    
+
 
 def cartesian_to_spherical(positions):
     """Convert cartesian to spherical coords
