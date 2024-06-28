@@ -36,7 +36,7 @@ def generate_data(
     data_type = "random",
     fourier_weight=0.0,
     coordinate_type="cartesian",
-    add_noise = False,
+    noise_variance = 0.0,
     prior_args={}):
 
     if data_type.split("-")[0] == "random":
@@ -169,7 +169,7 @@ def generate_data(
                 )
             
             if window_acceleration not in [False, None, "none"]:
-                print(np.shape(temp_coeffs), np.shape(window_coeffs))
+                #print(np.shape(temp_coeffs), np.shape(window_coeffs))
                 temp_coeffs  = window_functions.window_coeffs(times, temp_coeffs.T, window_coeffs, basis_type=basis_type).T
             else:
                 temp_coeffs = temp_coeffs
@@ -208,8 +208,8 @@ def generate_data(
     feature_shape = np.prod(np.shape(all_basis_dynamics)[1:]) + len(all_masses[0])
     #samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    if add_noise:
-        strain_timeseries = strain_timeseries + np.random.normal(0, 1, size=np.shape(strain_timeseries))
+    if noise_variance != 0 and noise_variance != False:
+        strain_timeseries = strain_timeseries + np.random.normal(0, noise_variance, size=np.shape(strain_timeseries))
 
     return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
 
@@ -245,7 +245,7 @@ def save_data(
     data_type: str = "random",
     start_index: int = 0,
     fourier_weight:float=0.0,
-    add_noise=False
+    noise_variance=0.0
     ):
 
 
@@ -277,7 +277,7 @@ def save_data(
         basis_type=basis_type,
         data_type=data_type,
         fourier_weight=fourier_weight,
-        add_noise=add_noise)
+        noise_variance=noise_variance)
 
 
     if n_examples < data_split:
@@ -304,7 +304,7 @@ def save_data(
             basis_type=basis_type,
             data_type=data_type,
             fourier_weight=fourier_weight,
-            add_noise=add_noise)
+            noise_variance=noise_variance)
 
         #t_label = np.array(labels)[split_ind*data_split : (split_ind + 1)*data_split]
         #t_positions = np.array(positions)[split_ind*data_split : (split_ind + 1)*data_split]
@@ -406,7 +406,7 @@ if __name__ == "__main__":
             basis_type="fourier",
             data_type = "kepler",
             fourier_weight=0.0,
-            add_noise=add_noise)
+            noise_variance=noise_variance)
     else:
         save_data(
             data_dir = args.datadir, 

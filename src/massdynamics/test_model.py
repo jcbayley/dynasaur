@@ -45,7 +45,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         data_type = config["data_type"],
         fourier_weight=config["fourier_weight"],
         coordinate_type=config["coordinate_type"],
-        add_noise=config["add_noise"]
+        noise_variance=config["noise_variance"]
         )
 
 
@@ -276,10 +276,6 @@ def test_model_2d(
             print("ccoeff2",np.max(coeff_samples))
             print("cmass2", np.max(mass_samples))
             print("csshape:", np.shape(coeff_samples))
-    
-
-            print("bmasstr",np.min(label.cpu().numpy()[:,-n_masses:]), np.max(label.cpu().numpy()[:,-n_masses:]))
-            print("bcoefftr",np.min(label.cpu().numpy()[:,:-n_masses]), np.max(label.cpu().numpy()[:,:-n_masses]))
 
             _, t_mass, t_coeff, _ = data_processing.unpreprocess_data(
                 pre_model, 
