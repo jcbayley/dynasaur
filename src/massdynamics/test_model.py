@@ -278,10 +278,6 @@ def test_model_2d(
             print("ccoeff2",np.max(coeff_samples))
             print("cmass2", np.max(mass_samples))
             print("csshape:", np.shape(coeff_samples))
-    
-
-            print("bmasstr",np.min(label.cpu().numpy()[:,-n_masses:]), np.max(label.cpu().numpy()[:,-n_masses:]))
-            print("bcoefftr",np.min(label.cpu().numpy()[:,:-n_masses]), np.max(label.cpu().numpy()[:,:-n_masses]))
 
             _, t_mass, t_coeff, _ = data_processing.unpreprocess_data(
                 pre_model, 

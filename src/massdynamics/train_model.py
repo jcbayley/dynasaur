@@ -93,9 +93,9 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             window_acceleration = config["window_acceleration"],
             basis_type = config["basis_type"],
             data_type = config["data_type"],
-            add_noise=config["add_noise"]
+            noise_variance=config["noise_variancce"]
             )
-
+   
         config["n_data"] = len(labels)
     else:
         print("making data ........")
@@ -111,7 +111,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             basis_type = config["basis_type"],
             data_type = config["data_type"],
             fourier_weight=config["fourier_weight"],
-            add_noise=config["add_noise"],
+            noise_variance=config["noise_variance"],
             prior_args=config["prior_args"])
 
     acc_basis_order = cshape

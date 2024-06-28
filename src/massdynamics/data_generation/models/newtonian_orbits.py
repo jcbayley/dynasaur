@@ -565,7 +565,7 @@ def solve_ode(
 
     initial_conditions = np.concatenate([ode_initial_positions, ode_initial_velocities], axis=-1)
 
-    print("ndec", newtoniandecay, "G: ", G, "C:", c)
+    ##print("ndec", newtoniandecay, "G: ", G, "C:", c)
     ode = lambda t, x: newton_derivative(
         t, 
         x, 
