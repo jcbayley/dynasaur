@@ -149,7 +149,7 @@ def generate_data(
             #if n_masses > 1:
             #    positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
-        # move to center of mass frane 
+        # move to center of mass frame 
         if n_masses > 1:
             positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
             
@@ -169,7 +169,7 @@ def generate_data(
                 )
             
             if window_acceleration not in [False, None, "none"]:
-                #print(np.shape(temp_coeffs), np.shape(window_coeffs))
+                print(np.shape(temp_coeffs), np.shape(window_coeffs))
                 temp_coeffs  = window_functions.window_coeffs(times, temp_coeffs.T, window_coeffs, basis_type=basis_type).T
             else:
                 temp_coeffs = temp_coeffs
@@ -195,7 +195,8 @@ def generate_data(
             all_basis_dynamics[data_index], 
             detectors, 
             basis_type=basis_type,
-            compute_energy=False)
+            compute_energy=False,
+            sky_position=prior_args["sky_position"])
 
         all_time_dynamics[data_index] = compute_waveform.get_time_dynamics(
             all_basis_dynamics[data_index], 
@@ -208,8 +209,8 @@ def generate_data(
     feature_shape = np.prod(np.shape(all_basis_dynamics)[1:]) + len(all_masses[0])
     #samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    if noise_variance != 0 and noise_variance != False:
-        strain_timeseries = strain_timeseries + np.random.normal(0, noise_variance, size=np.shape(strain_timeseries))
+    if noise_variance != 0 and noise_variance is not None:
+        strain_timeseries = strain_timeseries + np.random.normal(0, 1, size=np.shape(strain_timeseries))
 
     return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
 
