@@ -182,7 +182,8 @@ def load_models(config, device):
         window=config["window"], 
         window_acceleration=config["window_acceleration"],
         basis_type=config["basis_type"],
-        data_type=config["data_type"])
+        data_type=config["data_type"],
+        prior_args=config["prior_args"])
 
     n_basis = config["basis_order"]
     if config["basis_type"] == "fourier":

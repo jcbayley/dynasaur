@@ -275,7 +275,7 @@ def antenna_pattern(alpha, delta, gpstime, detector="H1"):
 
     return am_plus, am_cross
 
-def compute_strain(pols, detector="H1", alpha=np.pi, delta=np.pi/2):
+def compute_strain(pols, detector="H1", alpha=np.pi, delta=np.pi/2, gpstime=1381142123):
     """the output strain for one sky position
 
     Args:
@@ -286,14 +286,14 @@ def compute_strain(pols, detector="H1", alpha=np.pi, delta=np.pi/2):
     """
     # these are fixed for now so only have to be calculated once
     #alpha, delta = np.pi, np.pi/2 # arbritrary values for now
-    gpstime = 1381142123 # set to current time (when written)
+    #gpstime = 1381142123 # set to current time (when written)
     aplus, across = antenna_pattern(alpha, delta, gpstime, detector=detector)
     hplus, hcross = pols[0,0], pols[0,1]
 
     strain = aplus*hplus + across*hcross
     return strain
 
-def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebyshev", sky=(np.pi, np.pi/2)):
+def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebyshev", sky_position=(np.pi, np.pi/2)):
     """convert a set of coefficienct of hTT to a timeseries, theen compute the strain from hplus and hcross
 
 
@@ -319,7 +319,7 @@ def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebys
 
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):
-        strain_timeseries[dind] = compute_strain(hTT_timeseries, detector=detector, alpha=sky[0], delta=sky[1])
+        strain_timeseries[dind] = compute_strain(hTT_timeseries, detector=detector, alpha=sky_position[0], delta=sky_position[1])
 
     return strain_timeseries
 
@@ -402,7 +402,7 @@ def get_waveform(
     else:
         energy = None
 
-    strain_timeseries = compute_strain_from_coeffs(times, strain_coeffs, detectors=detectors, basis_type=basis_type, sky=sky_position)
+    strain_timeseries = compute_strain_from_coeffs(times, strain_coeffs, detectors=detectors, basis_type=basis_type, sky_position=sky_position)
     """
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):

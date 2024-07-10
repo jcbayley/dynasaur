@@ -195,6 +195,7 @@ def generate_data(
             all_basis_dynamics[data_index], 
             detectors, 
             basis_type=basis_type,
+            sky_position=prior_args["sky_position"],
             compute_energy=False)
 
         all_time_dynamics[data_index] = compute_waveform.get_time_dynamics(
