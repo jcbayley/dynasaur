@@ -149,6 +149,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             window_strain=config["window_strain"],
             spherical_coords=config["spherical_coords"],
             basis_type=config["basis_type"],
+            sky_position=config["prior_args"]["sky_position"],
             make_plots=make_plots)
     elif config["n_dimensions"] == 3:
         test_model_3d(
@@ -168,7 +169,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             window_strain=config["window_strain"],
             spherical_coords=config["spherical_coords"],
             basis_type=config["basis_type"],
-            sky_position=config["sky_position"],
+            sky_position=config["prior_args"]["sky_position"],
             make_plots=make_plots)
 
 
@@ -230,7 +231,8 @@ def test_model_2d(
     basis_type="chebyshev",
     window_strain=None,
     spherical_coords=False,
-    make_plots=True):
+    make_plots=True,
+    sky_position=(np.pi, np.pi/2)):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
