@@ -27,8 +27,8 @@ def integrate(amps1, m=1, duration=2):
         amps_int = np.cumsum(amps1) * dt + amps1[0]
     elif m == 2:
         amps_int = np.cumsum(amps1) * dt + amps1[0]
-        amps_int2 = np.cumsum(amps_int) * dt + amps_int[0]
-    return output
+        amps_int = np.cumsum(amps_int) * dt + amps_int[0]
+    return amps_int
 
 def fit(times, amps1, order):
     """ find inverse of function (inverse fft)
