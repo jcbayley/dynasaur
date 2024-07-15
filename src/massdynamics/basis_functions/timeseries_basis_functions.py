@@ -21,11 +21,13 @@ def derivative(amps1, m=1, duration=2):
 def integrate(amps1, m=1, duration=2):
 
     # needs to be fixed to take in different durations
+    #dt = t[1] - t[0]
+    dt = 1
     if m == 1:
-        amps_int = np.cumsum(amps1) * (t[1] - t[0]) + x[0]
+        amps_int = np.cumsum(amps1) * dt + x[0]
     elif m == 2:
-        amps_int = np.cumsum(amps1) * (t[1] - t[0]) + amps1[0]
-        amps_int2 = np.cumsum(amps_int) * (t[1] - t[0]) + amps_int[0]
+        amps_int = np.cumsum(amps1) * dt + amps1[0]
+        amps_int2 = np.cumsum(amps_int) * dt + amps_int[0]
     return output
 
 def fit(times, amps1, order):
