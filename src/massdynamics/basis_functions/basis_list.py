@@ -1,7 +1,8 @@
 import numpy as np
 from massdynamics.basis_functions import (
     fourier_basis_functions,
-    chebyshev_basis_functions)
+    chebyshev_basis_functions,
+    timeseries_basis_functions)
 
 basis = {
     "chebyshev":{
@@ -24,6 +25,17 @@ basis = {
         "integrate": fourier_basis_functions.integrate,
         "fit": fourier_basis_functions.fit,
         "val": fourier_basis_functions.val,
+        "dtype": complex
+    },
+    "timeseries":{
+        "multiply": timeseries_basis_functions.multiply,
+        "power": timeseries_basis_functions.power,
+        "subtract": timeseries_basis_functions.subtract,
+        "add": timeseries_basis_functions.add,
+        "derivative": timeseries_basis_functions.derivative,
+        "integrate": timeseries_basis_functions.integrate,
+        "fit": timeseries_basis_functions.fit,
+        "val": timeseries_basis_functions.val,
         "dtype": complex
     }
 }

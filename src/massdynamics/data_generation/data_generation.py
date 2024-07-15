@@ -209,7 +209,7 @@ def generate_data(
     feature_shape = np.prod(np.shape(all_basis_dynamics)[1:]) + len(all_masses[0])
     #samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    if noise_variance != 0 and noise_variance != False:
+    if noise_variance > 0 and noise_variance != False:
         strain_timeseries = strain_timeseries + np.random.normal(0, noise_variance, size=np.shape(strain_timeseries))
 
     return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
