@@ -287,10 +287,14 @@ def compute_strain(pols, detector="H1", alpha=np.pi, delta=np.pi/2, gpstime=1381
     # these are fixed for now so only have to be calculated once
     #alpha, delta = np.pi, np.pi/2 # arbritrary values for now
     #gpstime = 1381142123 # set to current time (when written)
-    aplus, across = antenna_pattern(alpha, delta, gpstime, detector=detector)
     hplus, hcross = pols[0,0], pols[0,1]
-
-    strain = aplus*hplus + across*hcross
+    if detector == "hplus":
+        strain = hplus
+    elif detector == "hcross":
+        strain = hcross
+    else:
+        aplus, across = antenna_pattern(alpha, delta, gpstime, detector=detector)
+        strain = aplus*hplus + across*hcross
     return strain
 
 def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebyshev", sky_position=(np.pi, np.pi/2)):
