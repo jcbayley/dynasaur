@@ -32,7 +32,14 @@ def generate_random_coefficients(
         coefficients = np.zeros((halforder,n_dimensions), dtype=basis[basis_type]["dtype"])
         for i in range(halforder):
             coefficients[i] = np.exp(-fourier_weight*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
-
+    elif basis_type == "timeseries":
+        halforder = int(order/2) + 1
+        coefficients = np.zeros((halforder,n_dimensions), dtype=basis[basis_type]["dtype"])
+        for i in range(halforder):
+            coefficients[i] = np.exp(-fourier_weight*i) * (2*np.random.rand(n_dimensions)-1 + 1j*(2 * np.random.rand(n_dimensions) - 1))
+        coefficients = np.fft.irfft(coefficients, axis=0)
+    else:
+        raise Exception(f"basis type {basis_type} not supported")
     # if ndim is 2 than set all z dimension movement to 0
     if n_dimensions == 2:
         coefficients[:,2] *= 0 + 0j

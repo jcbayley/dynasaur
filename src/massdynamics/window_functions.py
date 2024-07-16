@@ -26,32 +26,39 @@ def chebint2(times, coeffs, basis_type="chebyshev", vel_pos_offsets=None):
     Returns:
         _type_: _description_
     """
-    if vel_pos_offsets is not None:
-        # get coefficients for position and velocity before windowing
-        pos_offset_co, vel_offset_co = vel_pos_offsets
-        win_co_vel = basis[basis_type]["integrate"](coeffs, m=1)
-        # compute the values and subtract the mean from the first coefficient
-        # this is so that there is not a velocity offset
-        win_co_vel[np.isnan(win_co_vel)] = 0
-        win_vel = basis[basis_type]["val"](times, win_co_vel)
-        old_win_vel = basis[basis_type]["val"](times, vel_offset_co)
-        # find difference in velocity at center of timeseries
-        diff_vel = win_vel[int(0.5*len(win_vel))] - old_win_vel[int(0.5*len(old_win_vel))]
-        win_co_vel[0] += diff_vel*len(win_vel)
-
-        # now find the position
-        win_co_pos = basis[basis_type]["integrate"](win_co_vel, m=1)
-        # compute the values and subtract the mean from the first coefficient
-        # this is so that there is not a position offset
-        win_co_pos[np.isnan(win_co_pos)] = 0
-        win_pos = basis[basis_type]["val"](times, win_co_pos)
-        old_win_pos = basis[basis_type]["val"](times, pos_offset_co)
-        # find difference between positions at center of timeseries
-        diff_pos = win_pos[int(0.5*len(win_pos))] - old_win_pos[int(0.5*len(old_win_pos))]
-        win_co_pos[0] += diff_pos*len(win_pos)
+    if basis_type == "timeseries":
+        if vel_pos_offsets is not None:
+            pos_offset_co, vel_offset_co = vel_pos_offsets
+            win_co_pos = basis[basis_type]["integrate"](coeffs, m=1, amps0=pos_offset_co, amps05=vel_offset_co)
+        else:
+            win_co_pos = basis[basis_type]["integrate"](coeffs, m=2)
     else:
-        win_co_pos = basis[basis_type]["integrate"](coeffs, m=2)
-        win_co_pos[np.isnan(win_co_pos)] = 0
+        if vel_pos_offsets is not None:
+            # get coefficients for position and velocity before windowing
+            pos_offset_co, vel_offset_co = vel_pos_offsets
+            win_co_vel = basis[basis_type]["integrate"](coeffs, m=1)
+            # compute the values and subtract the mean from the first coefficient
+            # this is so that there is not a velocity offset
+            win_co_vel[np.isnan(win_co_vel)] = 0
+            win_vel = basis[basis_type]["val"](times, win_co_vel)
+            old_win_vel = basis[basis_type]["val"](times, vel_offset_co)
+            # find difference in velocity at center of timeseries
+            diff_vel = win_vel[int(0.5*len(win_vel))] - old_win_vel[int(0.5*len(old_win_vel))]
+            win_co_vel[0] += diff_vel*len(win_vel)
+
+            # now find the position
+            win_co_pos = basis[basis_type]["integrate"](win_co_vel, m=1)
+            # compute the values and subtract the mean from the first coefficient
+            # this is so that there is not a position offset
+            win_co_pos[np.isnan(win_co_pos)] = 0
+            win_pos = basis[basis_type]["val"](times, win_co_pos)
+            old_win_pos = basis[basis_type]["val"](times, pos_offset_co)
+            # find difference between positions at center of timeseries
+            diff_pos = win_pos[int(0.5*len(win_pos))] - old_win_pos[int(0.5*len(old_win_pos))]
+            win_co_pos[0] += diff_pos*len(win_pos)
+        else:
+            win_co_pos = basis[basis_type]["integrate"](coeffs, m=2)
+            win_co_pos[np.isnan(win_co_pos)] = 0
 
     return win_co_pos
 
