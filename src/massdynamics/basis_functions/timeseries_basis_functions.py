@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import fftpack, signal
+from scipy.integrate import cumtrapz
 
 def multiply(amps1, amps2):
         return amps1 * amps2
@@ -16,18 +17,33 @@ def add(amps1, amps2):
 
 def derivative(amps1, m=1, duration=2):
     # needs to be fixed to take in different durations
-    return np.gradient(amps1)
+    return np.gradient(amps1, axis=-1)
 
-def integrate(amps1, m=1, duration=2):
+def int1(t1, t0):
+    rt0 = cumtrapz(t1, axis=-1) + np.tile(t0[...,0:1], (np.shape(t0)[-1]-1))
+    rt0 = np.insert(rt0, 0, t0[...,0], axis=-1)
+    return rt0
+
+def integrate(amps1, amps0=None, amps05=None,  m=1, duration=2):
 
     # needs to be fixed to take in different durations
     #dt = t[1] - t[0]
     dt = 1
     if m == 1:
-        amps_int = np.cumsum(amps1) * dt + amps1[0]
+        if amps0 is not None:
+            amps_int = int1(amps1, amps0)
+        else:
+            amps_int = cumtrapz(amps1, axis=-1)
     elif m == 2:
-        amps_int = np.cumsum(amps1) * dt + amps1[0]
-        amps_int = np.cumsum(amps_int) * dt + amps_int[0]
+        if amps0 is not None:
+            amps_int = int1(amps1, amps0)
+        else:
+            amps_int = cumtrapz(amps1, axis=-1)
+        if amps05 is not None:
+            amps_int = int1(amps_int, amps05)
+        else:
+            amps_int = cumtrapz(amps_int, axis=-1)
+            
     return amps_int
 
 def fit(times, amps1, order):
