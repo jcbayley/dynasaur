@@ -7,6 +7,7 @@ import argparse
 import h5py
 import os
 import torch
+from massdynamics import window_functions
 from massdynamics.data_generation import (
     compute_waveform,
     data_processing,
@@ -15,7 +16,10 @@ from massdynamics.data_generation.models import (
     random_orbits,
     newtonian_orbits,
     newtonian_orbits_decay,
-    kepler_orbits
+    kepler_orbits,
+    inspiral_orbits,
+    oscillating_orbits,
+    circular_orbits
 )
 from massdynamics.basis_functions import basis
 
@@ -28,12 +32,12 @@ def generate_data(
     n_dimensions: int = 1, 
     detectors=["H1"], 
     window="none", 
-    return_windowed_coeffs=True, 
+    window_acceleration=True, 
     basis_type="chebyshev",
     data_type = "random",
     fourier_weight=0.0,
     coordinate_type="cartesian",
-    add_noise = False,
+    noise_variance = 0.0,
     prior_args={}):
 
     if data_type.split("-")[0] == "random":
@@ -45,10 +49,11 @@ def generate_data(
                 n_dimensions, 
                 detectors=detectors, 
                 window=window, 
-                return_windowed_coeffs=return_windowed_coeffs, 
+                window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 fourier_weight=fourier_weight,
-                data_type=data_type)
+                data_type=data_type,
+                prior_args=prior_args)
     elif data_type.split("-")[0] in ["newtonian", "newtonian_decay", "newtoniandecay"]:
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
                 n_data, 
@@ -58,7 +63,46 @@ def generate_data(
                 n_dimensions, 
                 detectors=detectors, 
                 window=window, 
-                return_windowed_coeffs=return_windowed_coeffs, 
+                window_acceleration=window_acceleration, 
+                basis_type=basis_type,
+                data_type=data_type,
+                prior_args=prior_args)
+    elif data_type.split("-")[0] in ["circular"]:
+        times, positions, masses, position_coeffs = circular_orbits.generate_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                window_acceleration=window_acceleration, 
+                basis_type=basis_type,
+                data_type=data_type,
+                prior_args=prior_args)
+    elif data_type.split("-")[0] in ["inspiral"]:
+        times, positions, masses, position_coeffs = inspiral_orbits.generate_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                window_acceleration=window_acceleration, 
+                basis_type=basis_type,
+                data_type=data_type,
+                prior_args=prior_args)
+    elif data_type.split("-")[0] in ["oscillatex"]:
+        times, positions, masses, position_coeffs = oscillating_orbits.generate_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 data_type=data_type,
                 prior_args=prior_args)
@@ -70,7 +114,8 @@ def generate_data(
                 basis_order = basis_order,
                 basis_type = basis_type,
                 n_dimensions = n_dimensions,
-                sample_rate = sample_rate)
+                sample_rate = sample_rate,
+                prior_args=prior_args)
     else:
         raise Exception(f"No data with name {data_type.split('-')[0]}")
     
@@ -96,6 +141,10 @@ def generate_data(
         positions = np.zeros((n_data, n_masses, n_dimensions, len(times)))
     else:
         no_positions = False
+
+    if window_acceleration not in [False, None, "none"]:
+        window_coeffs = window_functions.get_window_coeffs(times, window_acceleration, order=basis_order, basis_type=basis_type, alpha=0.5)
+
 
     all_masses = np.zeros((n_data, n_masses))
 
@@ -126,16 +175,21 @@ def generate_data(
         else:
             raise Exception(f"Coordinate type {coordinate_type} is not supported")
 
-
         for mass_index in range(n_masses):
             temp_coeffs = basis[basis_type]["fit"](
                 times,
                 positions[data_index,mass_index, :, :],
                 t_basis_order
                 )
+            
+            if window_acceleration not in [False, None, "none"]:
+                #print(np.shape(temp_coeffs), np.shape(window_coeffs))
+                temp_coeffs  = window_functions.window_coeffs(times, temp_coeffs.T, window_coeffs, basis_type=basis_type).T
+            else:
+                temp_coeffs = temp_coeffs
             #print(np.max(positions[data_index, mass_index]),np.max(temp_coeffs))
             # if windowing applied create coeffs which are windowed else just use the random coeffs
-            
+            #print(np.shape(positions), np.shape(temp_coeffs))
             all_basis_dynamics[data_index, mass_index] = temp_coeffs
 
             if coordinate_type != "cartesian":
@@ -155,6 +209,7 @@ def generate_data(
             all_basis_dynamics[data_index], 
             detectors, 
             basis_type=basis_type,
+            sky_position=prior_args["sky_position"],
             compute_energy=False)
 
         all_time_dynamics[data_index] = compute_waveform.get_time_dynamics(
@@ -168,8 +223,8 @@ def generate_data(
     feature_shape = np.prod(np.shape(all_basis_dynamics)[1:]) + len(all_masses[0])
     #samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    if add_noise:
-        strain_timeseries = strain_timeseries + np.random.normal(0, 1, size=np.shape(strain_timeseries))
+    if noise_variance > 0 and noise_variance != False:
+        strain_timeseries = strain_timeseries + np.random.normal(0, noise_variance, size=np.shape(strain_timeseries))
 
     return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
 
@@ -182,7 +237,7 @@ def get_data_path(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
-    return_windowed_coeffs = False,
+    window_acceleration = False,
     data_type: str = "random"
     ):
 
@@ -200,12 +255,12 @@ def save_data(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window: str = "none",
-    return_windowed_coeffs = False,
+    window_acceleration = False,
     basis_type: str = "chebyshev",
     data_type: str = "random",
     start_index: int = 0,
     fourier_weight:float=0.0,
-    add_noise=False
+    noise_variance=0.0
     ):
 
 
@@ -217,7 +272,7 @@ def save_data(
         n_dimensions = n_dimensions,
         detectors = detectors,
         window = window,
-        return_windowed_coeffs = False,
+        window_acceleration = False,
         data_type = data_type)
 
     data_dir = os.path.join(data_dir, data_path)
@@ -233,11 +288,11 @@ def save_data(
         n_dimensions=n_dimensions, 
         detectors=detectors, 
         window=window, 
-        return_windowed_coeffs=return_windowed_coeffs,
+        window_acceleration=window_acceleration,
         basis_type=basis_type,
         data_type=data_type,
         fourier_weight=fourier_weight,
-        add_noise=add_noise)
+        noise_variance=noise_variance)
 
 
     if n_examples < data_split:
@@ -260,11 +315,11 @@ def save_data(
             n_dimensions=n_dimensions, 
             detectors=detectors, 
             window=window, 
-            return_windowed_coeffs=return_windowed_coeffs,
+            window_acceleration=window_acceleration,
             basis_type=basis_type,
             data_type=data_type,
             fourier_weight=fourier_weight,
-            add_noise=add_noise)
+            noise_variance=noise_variance)
 
         #t_label = np.array(labels)[split_ind*data_split : (split_ind + 1)*data_split]
         #t_positions = np.array(positions)[split_ind*data_split : (split_ind + 1)*data_split]
@@ -287,7 +342,7 @@ def load_data(
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
     window = False,
-    return_windowed_coeffs = False,
+    window_acceleration = False,
     basis_type = "chebyshev",
     data_type: str = "random"
     ):
@@ -300,7 +355,7 @@ def load_data(
         n_dimensions = n_dimensions,
         detectors = detectors,
         window = window,
-        return_windowed_coeffs = False,
+        window_acceleration = False,
         data_type=data_type)
 
     data_dir = os.path.join(data_dir, data_path)
@@ -362,11 +417,11 @@ if __name__ == "__main__":
             n_dimensions = 1, 
             detectors=["H1"], 
             window="none", 
-            return_windowed_coeffs=True, 
+            window_acceleration=True, 
             basis_type="fourier",
             data_type = "kepler",
             fourier_weight=0.0,
-            add_noise=add_noise)
+            noise_variance=noise_variance)
     else:
         save_data(
             data_dir = args.datadir, 
@@ -378,7 +433,7 @@ if __name__ == "__main__":
             n_dimensions = args.ndimensions,
             detectors = dets[:int(args.ndetectors)],
             window = args.window,
-            return_windowed_coeffs = args.returnwindowedcoeffs,
+            window_acceleration = args.returnwindowedcoeffs,
             basis_type = args.basis_type,
             data_type = args.data_type,
             fourier_weight = args.fourier_weight
@@ -393,7 +448,7 @@ if __name__ == "__main__":
             n_dimensions = args.ndimensions,
             detectors = dets[:int(args.ndetectors)],
             window = args.window,
-            return_windowed_coeffs = args.returnwindowedcoeffs
+            window_acceleration = args.returnwindowedcoeffs
             )
         """
 

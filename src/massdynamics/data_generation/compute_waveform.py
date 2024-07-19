@@ -275,7 +275,7 @@ def antenna_pattern(alpha, delta, gpstime, detector="H1"):
 
     return am_plus, am_cross
 
-def compute_strain(pols, detector="H1"):
+def compute_strain(pols, detector="H1", alpha=np.pi, delta=np.pi/2, gpstime=1381142123):
     """the output strain for one sky position
 
     Args:
@@ -285,21 +285,26 @@ def compute_strain(pols, detector="H1"):
         _type_: _description_
     """
     # these are fixed for now so only have to be calculated once
-    alpha, delta = np.pi, np.pi/2 # arbritrary values for now
-    gpstime = 1381142123 # set to current time (when written)
-    aplus, across = antenna_pattern(alpha, delta, gpstime, detector=detector)
+    #alpha, delta = np.pi, np.pi/2 # arbritrary values for now
+    #gpstime = 1381142123 # set to current time (when written)
     hplus, hcross = pols[0,0], pols[0,1]
-
-    strain = aplus*hplus + across*hcross
+    if detector == "hplus":
+        strain = hplus
+    elif detector == "hcross":
+        strain = hcross
+    else:
+        aplus, across = antenna_pattern(alpha, delta, gpstime, detector=detector)
+        strain = aplus*hplus + across*hcross
     return strain
 
-def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebyshev"):
+def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebyshev", sky_position=(np.pi, np.pi/2)):
     """convert a set of coefficienct of hTT to a timeseries, theen compute the strain from hplus and hcross
 
 
     Args:
         times (np.array): times at which to evaluate the polynomial
         pols (_type_): (n_dimensions, n_dimensions, n_coeffs) coefficients for each polarisation
+        sky : tuple of sky position
 
     Returns:
         _type_: _description_
@@ -318,9 +323,68 @@ def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebys
 
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):
-        strain_timeseries[dind] = compute_strain(hTT_timeseries, detector=detector)
+        strain_timeseries[dind] = compute_strain(hTT_timeseries, detector=detector, alpha=sky_position[0], delta=sky_position[1])
 
     return strain_timeseries
+
+def compute_hplus_hcross(masses, x, xdot, xddot):
+    """compute the plus and cross polarisations
+
+    Args:
+        masses (_type_): (N_masses)
+        x (_type_): (N_masses, N_dimensions, N_times)
+        xdot (_type_): (N_masses, N_dimensions, N_times)
+        xddot (_type_): (N_masses, N_dimensions, N_times)
+
+    Returns:
+        tuple: hplus, hcross
+    """
+    norm_factor = 1
+
+    plus_t1 = masses[0]*(
+        xddot[:,0,0]*x[:,0,0] 
+        + xdot[:,0,0]**2 
+        - xddot[:,0,1]*x[:,0,1] 
+        - xdot[:,0,1]**2)
+    plus_t2 = masses[1]*(
+        xddot[:,1,0]*x[:,1,0] 
+        + xdot[:,1,0]**2 
+        - xddot[:,1,1]*x[:,1,1] 
+        - xdot[:,1,1]**2)
+    hplus = norm_factor*(plus_t1 + plus_t2)
+
+    cross_t1 = masses[0]*(
+        xddot[:,0,0]*x[:,0,1] 
+        + 2*xdot[:,0,0]*xdot[:,0,1] 
+        + x[:,0,0]*xddot[:,0,1])
+    cross_t2 = masses[1]*(
+        xddot[:,1,0]*x[:,1,1] 
+        + 2*xdot[:,1,0]*xdot[:,1,1] 
+        + x[:,1,0]*xddot[:,1,1])
+    hcross = 4*norm_factor*(cross_t1 + cross_t2)
+    return hplus, hcross
+
+def dynamics_to_hplus_hcross(times, masses, basis_dynamics, basis_type="fourier"):
+
+    norm_factor = 1
+
+    fx = basis_dynamics
+    fxdot = basis[basis_type]["derivative"](basis_dynamics, m=1)
+    fxddot = basis[basis_type]["derivative"](basis_dynamics, m=2)
+
+    fx[np.isinf(fx)] = 0
+    fxdot[np.isinf(fxdot)] = 0
+    fxddot[np.isinf(fxddot)] = 0
+
+    x = basis[basis_type]["val"](times, fx)
+    xdot = basis[basis_type]["val"](times, fxdot)
+    xddot = basis[basis_type]["val"](times, fxddot)
+
+    hplus, hcross = compute_hplus_hcross(masses, x, xdot, xddot)
+
+    pols = np.array([[hplus, hcross], [hcross, -hplus]])
+
+    return hplus, hcross, x, xdot, xddot
 
 def get_waveform(
     times, 
@@ -328,7 +392,8 @@ def get_waveform(
     basis_dynamics, 
     detectors, 
     basis_type="chebyshev",
-    compute_energy=False
+    compute_energy=False,
+    sky_position=(np.pi, np.pi/2)
     ):
     
 
@@ -341,7 +406,7 @@ def get_waveform(
     else:
         energy = None
 
-    strain_timeseries = compute_strain_from_coeffs(times, strain_coeffs, detectors=detectors, basis_type=basis_type)
+    strain_timeseries = compute_strain_from_coeffs(times, strain_coeffs, detectors=detectors, basis_type=basis_type, sky_position=sky_position)
     """
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):

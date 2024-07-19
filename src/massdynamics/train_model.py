@@ -78,6 +78,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     device = torch.device(config["device"])
     print(torch.cuda.get_device_name(device))
 
+    data_dimensions = 3
+
     if config["load_data"]:
         print("loading data ........")
         times, basis_dynamics, masses, strain, cshape, positions = data_generation.load_data(
@@ -85,15 +87,15 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             basis_order = config["basis_order"],
             n_masses = config["n_masses"],
             sample_rate = config["sample_rate"],
-            n_dimensions = config["n_dimensions"],
+            n_dimensions = data_dimensions,
             detectors = config["detectors"],
             window = config["window"],
-            return_windowed_coeffs = config["return_windowed_coeffs"],
+            window_acceleration = config["window_acceleration"],
             basis_type = config["basis_type"],
             data_type = config["data_type"],
-            add_noise=config["add_noise"]
+            noise_variance=config["noise_variancce"]
             )
-
+   
         config["n_data"] = len(labels)
     else:
         print("making data ........")
@@ -102,14 +104,14 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             basis_order=config["basis_order"], 
             n_masses=config["n_masses"], 
             sample_rate=config["sample_rate"], 
-            n_dimensions=config["n_dimensions"], 
+            n_dimensions=data_dimensions, 
             detectors=config["detectors"], 
             window=config["window"], 
-            return_windowed_coeffs=config["return_windowed_coeffs"],
+            window_acceleration=config["window_acceleration"],
             basis_type = config["basis_type"],
             data_type = config["data_type"],
             fourier_weight=config["fourier_weight"],
-            add_noise=config["add_noise"],
+            noise_variance=config["noise_variance"],
             prior_args=config["prior_args"])
 
     acc_basis_order = cshape
@@ -137,7 +139,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             initial_run=False,
             n_masses=config["n_masses"],
             device=config["device"],
-            basis_type=config["basis_type"])
+            basis_type=config["basis_type"],
+            n_dimensions=config["n_dimensions"])
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
         pre_model.to(config["device"])
@@ -152,7 +155,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             initial_run=True,
             n_masses=config["n_masses"],
             device=config["device"],
-            basis_type=config["basis_type"])
+            basis_type=config["basis_type"],
+            n_dimensions=config["n_dimensions"])
 
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
@@ -253,7 +257,7 @@ if __name__ == "__main__":
             window="none",
             basis_type="chebyshev",
             custom_flow=True,
-            return_windowed_coeffs=False,
+            window_acceleration=False,
             learning_rate = 5e-5,
             device = "cuda:0",
             nsplines = 8,

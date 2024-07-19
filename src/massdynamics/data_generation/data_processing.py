@@ -171,9 +171,11 @@ def get_strain_from_samples(
     masses, 
     coeffs, 
     detectors=["H1"],
-    return_windowed_coeffs=False, 
+    window_acceleration=False, 
     window="none", 
-    basis_type="chebyshev"):
+    basis_type="chebyshev",
+    basis_order=16,
+    sky_position=(np.pi, np.pi/2)):
     """_summary_
 
     Args:
@@ -181,7 +183,7 @@ def get_strain_from_samples(
         masses (_type_): _description_
         coeffs (_type_): (n_masses, n_coeffs, n_dimensions)
         detectors (list, optional): _description_. Defaults to ["H1"].
-        return_windowed_coeffs (bool, optional): _description_. Defaults to False.
+        window_acceleration (bool, optional): _description_. Defaults to False.
         window (bool, optional): _description_. Defaults to False.
         basis_type (str, optional): _description_. Defaults to "chebyshev".
 
@@ -191,17 +193,17 @@ def get_strain_from_samples(
     # if there is a window and I and not predicting the windowed coefficients
    
     n_masses, n_dimensions, n_coeffs = np.shape(coeffs)
-
-    if not return_windowed_coeffs and window != "none":
+    """
+    if window_acceleration not in [False, None, "none"]:
         n_coeffs = []
         # for each mass perform the window on the xyz positions (acceleration)
         for mass in range(n_masses):
-            temp_recon, win_coeffs = window_functions.perform_window(times, coeffs[mass], window, basis_type=basis_type)
-            n_coeffs.append(temp_recon)
+            temp_recon, win_coeffs = window_functions.perform_window(times, coeffs[mass].T, window_acceleration, basis_type=basis_type, order=basis_order)
+            n_coeffs.append(temp_recon.T)
         
         # update the coefficients with the windowed version
         coeffs = np.array(n_coeffs)
-
+    """
 
     strain, energy = compute_waveform.get_waveform(
         times, 
@@ -209,7 +211,8 @@ def get_strain_from_samples(
         coeffs, 
         detectors, 
         basis_type=basis_type,
-        compute_energy=True
+        compute_energy=True,
+        sky_position=sky_position
     )
 
 
@@ -257,6 +260,38 @@ def subtract_center_of_mass(positions, masses):
 
     return relative_positions
 
+def compute_angular_momentum(m1, m2, positions, velocities):
+    """
+    Compute the total angular momentum of the system.
+    
+    Parameters:
+    m1, m2: masses of the two particles
+    positions: array of shape (N, 2, 3) representing the positions of the particles over time
+    velocities: array of shape (N, 2, 3) representing the velocities of the particles over time
+    
+    Returns:
+    L: array of shape (N, 3) representing the angular momentum at each time step
+    """
+    r1, r2 = positions[:, 0, :], positions[:, 1, :]
+    v1, v2 = velocities[:, 0, :], velocities[:, 1, :]
+    
+    # Calculate the angular momentum for each particle and sum them up
+    L = m1 * np.cross(r1, v1) + m2 * np.cross(r2, v2)
+    return L
+
+def conserve_angular_momentum(m1, m2, positions, velocities):
+    """shift the positions such that they conserve angular momentum
+
+    Args:
+        m1 (_type_): _description_
+        m2 (_type_): _description_
+        positions (_type_): _description_
+        velocities (_type_): _description_
+    """
+
+    
+
+
 def cartesian_to_spherical(positions):
     """Convert cartesian to spherical coords
 
@@ -302,7 +337,8 @@ def preprocess_data(
     initial_run=False,
     n_masses=2,
     device="cpu",
-    basis_type="fourier"):
+    basis_type="fourier",
+    n_dimensions=3):
 
     if spherical_coords:
         print("Spherical not implemented yet")
@@ -310,9 +346,13 @@ def preprocess_data(
 
 
 
-    if window_strain is not None or window != False:
+    if window_strain is not None:
         strain = get_window_strain(strain, window_type=window_strain)
     
+    # get only the required dimensions for training
+    #print("b1", np.shape(basis_dynamics))
+    basis_dynamics = basis_dynamics[...,:n_dimensions,:]
+    #print("b2", np.shape(basis_dynamics))
     
     labels = positions_masses_to_samples(
         basis_dynamics,
@@ -380,5 +420,10 @@ def unpreprocess_data(
             n_dimensions,
             basis_type
         )
+    
+    if n_dimensions != 3:
+        bd_shape = list(np.shape(basis_dynamics))
+        bd_shape[-2] = 3 - n_dimensions
+        basis_dynamics = np.concatenate([basis_dynamics, np.zeros(bd_shape)], axis=-2)
 
     return pre_model, masses, basis_dynamics, strain

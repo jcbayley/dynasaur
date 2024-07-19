@@ -181,7 +181,7 @@ def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, vel
     """
     return initial_positions, initial_velocities
 
-def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
+def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G, handed_orbit=False):
     """generate initial conditionss for a kepler orbit in 2d plane starting at apoapsis
 
     Args:
@@ -196,7 +196,10 @@ def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
     """
     ra = semi_major_axis*(1+eccentricity)
     velocity = np.sqrt(G*np.sum(masses)/ra*(1-eccentricity))
-
+    if not handed_orbit:
+        # randomly switch the handedness of the orbit
+        if np.random.uniform(0,1) > 0.5:
+            velocity = -velocity 
     rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
                                 [np.sin(theta), np.cos(theta), 0],
                                 [0,0,0]])
@@ -358,7 +361,7 @@ def get_initial_conditions(
 
         semi_major_axes = ((G*(np.sum(masses))/(4*np.pi**2)) * period**2)**(1/3)
 
-        semi_major_axes = np.random.uniform(prior_args["semi_maj_ax_min"], prior_args["semi_maj_ax_max"])
+        #semi_major_axes = np.random.uniform(prior_args["semi_maj_ax_min"], prior_args["semi_maj_ax_max"])
 
         eccentricities = 0.0
         #inclinations = np.array([0.0])
@@ -384,6 +387,7 @@ def get_initial_conditions(
         prior_args.setdefault("separation_add_max", 10)
         prior_args.setdefault("arg_periapsis_min", 0)
         prior_args.setdefault("arg_periapsis_max", 2*np.pi)
+        prior_args.setdefault("handed_orbit", False)
 
         masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
 
@@ -399,7 +403,48 @@ def get_initial_conditions(
             eccentricities, 
             arg_periapsis, 
             masses, 
-            G)
+            G,
+            handed_orbit=prior_args["handed_orbit"])
+
+    elif data_type == "circularbinarymasstriangle":
+
+        prior_args.setdefault("mass_min", 1)
+        prior_args.setdefault("mass_max", 10)
+        prior_args.setdefault("cycles_min", 1)
+        prior_args.setdefault("cycles_max", 4)
+        prior_args.setdefault("separation_add_min", 6)
+        prior_args.setdefault("separation_add_max", 10)
+        prior_args.setdefault("arg_periapsis_min", 0)
+        prior_args.setdefault("arg_periapsis_max", 2*np.pi)
+        prior_args.setdefault("handed_orbit", False)
+
+        masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
+
+        m1 = masses[0]
+        m2 = masses[1]
+        if m2 > m1:
+            masses = np.array([m2, m1])
+
+        schwarz_rad = 2*G*masses/(c**2)
+        min_sep = np.sum(schwarz_rad)
+        #semi_major_axes = min_sep*np.random.uniform(prior_args["separation_add_min"],prior_args["separation_add_max"])
+
+        # days
+        duration = np.max(times) - np.min(times)
+        period = np.random.uniform(duration/prior_args["cycles_max"], duration/prior_args["cycles_min"])
+
+        semi_major_axes = ((G*(np.sum(masses))/(4*np.pi**2)) * period**2)**(1/3)
+
+        eccentricities = 0.0
+        arg_periapsis = np.random.uniform(prior_args["arg_periapsis_min"], prior_args["arg_periapsis_max"])
+
+        initial_positions, initial_velocities = kepler_apoapsis_binary(
+            semi_major_axes, 
+            eccentricities, 
+            arg_periapsis, 
+            masses, 
+            G,
+            handed_orbit=prior_args["handed_orbit"])
 
     else:
         raise Exception(f"Model {data_type} not implemented")
@@ -520,7 +565,7 @@ def solve_ode(
 
     initial_conditions = np.concatenate([ode_initial_positions, ode_initial_velocities], axis=-1)
 
-    print("ndec", newtoniandecay, "G: ", G, "C:", c)
+    ##print("ndec", newtoniandecay, "G: ", G, "C:", c)
     ode = lambda t, x: newton_derivative(
         t, 
         x, 
@@ -572,7 +617,7 @@ def generate_data(
     n_dimensions: int = 3, 
     detectors=["H1"], 
     window="none", 
-    return_windowed_coeffs=True, 
+    window_acceleration=True, 
     basis_type="chebyshev",
     data_type="newtonian-kepler",
     prior_args = {}) -> np.array:
@@ -604,7 +649,6 @@ def generate_data(
     prior_args.setdefault("duration", 1)
 
     second = 1./(24*3600)
-    n_samples = sample_rate
     times = np.linspace(0,1,prior_args["n_samples"]) #in days for ode
     solve_times = np.linspace(0,prior_args["duration"],prior_args["n_samples"])
 
@@ -624,7 +668,7 @@ def generate_data(
     position_scale = 2*distance_scale                             # in m
     velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
 
-    all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
+    all_positions = np.zeros((n_data, n_masses, n_dimensions, prior_args["n_samples"]))
     all_masses = np.zeros((n_data, n_masses))
     for i in range(n_data):
         masses, initial_positions, initial_velocities = resample_initial_conditions(
@@ -650,7 +694,7 @@ def generate_data(
             G=G_ggravunits,
             c=c_ggravunits)
 
-        print(f"solved: {i}")
+        #print(f"solved: {i}")
         all_positions[i] = np.transpose(positions, (1,2,0))
         all_masses[i] = masses
 

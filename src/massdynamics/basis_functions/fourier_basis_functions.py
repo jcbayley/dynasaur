@@ -24,14 +24,14 @@ def add(amps1, amps2):
 
 def derivative(amps1, m=1, duration=2):
     # needs to be fixed to take in different durations
-    freqs = np.arange(len(amps1))/duration
+    freqs = np.arange(np.shape(amps1)[-1])/duration
     output = amps1 * (freqs * 2 * np.pi * 1j)**m
     return output
 
 def integrate(amps1, m=1, duration=2):
 
     # needs to be fixed to take in different durations
-    freqs = np.arange(len(amps1))/duration
+    freqs = np.arange(np.shape(amps1)[-1])/duration
     output = amps1 * (freqs * 2 * np.pi * 1j)**(-m)
     return output
 

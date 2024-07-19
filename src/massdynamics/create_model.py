@@ -23,6 +23,22 @@ import torch
 import torch.nn as nn
 import os
 
+class PreNetworkAttention(torch.nn.Module):
+    def __init__(self, input_dim, output_dim, embed_dim, num_heads=2, num_layers=2):
+        super(PreNetworkAttention, self).__init__()
+        self.embedding = torch.nn.Linear(input_dim, embed_dim)
+        encoder_layers = torch.nn.TransformerEncoderLayer(embed_dim, num_heads)
+        self.transformer_encoder = torch.nn.TransformerEncoder(encoder_layers, num_layers)
+        self.fc = torch.nn.Linear(embed_dim, output_dim)
+        
+    def forward(self, x, layer_number=None):
+        x = self.embedding(x)
+        x = x.permute(1, 0, 2)  # Change to shape (seq_len, batch_size, embed_dim) for Transformer encoder
+        x = self.transformer_encoder(x)
+        x = x.permute(1, 0, 2)  # Change back to shape (batch_size, seq_len, embed_dim)
+        x = torch.mean(x, dim=1)  # Global average pooling
+        x = self.fc(x)
+        return x
 
 def create_models(config, device=None):
     """create a convolutional to linear model with n_context outputs and a 
@@ -44,7 +60,7 @@ def create_models(config, device=None):
         n_dimensions=config["n_dimensions"], 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"],
+        window_acceleration=config["window_acceleration"],
         basis_type=config["basis_type"],
         data_type=config["data_type"])
     """
@@ -56,25 +72,38 @@ def create_models(config, device=None):
 
     n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
+    n_input = config["sample_rate"]*config["duration"]
 
     if device is not None:
         config["device"] = device
 
     # pre processing creation
-    pre_model = nn.Sequential()
+    if "transformer_layers" in config:
+        if config["transformer_layers"]:
 
-    for lind, layer in enumerate(config["conv_layers"]):
-        pre_model.add_module(f"conv_{lind}", nn.Conv1d(layer[0], layer[1], layer[2], padding="same"))
-        pre_model.add_module(f"relu_{lind}", nn.ReLU())
-        if layer[3] > 1:
-            pre_model.add_module(f"maxpool_{lind}", nn.MaxPool1d(layer[3]))
+            pre_model = PreNetworkAttention(
+                n_input, 
+                n_context, 
+                config["transformer_layers"]["embed_dim"], 
+                num_heads=config["transformer_layers"]["num_heads"], 
+                num_layers=config["transformer_layers"]["num_layers"])
+        else:
+            raise Exception("Please define either transformer or convolution not both")
+    else:
+        pre_model = nn.Sequential()
 
-    pre_model.add_module("flatten", nn.Flatten())
-    
-    for lind, layer in enumerate(config["linear_layers"]):
-        pre_model.add_module(f"lin_{lind}", nn.LazyLinear(layer))
+        for lind, layer in enumerate(config["conv_layers"]):
+            pre_model.add_module(f"conv_{lind}", nn.Conv1d(layer[0], layer[1], layer[2], padding="same"))
+            pre_model.add_module(f"relu_{lind}", nn.ReLU())
+            if layer[3] > 1:
+                pre_model.add_module(f"maxpool_{lind}", nn.MaxPool1d(layer[3]))
 
-    pre_model.add_module("output", nn.LazyLinear(n_context))
+        pre_model.add_module("flatten", nn.Flatten())
+        
+        for lind, layer in enumerate(config["linear_layers"]):
+            pre_model.add_module(f"lin_{lind}", nn.LazyLinear(layer))
+
+        pre_model.add_module("output", nn.LazyLinear(n_context))
 
     # Flow creation
 
@@ -148,19 +177,22 @@ def load_models(config, device):
         config["basis_order"], 
         config["n_masses"], 
         config["sample_rate"], 
-        n_dimensions=config["n_dimensions"], 
+        n_dimensions=3, 
         detectors=config["detectors"], 
         window=config["window"], 
-        return_windowed_coeffs=config["return_windowed_coeffs"],
+        window_acceleration=config["window_acceleration"],
         basis_type=config["basis_type"],
-        data_type=config["data_type"])
+        data_type=config["data_type"],
+        prior_args=config["prior_args"])
 
+    n_basis = config["basis_order"]
     if config["basis_type"] == "fourier":
-        n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    else:
-        n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+        n_basis += 2
+    feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
 
+    n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
+    n_input = config["sample_rate"]*config["duration"]
 
     pre_model, model = create_models(config, device)
 
