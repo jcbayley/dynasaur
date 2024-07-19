@@ -18,7 +18,8 @@ from massdynamics.data_generation.models import (
     newtonian_orbits_decay,
     kepler_orbits,
     inspiral_orbits,
-    oscillating_orbits
+    oscillating_orbits,
+    circular_orbits
 )
 from massdynamics.basis_functions import basis
 
@@ -55,6 +56,19 @@ def generate_data(
                 prior_args=prior_args)
     elif data_type.split("-")[0] in ["newtonian", "newtonian_decay", "newtoniandecay"]:
         times, positions, masses, position_coeffs = newtonian_orbits.generate_data(
+                n_data, 
+                basis_order, 
+                n_masses, 
+                sample_rate, 
+                n_dimensions, 
+                detectors=detectors, 
+                window=window, 
+                window_acceleration=window_acceleration, 
+                basis_type=basis_type,
+                data_type=data_type,
+                prior_args=prior_args)
+    elif data_type.split("-")[0] in ["circular"]:
+        times, positions, masses, position_coeffs = circular_orbits.generate_data(
                 n_data, 
                 basis_order, 
                 n_masses, 
