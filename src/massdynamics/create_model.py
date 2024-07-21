@@ -172,7 +172,7 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics, snr = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 

@@ -32,7 +32,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
 
     n_test = config["n_test_data"] if n_test is None else n_test
 
-    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr = data_generation.generate_data(
         n_test, 
         config["basis_order"], 
         config["n_masses"], 
