@@ -112,6 +112,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             data_type = config["data_type"],
             fourier_weight=config["fourier_weight"],
             noise_variance=config["noise_variance"],
+            snr = config["snr"],
             prior_args=config["prior_args"])
 
     acc_basis_order = cshape
