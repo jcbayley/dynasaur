@@ -346,7 +346,7 @@ def preprocess_data(
 
 
 
-    if window_strain is not None:
+    if window_strain not in ["none", None, False]:
         strain = get_window_strain(strain, window_type=window_strain)
     
     # get only the required dimensions for training
