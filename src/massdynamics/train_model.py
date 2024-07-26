@@ -82,7 +82,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     if config["load_data"]:
         print("loading data ........")
-        times, basis_dynamics, masses, strain, cshape, positions = data_generation.load_data(
+        times, basis_dynamics, masses, strain, cshape, positions, snrs = data_generation.load_data(
             data_dir = config["data_dir"], 
             basis_order = config["basis_order"],
             n_masses = config["n_masses"],
@@ -99,7 +99,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         config["n_data"] = len(labels)
     else:
         print("making data ........")
-        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snrs = data_generation.generate_data(
             n_data=config["n_data"], 
             basis_order=config["basis_order"], 
             n_masses=config["n_masses"], 
@@ -112,6 +112,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             data_type = config["data_type"],
             fourier_weight=config["fourier_weight"],
             noise_variance=config["noise_variance"],
+            snr=config["snr"],
             prior_args=config["prior_args"])
 
     acc_basis_order = cshape
@@ -281,7 +282,7 @@ if __name__ == "__main__":
     if "data_dir" not in config.keys():
         config["data_dir"] = "./data"
     if "fourier_weight" not in config.keys():
-        config["fourier_weight"] = 0.9
+        config["fourier_weight"] = 0.0
         
     if train_model:
         run_training(config, continue_train=continue_train)

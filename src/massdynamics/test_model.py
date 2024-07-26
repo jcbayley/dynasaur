@@ -32,7 +32,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
 
     n_test = config["n_test_data"] if n_test is None else n_test
 
-    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr = data_generation.generate_data(
         n_test, 
         config["basis_order"], 
         config["n_masses"], 
@@ -46,6 +46,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         fourier_weight=config["fourier_weight"],
         coordinate_type=config["coordinate_type"],
         noise_variance=config["noise_variance"],
+        snr=config["snr"],
         prior_args=config["prior_args"]
         )
 
@@ -584,7 +585,8 @@ def test_model_2d(
                 f.create_dataset("recon_strain", data=m_recon_strain)
                 f.create_dataset("recon_masses", data=m_recon_masses)
                 f.create_dataset("source_timeseries", data=source_tseries)
-                f.create_dataset("source_strain", data=source_strain)
+                f.create_dataset("source_strain", data=data[0].cpu().numpy())
+                f.create_dataset("source_strain_signal_only", data=source_strain)
                 f.create_dataset("source_masses", data=source_masses)
                 f.create_dataset("source_basis", data=source_coeffs)
                 f.create_dataset("recon_basis", data=multi_coeff_samples)
@@ -1023,7 +1025,8 @@ def test_model_3d(
                 f.create_dataset("recon_strain", data=m_recon_strain)
                 f.create_dataset("recon_masses", data=m_recon_masses)
                 f.create_dataset("source_timeseries", data=source_tseries)
-                f.create_dataset("source_strain", data=source_strain)
+                f.create_dataset("source_strain", data=data[0].cpu().numpy())
+                f.create_dataset("source_strain_signal_only", data=source_strain)
                 f.create_dataset("source_masses", data=source_masses)
                 f.create_dataset("source_basis", data=source_coeffs)
                 f.create_dataset("recon_basis", data=multi_coeff_samples)

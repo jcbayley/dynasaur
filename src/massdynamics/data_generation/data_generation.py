@@ -38,6 +38,7 @@ def generate_data(
     fourier_weight=0.0,
     coordinate_type="cartesian",
     noise_variance = 0.0,
+    snr = None,
     prior_args={}):
 
     if data_type.split("-")[0] == "random":
@@ -163,7 +164,7 @@ def generate_data(
             #if n_masses > 1:
             #    positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
 
-        # move to center of mass frane 
+        # move to center of mass frame 
         if n_masses > 1:
             positions[data_index] = data_processing.subtract_center_of_mass(positions[data_index], masses[data_index])
             
@@ -183,7 +184,6 @@ def generate_data(
                 )
             
             if window_acceleration not in [False, None, "none"]:
-                #print(np.shape(temp_coeffs), np.shape(window_coeffs))
                 temp_coeffs  = window_functions.window_coeffs(times, temp_coeffs.T, window_coeffs, basis_type=basis_type).T
             else:
                 temp_coeffs = temp_coeffs
@@ -209,8 +209,8 @@ def generate_data(
             all_basis_dynamics[data_index], 
             detectors, 
             basis_type=basis_type,
-            sky_position=prior_args["sky_position"],
-            compute_energy=False)
+            compute_energy=False,
+            sky_position=prior_args["sky_position"])
 
         all_time_dynamics[data_index] = compute_waveform.get_time_dynamics(
             all_basis_dynamics[data_index], 
@@ -223,11 +223,97 @@ def generate_data(
     feature_shape = np.prod(np.shape(all_basis_dynamics)[1:]) + len(all_masses[0])
     #samples_shape, feature_shape = np.shape(output_coeffs_mass)
 
-    if noise_variance > 0 and noise_variance != False:
-        strain_timeseries = strain_timeseries + np.random.normal(0, noise_variance, size=np.shape(strain_timeseries))
+    print("snr", snr)
+    if noise_variance > 0 and noise_variance != False or snr not in [None, "none", False, np.inf]:
+        print(snr)
+        if snr not in [None, "none", False, np.inf]:
+            #signal_power = np.mean(strain_timeseries**2, axis=-1)
 
-    return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics
+            #(sp[0])**2 + (sp[1])**2 + (sp[2])**2 = snr**2 * np**n2
 
+            # Compute the noise power from the SNR
+            # sum over the 
+            """
+            noise_variance = np.sqrt(np.sum(signal_power / snr, axis=1))
+            print(noise_variance)
+            noise_variance = np.repeat(noise_variance[..., np.newaxis], np.shape(strain_timeseries)[-2], axis=-1)
+            noise_variance = np.repeat(noise_variance[..., np.newaxis], np.shape(strain_timeseries)[-1], axis=-1)
+            noise = np.random.normal(0, noise_variance, size=np.shape(strain_timeseries))
+            """
+            snrs, noise_variance = compute_individual_snrs_and_noise_variance(strain_timeseries, np.sqrt(snr))
+            noise_variance = np.repeat(noise_variance[..., np.newaxis], np.shape(strain_timeseries)[-2], axis=-1)
+            noise_variance = np.repeat(noise_variance[..., np.newaxis], np.shape(strain_timeseries)[-1], axis=-1) * sample_rate
+            noise = np.random.normal(0, np.sqrt(noise_variance), size=np.shape(strain_timeseries))
+        else:
+            noise = np.random.normal(0, np.sqrt(noise_variance), size=np.shape(strain_timeseries))
+
+        strain_timeseries = strain_timeseries + noise
+
+        signal_power = np.mean(strain_timeseries**2, axis=-1)
+        noise_power = np.mean(noise**2, axis=-1)
+
+        # Compute the SNR
+        snr = np.sum((signal_power / noise_power)**2, -1)
+        print(snr)
+    
+    else:
+        snr = np.ones(n_data)*np.inf
+
+    return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics, snr
+
+def compute_individual_snrs_and_noise_variance(signal, total_snr, sampling_frequency):
+    """
+    Compute the individual SNRs and fixed noise variance for each detector to achieve a given total SNR.
+
+    Parameters:
+    signal (numpy array): The signal time series of shape (Ndata, Ndetectors, Nsamples).
+    total_snr (float): The total signal-to-noise ratio (SNR) for the network.
+
+    Returns:
+    tuple: A tuple containing:
+        - numpy array: The individual SNRs for each detector, shape (Ndata, Ndetectors).
+        - float: The fixed noise variance for each detector.
+    """
+    # Compute the power of the signal for each detector in each set
+    signal_power = np.mean(signal**2, axis=(2))  # Shape (Ndata, Ndetectors)
+    # Compute the total signal power across all detectors for each set
+    total_signal_power = np.sqrt(np.sum(signal_power, axis=1))  # Shape (Ndata)
+    # Compute the total noise power required to achieve the given total SNR
+    total_noise_power = total_signal_power / (total_snr)  # Shape (Ndata)
+    # Compute the noise variance for each detecqtor (assuming equal noise variance)
+    noise_variance = total_noise_power / signal_power.shape[1]  # Shape (Ndata)
+    
+    # Compute individual SNRs
+    individual_snrs = signal_power / noise_variance[:, np.newaxis]  # Shape (Ndata, Ndetectors)
+    
+    return individual_snrs, noise_variance 
+
+def compute_individual_snrs_and_noise_variance(signal, total_snr):
+    """
+    Compute the individual SNRs and fixed noise variance for each detector to achieve a given total SNR.
+
+    Parameters:
+    signal (numpy array): The signal time series of shape (Ndata, Ndetectors, Nsamples).
+    total_snr (float): The total signal-to-noise ratio (SNR) for the network.
+
+    Returns:
+    tuple: A tuple containing:
+        - numpy array: The individual SNRs for each detector, shape (Ndata, Ndetectors).
+        - float: The fixed noise variance for each detector.
+    """
+    # Compute the power of the signal for each detector in each set
+    signal_power = np.mean(signal**2, axis=(2))  # Shape (Ndata, Ndetectors)
+    # Compute the total signal power across all detectors for each set
+    total_signal_power = np.sqrt(np.sum(signal_power, axis=1))  # Shape (Ndata)
+    # Compute the total noise power required to achieve the given total SNR
+    total_noise_power = total_signal_power / (total_snr)  # Shape (Ndata)
+    # Compute the noise variance for each detector (assuming equal noise variance)
+    noise_variance = total_noise_power / signal_power.shape[1]  # Shape (Ndata)
+    
+    # Compute individual SNRs
+    individual_snrs = signal_power / noise_variance[:, np.newaxis]  # Shape (Ndata, Ndetectors)
+    
+    return individual_snrs, np.sqrt(noise_variance)
 
 def get_data_path(
     basis_order: int = 8,
