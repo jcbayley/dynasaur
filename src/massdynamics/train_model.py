@@ -282,7 +282,7 @@ if __name__ == "__main__":
     if "data_dir" not in config.keys():
         config["data_dir"] = "./data"
     if "fourier_weight" not in config.keys():
-        config["fourier_weight"] = 0.9
+        config["fourier_weight"] = 0.0
         
     if train_model:
         run_training(config, continue_train=continue_train)
