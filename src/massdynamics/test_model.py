@@ -151,7 +151,8 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             spherical_coords=config["spherical_coords"],
             basis_type=config["basis_type"],
             sky_position=config["prior_args"]["sky_position"],
-            make_plots=make_plots)
+            make_plots=make_plots,
+            flow_package=config["flow_model_type"].split("-")[0])
     elif config["n_dimensions"] == 3:
         test_model_3d(
             model=model, 
@@ -171,7 +172,8 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             spherical_coords=config["spherical_coords"],
             basis_type=config["basis_type"],
             sky_position=config["prior_args"]["sky_position"],
-            make_plots=make_plots)
+            make_plots=make_plots,
+            flow_package=config["flow_model_type"].split("-")[0])
 
 
 
@@ -233,7 +235,8 @@ def test_model_2d(
     window_strain=None,
     spherical_coords=False,
     make_plots=True,
-    sky_position=(np.pi, np.pi/2)):
+    sky_position=(np.pi, np.pi/2),
+    flow_package="zuko"):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -263,8 +266,12 @@ def test_model_2d(
         for batch, (label, data) in enumerate(dataloader):
             label, data = label.to(device), data.to(device)
             input_data = pre_model(data)
-          
-            coeffmass_samples = model(input_data).sample().cpu().numpy()
+            if flow_package == "zuko":
+                coeffmass_samples = model(input_data).sample().cpu().numpy()
+            elif flow_package == "glasflow":
+                coeffmass_samples = model.sample(1, conditional=input_data).cpu().numpy()
+            else:
+                raise Exception(f"No flow package {flow_package}")
             print("ccoeff1", np.max(coeffmass_samples[:,:-2]))
             print("cmass1", np.max(coeffmass_samples[:,-2:]))
             pre_model, mass_samples, coeff_samples, _ = data_processing.unpreprocess_data(
@@ -399,8 +406,12 @@ def test_model_2d(
                                 fname = os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
 
-            
-            multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu().numpy()
+            if flow_package == "zuko":
+                multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu().numpy()
+            elif flow_package == "glasflow":
+                multi_coeffmass_samples = model.sample(n_samples, conditional=input_data).cpu().numpy()
+            else:
+                raise Exception(f"No flow package {flow_package}")
 
     
             pre_model, multi_mass_samples, multi_coeff_samples, _ = data_processing.unpreprocess_data(
@@ -644,7 +655,8 @@ def test_model_3d(
     window_strain=None,
     spherical_coords=False,
     sky_position=(np.pi, np.pi/2),
-    make_plots=True):
+    make_plots=True,
+    flow_package="zuko"):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -674,7 +686,13 @@ def test_model_3d(
             label, data = label.to(device), data.to(device)
             input_data = pre_model(data)
           
-            coeffmass_samples = model(input_data).sample().cpu().numpy()
+          
+            if flow_package == "zuko":
+                coeffmass_samples = model(input_data).sample().cpu().numpy()
+            elif flow_package == "glasflow":
+                coeffmass_samples = model.sample(1, conditional=input_data).cpu().numpy()
+            else:
+                raise Exception(f"No flow package {flow_package}")
             print("ccoeff1", np.max(coeffmass_samples[:,:-2]))
             print("cmass1", np.max(coeffmass_samples[:,-2:]))
             pre_model, mass_samples, coeff_samples, _ = data_processing.unpreprocess_data(
@@ -863,8 +881,12 @@ def test_model_3d(
                     source_masses)
                 """
 
-            
-            multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu().numpy()
+            if flow_package == "zuko":
+                multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu().numpy()
+            elif flow_package == "glasflow":
+                multi_coeffmass_samples = model.sample(n_samples, conditional=input_data).cpu().numpy()
+            else:
+                raise Exception(f"No flow package {flow_package}")
 
     
             pre_model, multi_mass_samples, multi_coeff_samples, _ = data_processing.unpreprocess_data(

@@ -70,10 +70,17 @@ def create_models(config, device=None):
     n_basis = config["basis_order"]
     if config["basis_type"] == "fourier":
         n_basis += 2
-    feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
+    
+    if config["timestep-predict"]:
+        feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]
+    else:
+        feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
 
     n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
+    if config["timestep-predict"]:
+        n_context += 1
+        
     n_input = config["sample_rate"]*config["duration"]
 
     if device is not None:
