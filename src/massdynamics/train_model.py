@@ -25,7 +25,8 @@ def train_epoch(
     pre_model: torch.nn.Module, 
     optimiser: torch.optim, 
     device:str = "cpu", 
-    train:bool = True) -> float:
+    train:bool = True,
+    flow_package="zuko") -> float:
     """train one epoch for data
 
     Args:
@@ -49,7 +50,12 @@ def train_epoch(
 
         optimiser.zero_grad()
         input_data = pre_model(data)
-        loss = -model(input_data).log_prob(label).mean()
+        if flow_package == "zuko":
+            loss = -model(input_data).log_prob(label).mean()
+        elif flow_package == "glasflow":
+            loss = -model.log_prob(label, conditional=input_data).mean()
+        else:
+            raise Exception(f"Package {flow_package} not supported")
 
         if train:
             loss.backward()
@@ -76,7 +82,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         f.write(configstring)
 
     device = torch.device(config["device"])
-    print(torch.cuda.get_device_name(device))
+    if torch.cuda.is_available():
+        print(torch.cuda.get_device_name(device))
 
     data_dimensions = 3
 
@@ -122,6 +129,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     n_context = config["n_context"]
+    flow_package = config["flow_model_type"].split("-")[0]
 
     fig, ax = plt.subplots()
     ax.plot(strain[0])
@@ -191,11 +199,11 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         if continue_train:
             epoch = epoch + start_epoch
 
-        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config["device"], train=True)
+        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config["device"], train=True, flow_package=flow_package)
         train_losses.append(train_loss)
 
         with torch.no_grad():
-            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config["device"], train=False)
+            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config["device"], train=False, flow_package=flow_package)
             val_losses.append(val_loss)
             
         if epoch % 100 == 0:

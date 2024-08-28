@@ -14,11 +14,13 @@ from zuko.flows import (
     Unconditional,
     LazyTransform,
 )
+import glasflow
 from zuko.distributions import DiagNormal
 import numpy as np
 from massdynamics.data_generation import (
     data_generation,
 )
+
 import torch
 import torch.nn as nn
 import os
@@ -106,8 +108,7 @@ def create_models(config, device=None):
         pre_model.add_module("output", nn.LazyLinear(n_context))
 
     # Flow creation
-
-    if config["flow_model_type"] == "custom":
+    if config["flow_model_type"] == "zuko-custom":
         bins = config["nsplines"]
         randperm = False
         orders = [
@@ -145,13 +146,43 @@ def create_models(config, device=None):
             base=base
             ).to(config["device"])
         
-    elif config["flow_model_type"] == "cnf":
+    elif config["flow_model_type"] == "zuko-cnf":
         model = zuko.flows.CNF(
             n_features, 
             context=n_context, 
             hidden_features=config["hidden_features"]
             ).to(config["device"])
+
+    elif config["flow_model_type"] == "zuko_nsf":
+        model = zuko.flows.spline.NSF(
+            n_features, 
+            context=n_context, 
+            transforms=config["ntransforms"], 
+            bins=config["nsplines"], 
+            hidden_features=config["hidden_features"]
+            ).to(config["device"])
+        
+    elif config["flow_model_type"] == "glasflow-nsf":
+        model = glasflow.CouplingNSF(
+            n_inputs=n_features,
+            n_transforms=config["ntransforms"],
+            n_blocks_per_transform=len(config["hidden_features"]),
+            n_conditional_inputs=n_context,
+            n_neurons=config["hidden_features"][0],
+            num_bins=config["nsplines"]
+        ).to(config["device"])
+
+    elif config["flow_model_type"] == "glasflow-enflow":
+        # Not working yet
+        model = glasflow.EnFlow(
+            n_inputs=n_features,
+            n_transforms=config["n_transforms"],
+            n_conditional_inputs=n_context,
+            n_neurons=config["hidden_features"],
+            num_bins=config["nsplines"]
+        ).to(config["device"])
     else:
+        print("-- No flow specified -- Using zuko nsf --")
         model = zuko.flows.spline.NSF(
             n_features, 
             context=n_context, 
