@@ -7,7 +7,7 @@ from massdynamics.data_generation import (
 from massdynamics.basis_functions import basis
 import massdynamics.create_model as create_model
 from scipy import signal
-from massdynamics.test_model import run_testing
+from massdynamics.test_model_timestep import run_testing
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
@@ -45,11 +45,15 @@ def train_epoch(
         model.eval()
 
     train_loss = 0
-    for batch, (label, data) in enumerate(dataloader):
+    for batch, (label, data, times) in enumerate(dataloader):
         label, data = label.to(device), data.to(device)
 
         optimiser.zero_grad()
         input_data = pre_model(data)
+        # concatenate the time of the sample to the embedded data
+        #print(input_data.size(), times.size())
+        input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
+
         if flow_package == "zuko":
             loss = -model(input_data).log_prob(label).mean()
         elif flow_package == "glasflow":
@@ -138,7 +142,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     if continue_train:
         pre_model, model, weights = create_model.load_models(config, device=config["device"])
-        pre_model, labels, strain = data_processing.preprocess_data(
+        pre_model, labels, strain, batch_times = data_processing.preprocess_data(
             pre_model, 
             basis_dynamics,
             masses, 
@@ -150,12 +154,12 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             device=config["device"],
             basis_type=config["basis_type"],
             n_dimensions=config["n_dimensions"],
-            convert_to_timestep=config["timestep-predict"])
+            split_data=True)
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
         pre_model.to(config["device"])
         model.to(config["device"])
-        pre_model, labels, strain = data_processing.preprocess_data(
+        pre_model, labels, strain, batch_times = data_processing.preprocess_data(
             pre_model, 
             basis_dynamics,
             masses, 
@@ -167,16 +171,16 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             device=config["device"],
             basis_type=config["basis_type"],
             n_dimensions=config["n_dimensions"],
-            convert_to_timestep=config["timestep-predict"])
+            split_data=True)
 
 
     plotting.plot_data(times, positions, strain, 10, config["root_dir"])
 
-    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain))
+    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times))
 
-    train_size = int(0.9*config["n_data"])
+    train_size = int(0.9*config["n_data"]*config["basis_order"])
     #test_size = 10
-    train_set, val_set = random_split(dataset, (train_size, config["n_data"] - train_size))
+    train_set, val_set = random_split(dataset, (train_size, config["n_data"]*config["basis_order"] - train_size))
     train_loader = DataLoader(train_set, batch_size=config["batch_size"],shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config["batch_size"])
 

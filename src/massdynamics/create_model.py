@@ -92,7 +92,7 @@ def create_models(config, device=None):
 
             pre_model = PreNetworkAttention(
                 n_input, 
-                n_context, 
+                config["n_context"], 
                 config["transformer_layers"]["embed_dim"], 
                 num_heads=config["transformer_layers"]["num_heads"], 
                 num_layers=config["transformer_layers"]["num_layers"])
