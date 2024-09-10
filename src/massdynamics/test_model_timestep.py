@@ -221,7 +221,7 @@ def test_model_2d(
     model.eval()
     with torch.no_grad():
         for batch, (label, data, times) in enumerate(dataloader):
-            label, data = label.to(device), data.to(device)
+            label, data, times = label.to(device), data.to(device), times.to(device)
             input_data = pre_model(data)
             input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
             #print(input_data.size(), label.size(), data.size(), times.size())

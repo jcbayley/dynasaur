@@ -46,7 +46,7 @@ def train_epoch(
 
     train_loss = 0
     for batch, (label, data, times) in enumerate(dataloader):
-        label, data = label.to(device), data.to(device)
+        label, data, times = label.to(device), data.to(device), times.to(device)
 
         optimiser.zero_grad()
         input_data = pre_model(data)
