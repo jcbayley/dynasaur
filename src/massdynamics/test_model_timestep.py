@@ -77,8 +77,9 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
 
     #n_context = config["sample_rate"]*2
 
-
     dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
+
+
     test_loader = DataLoader(dataset, batch_size=len(times))
 
 
@@ -196,9 +197,10 @@ def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previ
     vel_factor = 2 if includes_velocities else 1
     output_samples = torch.zeros((len(input_data), n_samples, n_masses*n_dim*vel_factor + n_masses))
     for index, tstep_input in enumerate(input_data):
+        #temp_previous_positions = torch.randn(temp_previous_positions.shape).to(device)*0.1
+        #temp_previous_positions = torch.zeros(temp_previous_positions.shape).to(device)
         tstep_input = torch.concatenate([tstep_input.unsqueeze(0).repeat(n_samples, 1), temp_previous_positions.flatten(start_dim=1)], dim=-1)
         #sampled_tstep_input = tstep_input.repeat_interleave(n_samples, dim=0) 
-        # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
         multi_coeffmass_samples = model.sample(n_samples, conditional=tstep_input)
         # add timesteps samples to output array
         output_samples[index] = multi_coeffmass_samples

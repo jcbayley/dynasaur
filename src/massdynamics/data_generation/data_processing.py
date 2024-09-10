@@ -411,7 +411,8 @@ def preprocess_data(
             previous_positions = torch.from_numpy(basis_dynamics)[:,:,:,indices]
             # now has shape (batch_size, n_masses, n_dimensions, n_timesteps, n_prev_points)
             previous_positions[:,:,:,indices<0] = 0
-            previous_positions += torch.randn(previous_positions.size())*0.01
+            # add noise to the previous positions as on evaluation we do not have the absolute truth.
+            previous_positions += torch.randn(previous_positions.size())*0.1
             previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
         else:
             previous_positions = torch.zeros((np.shape(split_dynamics)[0], 1))
