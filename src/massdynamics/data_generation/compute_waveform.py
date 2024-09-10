@@ -332,9 +332,9 @@ def compute_hplus_hcross(masses, x, xdot, xddot):
 
     Args:
         masses (_type_): (N_masses)
-        x (_type_): (N_masses, N_dimensions, N_times)
-        xdot (_type_): (N_masses, N_dimensions, N_times)
-        xddot (_type_): (N_masses, N_dimensions, N_times)
+        x (_type_): (N_times, N_masses, N_dimensions)
+        xdot (_type_): (N_times, N_masses, N_dimensions)
+        xddot (_type_): (N_times, N_masses, N_dimensions)
 
     Returns:
         tuple: hplus, hcross
@@ -365,7 +365,17 @@ def compute_hplus_hcross(masses, x, xdot, xddot):
     return hplus, hcross
 
 def dynamics_to_hplus_hcross(times, masses, basis_dynamics, basis_type="fourier"):
+    """_summary_
 
+    Args:
+        times (_type_): _description_
+        masses (_type_): _description_
+        basis_dynamics (_type_): (Nmasses, N_dims, N_times)
+        basis_type (str, optional): _description_. Defaults to "fourier".
+
+    Returns:
+        _type_: _description_
+    """
     norm_factor = 1
 
     fx = basis_dynamics
@@ -380,7 +390,7 @@ def dynamics_to_hplus_hcross(times, masses, basis_dynamics, basis_type="fourier"
     xdot = basis[basis_type]["val"](times, fxdot)
     xddot = basis[basis_type]["val"](times, fxddot)
 
-    hplus, hcross = compute_hplus_hcross(masses, x, xdot, xddot)
+    hplus, hcross = compute_hplus_hcross(masses, np.transpose(x, (2,0,1)), np.transpose(xdot, (2,0,1)), np.transpose(xddot, (2,0,1)))
 
     pols = np.array([[hplus, hcross], [hcross, -hplus]])
 
