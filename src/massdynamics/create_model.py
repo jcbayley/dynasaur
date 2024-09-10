@@ -70,16 +70,31 @@ def create_models(config, device=None):
     n_basis = config["basis_order"]
     if config["basis_type"] == "fourier":
         n_basis += 2
-    
-    if config["timestep-predict"]:
-        feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]
+
+    if config["return_velocities"]:
+        vel_features = 2
     else:
-        feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
+        vel_features = 1
+
+    if config["include_previous_positions"]:
+        extra_context = config["n_masses"]*config["n_dimensions"]*config["n_previous_positions"]
+    else:
+        extra_context = 0
+
+    if config["timestep-predict"]:
+        tstep_context = 1
+    else:
+        tstep_context = 0
+
+
+    if config["timestep-predict"]:
+        feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*vel_features
+    else:
+        feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis*vel_features
 
     n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["n_context"]
-    if config["timestep-predict"]:
-        n_context += 1
+    
+    n_context = config["n_context"] + tstep_context + extra_context
         
     n_input = config["sample_rate"]*config["duration"]
 
@@ -92,7 +107,7 @@ def create_models(config, device=None):
 
             pre_model = PreNetworkAttention(
                 n_input, 
-                config["n_context"], 
+                n_context - tstep_context - extra_context, 
                 config["transformer_layers"]["embed_dim"], 
                 num_heads=config["transformer_layers"]["num_heads"], 
                 num_layers=config["transformer_layers"]["num_layers"])
@@ -210,7 +225,7 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics, snr = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics, snr, basis_velocities = data_generation.generate_data(
         2, 
         config["basis_order"], 
         config["n_masses"], 

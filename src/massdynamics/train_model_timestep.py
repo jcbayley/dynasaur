@@ -26,7 +26,8 @@ def train_epoch(
     optimiser: torch.optim, 
     device:str = "cpu", 
     train:bool = True,
-    flow_package="zuko") -> float:
+    flow_package="zuko",
+    include_previous_positions=False) -> float:
     """train one epoch for data
 
     Args:
@@ -45,15 +46,18 @@ def train_epoch(
         model.eval()
 
     train_loss = 0
-    for batch, (label, data, times) in enumerate(dataloader):
-        label, data, times = label.to(device), data.to(device), times.to(device)
+    for batch, (label, data, times, previous_positions) in enumerate(dataloader):
+        label, data, times, previous_positions = label.to(device), data.to(device), times.to(device), previous_positions.to(device)
 
         optimiser.zero_grad()
         input_data = pre_model(data)
         # concatenate the time of the sample to the embedded data
         #print(input_data.size(), times.size())
-        input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
-
+        if include_previous_positions:
+            input_data = torch.cat([input_data, times.unsqueeze(-1), previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32)
+        else:
+            input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
+        
         if flow_package == "zuko":
             loss = -model(input_data).log_prob(label).mean()
         elif flow_package == "glasflow":
@@ -104,13 +108,14 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             window_acceleration = config["window_acceleration"],
             basis_type = config["basis_type"],
             data_type = config["data_type"],
-            noise_variance=config["noise_variancce"]
+            noise_variance=config["noise_variance"],
+            return_velocities=config["return_velocities"]
             )
    
         config["n_data"] = len(labels)
     else:
         print("making data ........")
-        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snrs = data_generation.generate_data(
+        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snrs, basis_velocities = data_generation.generate_data(
             n_data=config["n_data"], 
             basis_order=config["basis_order"], 
             n_masses=config["n_masses"], 
@@ -124,7 +129,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             fourier_weight=config["fourier_weight"],
             noise_variance=config["noise_variance"],
             snr=config["snr"],
-            prior_args=config["prior_args"])
+            prior_args=config["prior_args"],
+            return_velocities=config["return_velocities"])
 
     acc_basis_order = cshape
 
@@ -142,7 +148,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     if continue_train:
         pre_model, model, weights = create_model.load_models(config, device=config["device"])
-        pre_model, labels, strain, batch_times = data_processing.preprocess_data(
+        pre_model, labels, strain, batch_times, previous_positions = data_processing.preprocess_data(
             pre_model, 
             basis_dynamics,
             masses, 
@@ -154,12 +160,14 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             device=config["device"],
             basis_type=config["basis_type"],
             n_dimensions=config["n_dimensions"],
-            split_data=True)
+            split_data=True,
+            basis_velocities=basis_velocities,
+            n_previous_positions=config["n_previous_positions"])
     else:   
         pre_model, model = create_model.create_models(config, device=config["device"])
         pre_model.to(config["device"])
         model.to(config["device"])
-        pre_model, labels, strain, batch_times = data_processing.preprocess_data(
+        pre_model, labels, strain, batch_times, previous_positions = data_processing.preprocess_data(
             pre_model, 
             basis_dynamics,
             masses, 
@@ -171,15 +179,17 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             device=config["device"],
             basis_type=config["basis_type"],
             n_dimensions=config["n_dimensions"],
-            split_data=True)
+            split_data=True,
+            basis_velocities=basis_velocities,
+            n_previous_positions=config["n_previous_positions"])
 
 
-    plotting.plot_data(times, positions, strain, 10, config["root_dir"])
+    indices = np.random.choice(np.arange(len(positions)), size=10)
+    plotting.plot_data(times, positions[indices], strain[indices], 10, config["root_dir"])
 
-    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times))
+    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
 
     train_size = int(0.9*config["n_data"]*config["basis_order"])
-    #test_size = 10
     train_set, val_set = random_split(dataset, (train_size, config["n_data"]*config["basis_order"] - train_size))
     train_loader = DataLoader(train_set, batch_size=config["batch_size"],shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config["batch_size"])
@@ -205,11 +215,11 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         if continue_train:
             epoch = epoch + start_epoch
 
-        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config["device"], train=True, flow_package=flow_package)
+        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config["device"], train=True, flow_package=flow_package, include_previous_positions=config["include_previous_positions"])
         train_losses.append(train_loss)
 
         with torch.no_grad():
-            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config["device"], train=False, flow_package=flow_package)
+            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config["device"], train=False, flow_package=flow_package, include_previous_positions=config["include_previous_positions"])
             val_losses.append(val_loss)
             
         if epoch % 100 == 0:

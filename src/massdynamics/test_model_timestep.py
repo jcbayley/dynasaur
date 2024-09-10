@@ -32,7 +32,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
 
     n_test = config["n_test_data"] if n_test is None else n_test
 
-    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr, basis_velocities = data_generation.generate_data(
         n_test, 
         config["basis_order"], 
         config["n_masses"], 
@@ -47,11 +47,13 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         coordinate_type=config["coordinate_type"],
         noise_variance=config["noise_variance"],
         snr=config["snr"],
-        prior_args=config["prior_args"]
+        prior_args=config["prior_args"],
+        return_velocities=config["return_velocities"]
         )
 
+    print(np.shape(basis_dynamics))
 
-    pre_model, labels, strain, batch_times = data_processing.preprocess_data(
+    pre_model, labels, strain, batch_times, previous_positions = data_processing.preprocess_data(
         pre_model, 
         basis_dynamics,
         masses, 
@@ -63,16 +65,20 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         device=config["device"],
         basis_type=config["basis_type"],
         n_dimensions=config["n_dimensions"],
-        split_data=True)
+        split_data=True,
+        basis_velocities=basis_velocities,
+        n_previous_positions=config["n_previous_positions"])
+
+    print(np.shape(labels), np.shape(strain), )
 
     acc_basis_order = config["basis_order"]#cshape
 
-    n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    #n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
 
-    n_context = config["sample_rate"]*2
+    #n_context = config["sample_rate"]*2
 
 
-    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times))
+    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
     test_loader = DataLoader(dataset, batch_size=len(times))
 
 
@@ -109,7 +115,10 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             basis_type=config["basis_type"],
             sky_position=config["prior_args"]["sky_position"],
             make_plots=make_plots,
-            flow_package=config["flow_model_type"].split("-")[0])
+            flow_package=config["flow_model_type"].split("-")[0],
+            return_velocities=config["return_velocities"],
+            include_previous_positions=config["include_previous_positions"],
+            n_previous_positions=config["n_previous_positions"])
     elif config["n_dimensions"] == 3:
         test_model_3d(
             model=model, 
@@ -171,6 +180,43 @@ def test_model_1d(model, dataloader, times, n_masses, basis_order, n_dimensions,
 
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
+def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previous_steps, includes_velocities=False, device="cpu"):
+    """gets samples recurrently
+
+    Args:
+        flow (_type_): _description_
+        input_data (_type_): _description_
+        n_samples (_type_): _description_
+        n_masses (_type_): _description_
+        n_dim (_type_): _description_
+        n_previous_steps (_type_): _description_
+    """
+    # starting point for previous positions is all zeros
+    temp_previous_positions = torch.zeros((n_samples, n_masses, n_dim, n_previous_steps)).to(device)
+    vel_factor = 2 if includes_velocities else 1
+    output_samples = torch.zeros((len(input_data), n_samples, n_masses*n_dim*vel_factor + n_masses))
+    for index, tstep_input in enumerate(input_data):
+        tstep_input = torch.concatenate([tstep_input.unsqueeze(0).repeat(n_samples, 1), temp_previous_positions.flatten(start_dim=1)], dim=-1)
+        #sampled_tstep_input = tstep_input.repeat_interleave(n_samples, dim=0) 
+        # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
+        multi_coeffmass_samples = model.sample(n_samples, conditional=tstep_input)
+        # add timesteps samples to output array
+        output_samples[index] = multi_coeffmass_samples
+
+        # get the positions of the objects from the sampled output and reshape
+        if includes_velocities:
+            reshape_samples = multi_coeffmass_samples[:,:-n_masses].reshape(n_samples, n_masses, 2, n_dim)[:,:,0,:]
+        else:
+            reshape_samples = multi_coeffmass_samples[:,:-n_masses].reshape(n_samples, n_masses, n_dim)
+
+        # roll previous positions to shift to next time step
+        temp_previous_positions = torch.roll(temp_previous_positions, shifts=-1, dims=-1)
+        # fill final time step with current sampled position
+        temp_previous_positions[:, :, :, -1] = reshape_samples
+
+    # permute indices so its (nsamples, ntime, ncoeffs)
+    output_samples = output_samples.permute(1,0,2).reshape((output_samples.size(0)*output_samples.size(1), output_samples.size(2)))
+    return output_samples
 
 def test_model_2d(
     model, 
@@ -193,7 +239,10 @@ def test_model_2d(
     spherical_coords=False,
     make_plots=True,
     sky_position=(np.pi, np.pi/2),
-    flow_package="zuko"):
+    flow_package="zuko",
+    return_velocities=False,
+    include_previous_positions=False,
+    n_previous_positions=2):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -220,30 +269,35 @@ def test_model_2d(
     n_detectors = len(detectors)
     model.eval()
     with torch.no_grad():
-        for batch, (label, data, times) in enumerate(dataloader):
-            label, data, times = label.to(device), data.to(device), times.to(device)
+        for batch, (label, data, batch_times, previous_positions) in enumerate(dataloader):
+            label, data, batch_times = label.to(device), data.to(device), batch_times.to(device)
+            n_batch = len(label)//data.size(-1)
             input_data = pre_model(data)
-            input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
+            # include the time 
+            input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1)
             #print(input_data.size(), label.size(), data.size(), times.size())
-            if flow_package == "zuko":
-                multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu().numpy()
-            elif flow_package == "glasflow":
-                # repeat the input data n time as glasflow needs conditional to be repeated (must be a better way)
-                input_data = input_data.repeat_interleave(n_samples, dim=0) 
-                # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
-                multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
-                # undo interleaved repeat by splitting the times and samples, then permuting time  dimension to end
-                # extra dimension added so output matches shape with zuko output
-                multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), 1, label.size(-1)))
-                #multi_coeffmass_samples = multi_coeffmass_samples.permute(1,2,3,0).cpu().numpy()
+            if include_previous_positions:
+                multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, includes_velocities=return_velocities, device=device)
+                multi_coeffmass_samples = multi_coeffmass_samples.reshape(-1, 1, label.size(-1))
             else:
-                raise Exception(f"No flow package {flow_package}")
+                if flow_package == "zuko":
+                    multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu()
+                    multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
+                elif flow_package == "glasflow":
+                    # repeat the input data n time as glasflow needs conditional to be repeated (must be a better way)
+                    input_data = input_data.repeat_interleave(n_samples, dim=0) 
+                    # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
+                    multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
+                    multi_coeffmass_samples = multi_coeffmass_samples.view((-1, n_samples, label.size(-1))).permute(1,0,2).reshape(-1,label.size(-1))
+                    # undo interleaved repeat by splitting the times and samples, then permuting time  dimension to end
+                    multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
+                    #multi_coeffmass_samples = multi_coeffmass_samples.permute(1,2,3,0).cpu().numpy()
+                else:
+                    raise Exception(f"No flow package {flow_package}")
             
-            print("mcms", np.shape(multi_coeffmass_samples[:,0]))
+            # un preprocess the true masses and timeseries
 
-            # get the strain and timeseries into time domain array
-
-            _, t_mass, t_coeff, _ = data_processing.unpreprocess_data(
+            _, t_mass, t_coeff, _, t_vel = data_processing.unpreprocess_data(
                 pre_model, 
                 label.cpu().numpy(), 
                 data.cpu().numpy(), 
@@ -254,16 +308,21 @@ def test_model_2d(
                 n_dimensions=n_dimensions,
                 device=device,
                 basis_type=basis_type,
-                basis_order=basis_order)
+                basis_order=basis_order,
+                split_data=True,
+                return_velocities=return_velocities)
        
             source_coeffs = t_coeff[0]
             source_masses = t_mass[0]
+            source_velocities = t_vel[0] if t_vel is not None else None
 
+            # compute true motion of masses
             source_tseries = compute_waveform.get_time_dynamics(
                 source_coeffs,
                 upsample_times,  
                 basis_type=basis_type)
             
+            # get the true strain
             source_strain, source_energy,source_coeffs = data_processing.get_strain_from_samples(
                 upsample_times, 
                 source_masses,  
@@ -275,12 +334,14 @@ def test_model_2d(
                 basis_order=basis_order,
                 sky_position=sky_position)
             
+            # normalise the strain as unpreprocess un(de) normalised it
             source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
     
             # get the samples from the flow reprocessed into a timeseries array
-            pre_model, multi_mass_samples, multi_coeff_samples, _ = data_processing.unpreprocess_data(
+            # print(label.shape, data.shape, times.shape, multi_coeffmass_samples[:,0].shape)
+            pre_model, multi_mass_samples, multi_coeff_samples, _, multi_velocity_samples = data_processing.unpreprocess_data(
                 pre_model, 
-                multi_coeffmass_samples[:,0], 
+                multi_coeffmass_samples[:,0].cpu().numpy(), 
                 data.cpu().numpy(), 
                 window_strain=window_strain, 
                 spherical_coords=spherical_coords, 
@@ -290,7 +351,8 @@ def test_model_2d(
                 device=device,
                 basis_type=basis_type,
                 basis_order=basis_order, # set to 1 for the timstep predict
-                split_data=True)
+                split_data=True,
+                return_velocities=return_velocities)
 
             print("mcshape", np.shape(multi_coeff_samples))
 

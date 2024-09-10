@@ -98,7 +98,8 @@ def real_to_complex(input_array):
 def positions_masses_to_samples(
     coeff_samples: np.array,
     mass_samples: np.array,
-    basis_type: str = "chebyshev"
+    basis_type: str = "chebyshev",
+    velocities = None
     ):
     """convert dynamics into samples for network
 
@@ -116,12 +117,19 @@ def positions_masses_to_samples(
     if basis_type == "fourier":
         #coeff_samples = torch.view_as_real(torch.from_numpy(coeff_samples)).flatten(start_dim=-1)
         output_coeffs = complex_to_real(coeff_samples).reshape(np.shape(coeff_samples)[0], -1)
+        if velocities is not None:
+            output_vels = complex_to_real(velocities).reshape(np.shape(coeff_samples)[0], -1)
     else:
         output_coeffs = coeff_samples.reshape(np.shape(coeff_samples)[0], -1)
+        if velocities is not None:
+            output_vels = velocities.reshape(np.shape(coeff_samples)[0], -1)
     # flatten all dimensions apart from 1st which is samples
     #output_coeffs = coeff_samples.flatten(start_dim=1)
     # append masses to the flattened output coefficients 
-    output_coeffs = np.concatenate([output_coeffs, mass_samples], axis=1)
+    if velocities is not None:
+        output_coeffs = np.concatenate([output_coeffs, output_vels, mass_samples], axis=1)
+    else:
+        output_coeffs = np.concatenate([output_coeffs, mass_samples], axis=1)
 
     return output_coeffs
 
@@ -131,7 +139,8 @@ def samples_to_positions_masses(
     n_masses,
     basis_order,
     n_dimensions,
-    basis_type):
+    basis_type,
+    includes_velocities=False):
     """conver outputs samples from flow into coefficients and masses
 
     Args:
@@ -148,12 +157,25 @@ def samples_to_positions_masses(
     if basis_type == "fourier":
         sshape = np.shape(coeffmass_samples[:, :-n_masses])
 
-        coeffs = coeffmass_samples[:, :-n_masses].reshape(
-            sshape[0], 
-            n_masses, 
-            n_dimensions, 
-            int(basis_order/2 + 1), 
-            2)
+        if includes_velocities:
+            coeffs = coeffmass_samples[:, :-n_masses].reshape(
+                sshape[0], 
+                n_masses, 
+                n_dimensions, 
+                2,
+                int(basis_order/2 + 1), 
+                2)
+            velocities = coeffs[:,:,:,1]
+            coeffs = coeffs[:,:,:,0]
+            velocities = real_to_complex(velocities)
+        else:
+            coeffs = coeffmass_samples[:, :-n_masses].reshape(
+                sshape[0], 
+                n_masses, 
+                n_dimensions, 
+                int(basis_order/2 + 1), 
+                2)
+            velocities = None
         #coeffs = torch.view_as_complex(coeffs).numpy()
         coeffs = real_to_complex(coeffs)
         # plus 1 on basis order as increased coeffs to return same ts samples
@@ -161,9 +183,14 @@ def samples_to_positions_masses(
         #coeffs = np.transpose(coeffs, (0,1,3,2))
         #coeffs = coeffs.reshape(sshape[0], n_masses, int(0.5*basis_order+1), n_dimensions)
     else:
-        coeffs = coeffmass_samples[:,:-n_masses].reshape(-1,n_masses, n_dimensions, basis_order)
-
-    return masses, coeffs
+        if includes_velocities:
+            coeffs = coeffmass_samples[:,:-n_masses].reshape(-1,n_masses, n_dimensions, 2, basis_order)
+            velocities = coeffs[:,:,:,1]
+            coeffs = coeffs[:,:,:,0]
+        else:
+            coeffs = coeffmass_samples[:,:-n_masses].reshape(-1,n_masses, n_dimensions, basis_order)
+            velocities = None
+    return masses, coeffs, velocities
 
 
 def get_strain_from_samples(
@@ -332,6 +359,7 @@ def preprocess_data(
     basis_dynamics,
     masses, 
     strain, 
+    basis_velocities=None,
     window_strain=None, 
     spherical_coords=None, 
     initial_run=False,
@@ -339,7 +367,8 @@ def preprocess_data(
     device="cpu",
     basis_type="fourier",
     n_dimensions=3,
-    split_data=False):
+    split_data=False,
+    n_previous_positions="none"):
 
     if spherical_coords:
         print("Spherical not implemented yet")
@@ -353,6 +382,8 @@ def preprocess_data(
     # get only the required dimensions for training
     #print("b1", np.shape(basis_dynamics))
     basis_dynamics = basis_dynamics[...,:n_dimensions,:]
+    if basis_velocities is not None:
+        basis_velocities = basis_velocities[...,:n_dimensions,:]
     #print("b2", np.shape(basis_dynamics))
 
     if split_data:
@@ -361,19 +392,42 @@ def preprocess_data(
         # reshape to [batch_size*n_timesteps, n_masses, n_dimensions]
 
         split_dynamics = reshape_to_time_batch(torch.from_numpy(basis_dynamics)).numpy()
-
+        if basis_velocities is not None:
+            split_velocities = reshape_to_time_batch(torch.from_numpy(basis_velocities)).numpy()
+        else:
+            split_velocities = None
         # make strain shape (batchsize*n_times, n_detectors, n_timesteps)
         strain = torch.from_numpy(strain).repeat_interleave(n_t, dim=0).numpy()
         masses = torch.from_numpy(masses).repeat_interleave(n_t, dim=0).numpy()
-        times = torch.linspace(0,1,n_t).repeat(batch_size).numpy()
+        batch_times = torch.linspace(0,1,n_t).repeat(batch_size).numpy()
+
+        if n_previous_positions not in ["none", None, False]:
+            # repeat basis dynamics n_time times
+            # define indices as the index minus 2 data points
+            indices = torch.stack([torch.arange(i-n_previous_positions, i) for i in range(n_t)])
+            # for first point just keep selecting the same point
+            #indices[indices<0] = 0
+            # select indices to use and move them to the second dimension equivalent to above dynamics, then flatten as before
+            previous_positions = torch.from_numpy(basis_dynamics)[:,:,:,indices]
+            # now has shape (batch_size, n_masses, n_dimensions, n_timesteps, n_prev_points)
+            previous_positions[:,:,:,indices<0] = 0
+            previous_positions += torch.randn(previous_positions.size())*0.01
+            previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
+        else:
+            previous_positions = torch.zeros((np.shape(split_dynamics)[0], 1))
+
     else:
-        times = None
+        batch_times = None
+        previous_positions = None
         split_dynamics = basis_dynamics
+        split_velocities = basis_velocities
     
+    #print("basis vel shapes:", np.shape(split_dynamics), np.shape(split_velocities))
     labels = positions_masses_to_samples(
         split_dynamics,
         masses,
-        basis_type = basis_type
+        basis_type = basis_type,
+        velocities = split_velocities
         )
 
     if initial_run:
@@ -399,7 +453,7 @@ def preprocess_data(
             n_masses=n_masses)
 
 
-    return pre_model, labels, strain, times
+    return pre_model, labels, strain, batch_times, previous_positions
 
 def unpreprocess_data(
     pre_model, 
@@ -413,7 +467,8 @@ def unpreprocess_data(
     basis_type="fourier",
     basis_order=16,
     device="cpu",
-    split_data=False):
+    split_data=False,
+    return_velocities=False):
 
 
     if spherical_coords:
@@ -421,16 +476,50 @@ def unpreprocess_data(
         #basis_dynamics = spherical_to_cartesian(basis_dynamics)
     
     if strain is not None:
+        # remove normalisation from strain
         strain, norm_factor = unnormalise_data(
             strain, 
             pre_model.norm_factor)
 
     if labels is not None:
+        # remove normalisation from the labels (different normalisation for positionsal and masses)
         labels2, label_norm_factor, mass_norm_factor = unnormalise_labels(
             labels, 
             label_norm_factor=pre_model.label_norm_factor, 
             mass_norm_factor=pre_model.mass_norm_factor, 
             n_masses=n_masses)
+
+    else:
+        masses, basis_dynamics = None, None
+    
+    if split_data:
+        # split each timestep into a different batch
+        n_batchtimes, n_detectors, n_times = np.shape(strain)
+        n_batch = n_batchtimes//n_times
+        
+        strain = torch.from_numpy(strain).view((n_batch, n_times, n_detectors, n_times))[:, 0, :, :]
+        n_samp_batch = labels2.shape[0]//n_times
+        masses = torch.from_numpy(labels2[:,-n_masses:]).view((n_samp_batch, n_times, n_masses))[:, 0, :]
+        strain = strain.numpy()
+        masses = masses.numpy()
+
+        # if velocities included, split them from positionsal coeffs
+        if return_velocities:
+            basis_m_dynamics = labels2[:,:-n_masses].reshape(-1, 2, n_masses, n_dimensions)
+            basis_dynamics = basis_m_dynamics[:,0,:,:]
+            basis_velocities = basis_m_dynamics[:,1,:,:]
+        else:
+            basis_dynamics = labels2[:,:-n_masses].reshape(-1, n_masses, n_dimensions)
+        
+        n_samp_batch = basis_dynamics.shape[0]//basis_order
+        basis_dynamics = reshape_to_original(torch.from_numpy(basis_dynamics), n_samp_batch, basis_order).numpy()
+        if return_velocities:
+            basis_velocities = reshape_to_original(torch.from_numpy(basis_velocities), n_samp_batch, basis_order).numpy()
+        else:
+            basis_velocities = None
+        #print(np.shape(basis_dynamics))
+    else:
+        # convert the samples into separate positions and masses
         masses, basis_dynamics = samples_to_positions_masses(
                 labels2,
                 n_masses,
@@ -438,27 +527,15 @@ def unpreprocess_data(
                 n_dimensions,
                 basis_type
             )
-    else:
-        masses, basis_dynamics = None, None
+        basis_velocities = None
     
-    if split_data:
-        n_batchtimes, n_detectors, n_times = np.shape(strain)
-        n_batch = n_batchtimes//n_times
-
-        strain = torch.from_numpy(strain).view((n_batch, n_times, n_detectors, n_times))[:, 0, :, :]
-        #masses = torch.from_numpy(masses).view((n_batch, n_times, 1))[:, 0, :]
-        strain = strain.numpy()
-        #masses = masses.numpy()
-        n_batch = basis_dynamics.shape[0]//basis_order
-        #basis_dynamics = reshape_to_original(torch.from_numpy(basis_dynamics), n_batch, basis_order).numpy()
-        #print(np.shape(basis_dynamics))
-    
+    # if the number of dimensions is less than 3 add extra dimensions to make it 3 (filled with zeros)
     if n_dimensions != 3:
         bd_shape = list(np.shape(basis_dynamics))
         bd_shape[-2] = 3 - n_dimensions
         basis_dynamics = np.concatenate([basis_dynamics, np.zeros(bd_shape)], axis=-2)
 
-    return pre_model, masses, basis_dynamics, strain
+    return pre_model, masses, basis_dynamics, strain, basis_velocities
 
 def reshape_to_time_batch(tensor):
     """
@@ -483,149 +560,4 @@ def reshape_to_original(tensor, batch, n_time):
     """
     n_mass, n_dim = tensor.shape[1], tensor.shape[2]
     return tensor.reshape(batch, n_time, n_mass, n_dim).permute(0, 2, 3, 1)
-
-def preprocess_timestep_data(
-    pre_model, 
-    basis_dynamics,
-    masses, 
-    strain, 
-    window_strain=None, 
-    spherical_coords=None, 
-    initial_run=False,
-    n_masses=2,
-    device="cpu",
-    basis_type="fourier",
-    n_dimensions=3):
-    """_summary_
-
-    Args:
-        pre_model (_type_): _description_
-        basis_dynamics (_type_): _description_
-        masses (_type_): _description_
-        strain (_type_): _description_
-        window_strain (_type_, optional): _description_. Defaults to None.
-        spherical_coords (_type_, optional): _description_. Defaults to None.
-        initial_run (bool, optional): _description_. Defaults to False.
-        n_masses (int, optional): _description_. Defaults to 2.
-        device (str, optional): _description_. Defaults to "cpu".
-        basis_type (str, optional): _description_. Defaults to "fourier".
-        n_dimensions (int, optional): _description_. Defaults to 3.
-
-    Raises:
-        Exception: _description_
-
-    Returns:
-        _type_: _description_
-    """
-
-    if basis_type != "timeseries":
-        raise Exception(f"Timestep prediction only works in timeseries basis not {basis_type}")
-
-    if spherical_coords:
-        print("Spherical not implemented yet")
-        #time_dynamics = cartesian_to_spherical(time_dynamics)
-
-
-
-    if window_strain not in ["none", None, False]:
-        strain = get_window_strain(strain, window_type=window_strain)
-    
-    # get only the required dimensions for training
-    #print("b1", np.shape(basis_dynamics))
-    basis_dynamics = basis_dynamics[...,:n_dimensions,:]
-    batch_size, n_m, n_d, n_t = basis_dynamics.shape
-    # shape [batch_size, n_masses, n_dimensions, n_timesteps]
-    # reshape to [batch_size*n_timesteps, n_masses, n_dimensions]
-
-    split_dynamics = reshape_to_time_batch(torch.from_numpy(basis_dynamics)).numpy()
-
-    # make strain shape (batchsize*n_times, n_detectors, n_timesteps)
-    strain = torch.from_numpy(strain).repeat_interleave(n_t, dim=0).numpy()
-    masses = torch.from_numpy(masses).repeat_interleave(n_t, dim=0).numpy()
-    times = torch.linspace(0,1,n_t).repeat(batch_size).numpy()
-
-    labels = positions_masses_to_samples(
-        split_dynamics,
-        masses,
-        basis_type = basis_type
-        )
-
-    if initial_run:
-        strain, norm_factor = normalise_data(
-            strain, 
-            None)
-        pre_model.norm_factor = norm_factor
-        labels, label_norm_factor, mass_norm_factor = normalise_labels(
-            labels, 
-            None, 
-            None,
-            n_masses=n_masses)
-        pre_model.label_norm_factor = label_norm_factor
-        pre_model.mass_norm_factor = mass_norm_factor
-    else:
-        strain, norm_factor = normalise_data(
-            strain, 
-            pre_model.norm_factor)
-        labels, label_norm_factor, mass_norm_factor = normalise_labels(
-            labels, 
-            label_norm_factor=pre_model.label_norm_factor, 
-            mass_norm_factor=pre_model.mass_norm_factor, 
-            n_masses=n_masses)
-
-
-    return pre_model, labels, strain, times
-
-def unpreprocess_timestep_data(
-    pre_model, 
-    labels, 
-    strain,
-    window_strain=None, 
-    spherical_coords=None, 
-    initial_run=False,
-    n_masses=2,
-    n_dimensions=3,
-    basis_type="fourier",
-    basis_order=16,
-    device="cpu"):
-
-
-    if spherical_coords:
-        print("spherical not implemented yet")
-        #basis_dynamics = spherical_to_cartesian(basis_dynamics)
-    
-    strain, norm_factor = unnormalise_data(
-        strain, 
-        pre_model.norm_factor)
-
-    labels2, label_norm_factor, mass_norm_factor = unnormalise_labels(
-        labels, 
-        label_norm_factor=pre_model.label_norm_factor, 
-        mass_norm_factor=pre_model.mass_norm_factor, 
-        n_masses=n_masses)
-
-    masses, basis_dynamics = samples_to_positions_masses(
-            labels2,
-            n_masses,
-            basis_order,
-            n_dimensions,
-            basis_type
-        )
-    
-    n_batchtimes, n_detectors, n_times = np.shape(strain)
-    n_batch = n_batchtimes//n_times
-
-    strain = torch.from_numpy(strain).view((n_batch, n_times, n_detectors, n_times))[:, 0, :, :]
-    masses = torch.from_numpy(masses).view((n_batch, n_times, 1))[:, 0, :]
-    strain = strain.numpy()
-    masses = masses.numpy()
-
-    basis_dynamics = reshape_to_original(torch.from_numpy(basis_dynamics), n_batch, n_times).numpy()
-    
-    # if it is not in 3d then add a set of zeros to the extra dimensions an make the tensor 3d
-    if n_dimensions != 3:
-        bd_shape = list(np.shape(basis_dynamics))
-        bd_shape[-2] = 3 - n_dimensions
-        basis_dynamics = np.concatenate([basis_dynamics, np.zeros(bd_shape)], axis=-2)
-
-    return pre_model, masses, basis_dynamics, strain
 
