@@ -61,7 +61,7 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 3, 
     detectors=["H1"], 
-    window="none", 
+    window_strain="none", 
     window_acceleration=True, 
     basis_type="fourier",
     data_type="inspiral",

@@ -1,7 +1,7 @@
 import torch
 import numpy as np
-import massdynamics.data_generation.compute_waveform as compute_waveform
-import massdynamics.window_functions as window_functions
+import dynasaur.data_generation.compute_waveform as compute_waveform
+import dynasaur.window_functions as window_functions
 import scipy
 import copy
 
@@ -172,7 +172,7 @@ def get_strain_from_samples(
     coeffs, 
     detectors=["H1"],
     window_acceleration=False, 
-    window="none", 
+    window_strain="none", 
     basis_type="chebyshev",
     basis_order=16,
     sky_position=(np.pi, np.pi/2)):

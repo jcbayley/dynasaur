@@ -1,6 +1,6 @@
 # dynasaur
 
-Project to find the mass dynamics of a system from the strain time series. 
+Project to find the mass and dynamics of a system from the gravitational wavestrain time series. 
 Use normalising flows conditioned on strain to find polynomial coefficients of mass motion
 
 For a test case we trained a model on circular orbits with random radii, masses and initial phase angle. These were simulated in the x,y plane, however were reconstructed in 3d space.

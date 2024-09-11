@@ -17,7 +17,10 @@ def add(amps1, amps2):
 
 def derivative(amps1, m=1, duration=2):
     # needs to be fixed to take in different durations
-    return np.gradient(amps1, axis=-1)
+    output = amps1
+    for i in range(m):
+        output = np.gradient(output, axis=-1)
+    return output
 
 def int1(t1, t0):
     rt0 = cumtrapz(t1, axis=-1) + np.tile(t0[...,0:1], (np.shape(t0)[-1]-1))

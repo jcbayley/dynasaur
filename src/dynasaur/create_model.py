@@ -14,11 +14,13 @@ from zuko.flows import (
     Unconditional,
     LazyTransform,
 )
+import glasflow
 from zuko.distributions import DiagNormal
 import numpy as np
-from massdynamics.data_generation import (
+from dynasaur.data_generation import (
     data_generation,
 )
+
 import torch
 import torch.nn as nn
 import os
@@ -54,45 +56,47 @@ def create_models(config, device=None):
     """
     times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics = data_generation.generate_data(
         2, 
-        config["basis_order"], 
-        config["n_masses"], 
-        config["sample_rate"], 
-        n_dimensions=config["n_dimensions"], 
-        detectors=config["detectors"], 
-        window=config["window"], 
-        window_acceleration=config["window_acceleration"],
-        basis_type=config["basis_type"],
-        data_type=config["data_type"])
+        config.get("basis_order"], 
+        config.get("n_masses"], 
+        config.get("sample_rate"], 
+        n_dimensions=config.get("n_dimensions"], 
+        detectors=config.get("detectors"], 
+        window=config.get("window"], 
+        window_acceleration=config.get("window_acceleration"],
+        basis_type=config.get("basis_type"],
+        data_type=config.get("data_type"])
     """
 
-    n_basis = config["basis_order"]
-    if config["basis_type"] == "fourier":
+    n_basis = config.get("Data", "basis_order")
+    if config.get("Data", "basis_type") == "fourier":
         n_basis += 2
-    feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
+    
+    feature_shape = config.get("Data", "n_masses") + config.get("Data", "n_masses")*config.get("Data", "n_dimensions")*n_basis
 
-    n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["n_context"]
-    n_input = config["sample_rate"]*config["duration"]
+    n_features = feature_shape#cshape*config.get("n_masses"]*config.get("n_dimensions"] + config.get("n_masses"]
+    n_context = config.get("FlowNetwork", "n_context")
+        
+    n_input = config.get("Data", "sample_rate")*config.get("Data", "duration")
 
-    if device is not None:
-        config["device"] = device
+    #if device is not None:
+    #    config.get("Training", "device") = device
 
     # pre processing creation
-    if "transformer_layers" in config:
-        if config["transformer_layers"]:
+    if config.get("PreNetwork", "transformer_layers") not in ["none", None]:
+        if config.get("PreNetwork", "transformer_layers"):
 
             pre_model = PreNetworkAttention(
                 n_input, 
                 n_context, 
-                config["transformer_layers"]["embed_dim"], 
-                num_heads=config["transformer_layers"]["num_heads"], 
-                num_layers=config["transformer_layers"]["num_layers"])
+                config.get("PreNetwork","transformer_layers")["embed_dim"], 
+                num_heads=config.get("PreNetwork", "transformer_layers")["num_heads"], 
+                num_layers=config.get("PreNetwork", "transformer_layers")["num_layers"])
         else:
             raise Exception("Please define either transformer or convolution not both")
-    else:
+    elif config.get("PreNetwork", "conv_layers") not in ["none", None]:
         pre_model = nn.Sequential()
 
-        for lind, layer in enumerate(config["conv_layers"]):
+        for lind, layer in enumerate(config.get("PreNetwork","conv_layers")):
             pre_model.add_module(f"conv_{lind}", nn.Conv1d(layer[0], layer[1], layer[2], padding="same"))
             pre_model.add_module(f"relu_{lind}", nn.ReLU())
             if layer[3] > 1:
@@ -100,15 +104,16 @@ def create_models(config, device=None):
 
         pre_model.add_module("flatten", nn.Flatten())
         
-        for lind, layer in enumerate(config["linear_layers"]):
+        for lind, layer in enumerate(config.get("PreNetwork", "linear_layers")):
             pre_model.add_module(f"lin_{lind}", nn.LazyLinear(layer))
 
         pre_model.add_module("output", nn.LazyLinear(n_context))
+    else:
+        raise Exception("No Pre network parameters")
 
     # Flow creation
-
-    if config["flow_model_type"] == "custom":
-        bins = config["nsplines"]
+    if config.get("FlowNetwork", "flow_model_type") == "zuko-custom":
+        bins = config.get("FlowNetwork", "nsplines")
         randperm = False
         orders = [
             torch.arange(n_features),
@@ -118,14 +123,14 @@ def create_models(config, device=None):
             Unconditional(lambda: SigmoidTransform().inv),
         ]
 
-        for i in range(config["ntransforms"]):
+        for i in range(config.get("FlowNetwork", "ntransforms")):
             transforms.append(MaskedAutoregressiveTransform(
                 features=n_features,
                 context=n_context,
                 order=torch.randperm(features) if randperm else orders[i % 2],
                 univariate=MonotonicRQSTransform,
                 shapes=[(bins,), (bins,), (bins - 1,)],
-                hidden_features=config["hidden_features"]
+                hidden_features=config.get("FlowNetwork", "hidden_features")
                 )
             )
         
@@ -143,22 +148,52 @@ def create_models(config, device=None):
         model = Flow(
             transform=transforms, 
             base=base
-            ).to(config["device"])
+            ).to(config.get("Training", "device"))
         
-    elif config["flow_model_type"] == "cnf":
+    elif config.get("FlowNetwork", "flow_model_type") == "zuko-cnf":
         model = zuko.flows.CNF(
             n_features, 
             context=n_context, 
-            hidden_features=config["hidden_features"]
-            ).to(config["device"])
-    else:
+            hidden_features=config.get("FlowNetwork", "hidden_features")
+            ).to(config.get("Training","device"))
+
+    elif config.get("FlowNetwork", "flow_model_type") == "zuko_nsf":
         model = zuko.flows.spline.NSF(
             n_features, 
             context=n_context, 
-            transforms=config["ntransforms"], 
-            bins=config["nsplines"], 
-            hidden_features=config["hidden_features"]
-            ).to(config["device"])
+            transforms=config.get("FlowNetwork", "ntransforms"), 
+            bins=config.get("FlowNetwork", "nsplines"), 
+            hidden_features=config.get("FlowNetwork", "hidden_features")
+            ).to(config.get("Training", "device"))
+        
+    elif config.get("FlowNetwork", "flow_model_type") == "glasflow-nsf":
+        model = glasflow.CouplingNSF(
+            n_inputs=n_features,
+            n_transforms=config.get("FlowNetwork", "ntransforms"),
+            n_blocks_per_transform=len(config.get("FlowNetwork", "hidden_features")),
+            n_conditional_inputs=n_context,
+            n_neurons=config.get("FlowNetwork", "hidden_features")[0],
+            num_bins=config.get("FlowNetwork", "nsplines")
+        ).to(config.get("Training", "device"))
+
+    elif config.get("FlowNetwork", "flow_model_type") == "glasflow-enflow":
+        # Not working yet
+        model = glasflow.EnFlow(
+            n_inputs=n_features,
+            n_transforms=config.get("FlowNetwork", "n_transforms"),
+            n_conditional_inputs=n_context,
+            n_neurons=config.get("FlowNetwork", "hidden_features"),
+            num_bins=config.get("FlowNetwork", "nsplines")
+        ).to(config.get("Training", "device"))
+    else:
+        print("-- No flow specified -- Using zuko nsf --")
+        model = zuko.flows.spline.NSF(
+            n_features, 
+            context=n_context, 
+            transforms=config.get("FlowNetwork", "ntransforms"), 
+            bins=config.get("FlowNetwork", "nsplines"), 
+            hidden_features=config.get("FlowNetwork", "hidden_features")
+            ).to(config.get("Training", "device"))
 
     return pre_model, model
 
@@ -174,32 +209,32 @@ def load_models(config, device):
     """
     times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics, snr = data_generation.generate_data(
         2, 
-        config["basis_order"], 
-        config["n_masses"], 
-        config["sample_rate"], 
+        config.get("Data", "basis_order"), 
+        config.get("Data", "n_masses"), 
+        config.get("Data", "sample_rate"), 
         n_dimensions=3, 
-        detectors=config["detectors"], 
-        window=config["window"], 
-        window_acceleration=config["window_acceleration"],
-        basis_type=config["basis_type"],
-        data_type=config["data_type"],
-        prior_args=config["prior_args"])
+        detectors=config.get("Data", "detectors"), 
+        window_strain=config.get("Data", "window_strain"), 
+        window_acceleration=config.get("Data", "window_acceleration"),
+        basis_type=config.get("Data", "basis_type"),
+        data_type=config.get("Data", "data_type"),
+        prior_args=config.get("Data", "prior_args"))
 
-    n_basis = config["basis_order"]
-    if config["basis_type"] == "fourier":
+    n_basis = config.get("Data", "basis_order")
+    if config.get("Data", "basis_type") == "fourier":
         n_basis += 2
-    feature_shape = config["n_masses"] + config["n_masses"]*config["n_dimensions"]*n_basis
+    feature_shape = config.get("Data", "n_masses") + config.get("Data", "n_masses")*config.get("Data", "n_dimensions")*n_basis
 
-    n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["n_context"]
-    n_input = config["sample_rate"]*config["duration"]
+    n_features = feature_shape#cshape*config.get("n_masses"]*config.get("n_dimensions"] + config.get("n_masses"]
+    n_context = config.get("FlowNetwork", "n_context")
+    n_input = config.get("Data", "sample_rate")*config.get("Data", "duration")
 
     pre_model, model = create_models(config, device)
 
     pre_model.to(device)
     model.to(device)
     
-    weights = torch.load(os.path.join(config["root_dir"],"test_model.pt"), map_location=device)
+    weights = torch.load(os.path.join(config.get("General", "root_dir"),"test_model.pt"), map_location=device)
 
     pre_model.load_state_dict(weights["pre_model_state_dict"])
 
