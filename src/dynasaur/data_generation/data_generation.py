@@ -7,12 +7,12 @@ import argparse
 import h5py
 import os
 import torch
-from massdynamics import window_functions
-from massdynamics.data_generation import (
+from dynasaur import window_functions
+from dynasaur.data_generation import (
     compute_waveform,
     data_processing,
 )
-from massdynamics.data_generation.models import (
+from dynasaur.data_generation.models import (
     random_orbits,
     newtonian_orbits,
     newtonian_orbits_decay,
@@ -21,7 +21,7 @@ from massdynamics.data_generation.models import (
     oscillating_orbits,
     circular_orbits
 )
-from massdynamics.basis_functions import basis
+from dynasaur.basis_functions import basis
 
 
 def generate_data(
@@ -31,8 +31,8 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 1, 
     detectors=["H1"], 
-    window="none", 
-    window_acceleration=True, 
+    window_strain="none", 
+    window_acceleration="none", 
     basis_type="chebyshev",
     data_type = "random",
     fourier_weight=0.0,
@@ -49,7 +49,7 @@ def generate_data(
                 sample_rate, 
                 n_dimensions, 
                 detectors=detectors, 
-                window=window, 
+                window_strain=window_strain, 
                 window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 fourier_weight=fourier_weight,
@@ -63,7 +63,7 @@ def generate_data(
                 sample_rate, 
                 n_dimensions, 
                 detectors=detectors, 
-                window=window, 
+                window_strain=window_strain, 
                 window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 data_type=data_type,
@@ -76,7 +76,7 @@ def generate_data(
                 sample_rate, 
                 n_dimensions, 
                 detectors=detectors, 
-                window=window, 
+                window_strain=window_strain, 
                 window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 data_type=data_type,
@@ -89,7 +89,7 @@ def generate_data(
                 sample_rate, 
                 n_dimensions, 
                 detectors=detectors, 
-                window=window, 
+                window_strain=window_strain, 
                 window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 data_type=data_type,
@@ -102,7 +102,7 @@ def generate_data(
                 sample_rate, 
                 n_dimensions, 
                 detectors=detectors, 
-                window=window, 
+                window_strain=window_strain, 
                 window_acceleration=window_acceleration, 
                 basis_type=basis_type,
                 data_type=data_type,
@@ -322,12 +322,12 @@ def get_data_path(
     sample_rate: int = 128,
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
-    window: str = "none",
+    window_strain: str = "none",
     window_acceleration = False,
     data_type: str = "random"
     ):
 
-    path = os.path.join(f"data_{data_type}_{basis_type}{basis_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window}")
+    path = os.path.join(f"data_{data_type}_{basis_type}{basis_order}_mass{n_masses}_ndim{n_dimensions}_fs{sample_rate}_det{len(detectors)}_win{window_strain}")
 
     return path
 
@@ -340,7 +340,7 @@ def save_data(
     sample_rate: int = 128,
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
-    window: str = "none",
+    window_strain: str = "none",
     window_acceleration = False,
     basis_type: str = "chebyshev",
     data_type: str = "random",
@@ -373,7 +373,7 @@ def save_data(
         sample_rate, 
         n_dimensions=n_dimensions, 
         detectors=detectors, 
-        window=window, 
+        window_strain=window_strain, 
         window_acceleration=window_acceleration,
         basis_type=basis_type,
         data_type=data_type,
@@ -427,7 +427,7 @@ def load_data(
     sample_rate: int = 128,
     n_dimensions: int = 3,
     detectors: list = ["H1", "L1", "V1"],
-    window = False,
+    window_strain = False,
     window_acceleration = False,
     basis_type = "chebyshev",
     data_type: str = "random"
@@ -440,7 +440,7 @@ def load_data(
         sample_rate = sample_rate,
         n_dimensions = n_dimensions,
         detectors = detectors,
-        window = window,
+        window_strain = window_strain,
         window_acceleration = False,
         data_type=data_type)
 
