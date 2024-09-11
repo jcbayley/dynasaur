@@ -409,7 +409,8 @@ def test_model_2d(
             if flow_package == "zuko":
                 multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu().numpy()
             elif flow_package == "glasflow":
-                multi_coeffmass_samples = model.sample(n_samples, conditional=input_data).cpu().numpy()
+                input_data = input_data.repeat_interleave(n_samples, dim=0) 
+                multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data).cpu().numpy()
             else:
                 raise Exception(f"No flow package {flow_package}")
 
