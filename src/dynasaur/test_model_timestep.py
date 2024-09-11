@@ -3,18 +3,18 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 import os
 import numpy as np
 import copy
-from massdynamics.data_generation import (
+from dynasaur.data_generation import (
     data_generation,
     data_processing,
     compute_waveform
 )
-from massdynamics.create_model import (
+from dynasaur.create_model import (
     load_models,
     create_models
 )
 
-from massdynamics.plotting import plotting, make_animations
-from massdynamics.basis_functions import basis
+from dynasaur.plotting import plotting, make_animations
+from dynasaur.basis_functions import basis
 import h5py
 import matplotlib.pyplot as plt
 
@@ -25,30 +25,27 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
     Args:
         config (dict): _description_
     """
-    pre_model, model, weights = load_models(config, config["device"])
+    pre_model, model, weights = load_models(config, config.get("Training","device"))
 
-    config.setdefault("coordinate_type", "cartesian")
-
-
-    n_test = config["n_test_data"] if n_test is None else n_test
+    n_test = config.get("Data","n_test_data") if n_test is None else n_test
 
     times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr, basis_velocities = data_generation.generate_data(
         n_test, 
-        config["basis_order"], 
-        config["n_masses"], 
-        config["sample_rate"], 
+        config.get("Data","basis_order"), 
+        config.get("Data","n_masses"), 
+        config.get("Data","sample_rate"), 
         n_dimensions=3, 
-        detectors=config["detectors"], 
-        window=config["window"], 
-        window_acceleration=config["window_acceleration"],
-        basis_type = config["basis_type"],
-        data_type = config["data_type"],
-        fourier_weight=config["fourier_weight"],
-        coordinate_type=config["coordinate_type"],
-        noise_variance=config["noise_variance"],
-        snr=config["snr"],
-        prior_args=config["prior_args"],
-        return_velocities=config["return_velocities"]
+        detectors=config.get("Data","detectors"), 
+        window_strain=config.get("Data","window_strain"), 
+        window_acceleration=config.get("Data","window_acceleration"),
+        basis_type = config.get("Data","basis_type"),
+        data_type = config.get("Data","data_type"),
+        fourier_weight=config.get("Data","fourier_weight"),
+        coordinate_type=config.get("Data","coordinate_type"),
+        noise_variance=config.get("Data","noise_variance"),
+        snr=config.get("Data","snr"),
+        prior_args=config.get("Data","prior_args"),
+        return_velocities=config.get("Data","return_velocities")
         )
 
     print(np.shape(basis_dynamics))
@@ -58,24 +55,24 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         basis_dynamics,
         masses, 
         strain, 
-        window_strain=config["window_strain"], 
-        spherical_coords=config["spherical_coords"], 
+        window_strain=config.get("Data","window_strain"), 
+        spherical_coords=config.get("Data","spherical_coords"), 
         initial_run=False,
-        n_masses=config["n_masses"],
-        device=config["device"],
-        basis_type=config["basis_type"],
-        n_dimensions=config["n_dimensions"],
+        n_masses=config.get("Data","n_masses"),
+        device=config.get("Training","device"),
+        basis_type=config.get("Data","basis_type"),
+        n_dimensions=config.get("Data","n_dimensions"),
         split_data=True,
         basis_velocities=basis_velocities,
-        n_previous_positions=config["n_previous_positions"])
+        n_previous_positions=config.get("Data","n_previous_positions"))
 
     print(np.shape(labels), np.shape(strain), )
 
-    acc_basis_order = config["basis_order"]#cshape
+    acc_basis_order = config.get("Data","basis_order")#cshape
 
-    #n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    #n_features = acc_basis_order*config.get("Data","n_masses"]*config.get("Data","n_dimensions"] + config.get("Data","n_masses"]
 
-    #n_context = config["sample_rate"]*2
+    #n_context = config.get("Data","sample_rate"]*2
 
     dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
 
@@ -83,64 +80,62 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
     test_loader = DataLoader(dataset, batch_size=len(times))
 
 
-    upsample_times = np.linspace(np.min(times), np.max(times), config["plot_sample_rate"])
+    upsample_times = np.linspace(np.min(times), np.max(times), config.get("Data","plot_sample_rate"))
 
 
-    if config["n_dimensions"] == 1:
+    if config.get("Data","n_dimensions") == 1:
         test_model_1d(
             model, 
             test_loader, 
             times, 
-            config["n_masses"], 
-            config["basis_order"], 
-            config["n_dimensions"], 
-            config["root_dir"], 
-            config["device"],)
-    elif config["n_dimensions"] == 2:
+            config.get("Data","n_masses"), 
+            config.get("Data","basis_order"), 
+            config.get("Data","n_dimensions"), 
+            config.get("General","root_dir"), 
+            config.get("Training","device"),)
+    elif config.get("Data","n_dimensions") == 2:
         test_model_2d(
             model=model, 
             pre_model=pre_model, 
             dataloader=test_loader,
             times=times,
             upsample_times=upsample_times, 
-            n_masses=config["n_masses"], 
+            n_masses=config.get("Data","n_masses"), 
             basis_order=acc_basis_order, 
-            n_dimensions=config["n_dimensions"], 
-            detectors=config["detectors"], 
-            window=config["window"], 
-            root_dir=config["root_dir"], 
-            device=config["device"], 
-            window_acceleration=config["window_acceleration"],
-            window_strain=config["window_strain"],
-            spherical_coords=config["spherical_coords"],
-            basis_type=config["basis_type"],
-            sky_position=config["prior_args"]["sky_position"],
+            n_dimensions=config.get("Data","n_dimensions"), 
+            detectors=config.get("Data","detectors"), 
+            root_dir=config.get("General","root_dir"), 
+            device=config.get("Training","device"), 
+            window_acceleration=config.get("Data","window_acceleration"),
+            window_strain=config.get("Data","window_strain"),
+            spherical_coords=config.get("Data","spherical_coords"),
+            basis_type=config.get("Data","basis_type"),
+            sky_position=config.get("Data","prior_args")["sky_position"],
             make_plots=make_plots,
-            flow_package=config["flow_model_type"].split("-")[0],
-            return_velocities=config["return_velocities"],
-            include_previous_positions=config["include_previous_positions"],
-            n_previous_positions=config["n_previous_positions"])
-    elif config["n_dimensions"] == 3:
+            flow_package=config.get("FlowNetwork","flow_model_type").split("-")[0],
+            return_velocities=config.get("Data","return_velocities"),
+            include_previous_positions=config.get("Data","include_previous_positions"),
+            n_previous_positions=config.get("Data","n_previous_positions"))
+    elif config.get("Data","n_dimensions") == 3:
         test_model_3d(
             model=model, 
             pre_model=pre_model, 
             dataloader=test_loader,
             times=times,
             upsample_times=upsample_times, 
-            n_masses=config["n_masses"], 
+            n_masses=config.get("Data","n_masses"), 
             basis_order=acc_basis_order, 
-            n_dimensions=config["n_dimensions"], 
-            detectors=config["detectors"], 
-            window=config["window"], 
-            root_dir=config["root_dir"], 
-            device=config["device"], 
-            window_acceleration=config["window_acceleration"],
-            window_strain=config["window_strain"],
-            spherical_coords=config["spherical_coords"],
-            basis_type=config["basis_type"],
-            sky_position=config["prior_args"]["sky_position"],
+            n_dimensions=config.get("Data","n_dimensions"), 
+            detectors=config.get("Data","detectors"), 
+            root_dir=config.get("General","root_dir"), 
+            device=config.get("Training","device"), 
+            window_acceleration=config.get("Data","window_acceleration"),
+            window_strain=config.get("Data","window_strain"),
+            spherical_coords=config.get("Data","spherical_coords"),
+            basis_type=config.get("Data","basis_type"),
+            sky_position=config.get("Data","prior_args")["sky_position"],
             make_plots=make_plots,
-            flow_package=config["flow_model_type"].split("-")[0])
+            flow_package=config.get("FlowNetwork","flow_model_type").split("-")[0])
 
 
 
@@ -230,7 +225,6 @@ def test_model_2d(
     basis_order, 
     n_dimensions, 
     detectors, 
-    window, 
     root_dir, 
     device, 
     n_samples=2000,
@@ -331,7 +325,6 @@ def test_model_2d(
                 source_coeffs, 
                 detectors=detectors,
                 window_acceleration=window_acceleration, 
-                window=window, 
                 basis_type=basis_type,
                 basis_order=basis_order,
                 sky_position=sky_position)
@@ -389,7 +382,6 @@ def test_model_2d(
                     t_co,  
                     detectors=detectors,
                     window_acceleration=window_acceleration, 
-                    window=window, 
                     basis_type=basis_type,
                     basis_order=basis_order,
                     sky_position=sky_position)

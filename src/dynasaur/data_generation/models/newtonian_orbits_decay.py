@@ -4,8 +4,8 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import time
 import timeit
-from massdynamics.basis_functions import basis
-from massdynamics.data_generation import orbits_functions, data_processing
+from dynasaur.basis_functions import basis
+from dynasaur.data_generation import orbits_functions, data_processing
 
 def acceleration_1pn(m0, m1, r, v, rvect, vvect, G, c):
 
@@ -761,7 +761,7 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 3, 
     detectors=["H1"], 
-    window="none", 
+    window_strain="none", 
     window_acceleration=True, 
     basis_type="chebyshev",
     data_type="newtonian-kepler") -> np.array:

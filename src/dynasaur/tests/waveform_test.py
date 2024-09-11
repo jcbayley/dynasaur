@@ -1,10 +1,10 @@
-from massdynamics.data_generation import (
+from dynasaur.data_generation import (
     data_generation,
     compute_waveform,
     data_processing
 )
 
-from massdynamics.basis import basis
+from dynasaur.basis import basis
 
 def test_fixed_velocity(output_dir):
 

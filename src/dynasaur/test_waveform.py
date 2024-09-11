@@ -4,18 +4,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import os
-from massdynamics.data_generation import (
+from dynasaur.data_generation import (
     data_generation,
     data_processing,
     compute_waveform
 )
-from massdynamics.plotting import plotting, make_animations
-from massdynamics.create_model import (
+from dynasaur.plotting import plotting, make_animations
+from dynasaur.create_model import (
     create_models,
     load_models, 
 )
-from massdynamics.basis_functions import basis
-from massdynamics import window_functions
+from dynasaur.basis_functions import basis
+from dynasaur import window_functions
 import zuko
 import argparse
 import copy

@@ -1,7 +1,7 @@
 import numpy as np
-from massdynamics.basis_functions import basis
-import massdynamics.window_functions as window_functions
-from massdynamics.data_generation import (
+from dynasaur.basis_functions import basis
+import dynasaur.window_functions as window_functions
+from dynasaur.data_generation import (
     data_generation,
     compute_waveform,
     data_processing
@@ -79,7 +79,7 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 1, 
     detectors=["H1"], 
-    window="none", 
+    window_strain="none", 
     window_acceleration=True, 
     basis_type="chebyshev",
     fourier_weight=0.0,
