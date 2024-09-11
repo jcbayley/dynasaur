@@ -1,5 +1,5 @@
 import numpy as np
-from massdynamics.basis_functions import (
+from dynasaur.basis_functions import (
     fourier_basis_functions,
     chebyshev_basis_functions,
     timeseries_basis_functions)

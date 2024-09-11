@@ -4,9 +4,9 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import time
 import timeit
-from massdynamics.basis_functions import basis
-from massdynamics.data_generation import orbits_functions, data_processing
-from massdynamics.data_generation.models.newtonian_eom import newton_derivative
+from dynasaur.basis_functions import basis
+from dynasaur.data_generation import orbits_functions, data_processing
+from dynasaur.data_generation.models.newtonian_eom import newton_derivative
 
 
 def get_masses(n_masses):
@@ -616,7 +616,7 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 3, 
     detectors=["H1"], 
-    window="none", 
+    _strain="none", 
     window_acceleration=True, 
     basis_type="chebyshev",
     data_type="newtonian-kepler",

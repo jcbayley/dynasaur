@@ -1,7 +1,7 @@
 import torch
 import numpy as np
-import massdynamics.data_generation.compute_waveform as compute_waveform
-import massdynamics.window_functions as window_functions
+import dynasaur.data_generation.compute_waveform as compute_waveform
+import dynasaur.window_functions as window_functions
 import scipy
 import copy
 
@@ -199,7 +199,7 @@ def get_strain_from_samples(
     coeffs, 
     detectors=["H1"],
     window_acceleration=False, 
-    window="none", 
+    window_strain="none", 
     basis_type="chebyshev",
     basis_order=16,
     sky_position=(np.pi, np.pi/2)):
@@ -411,7 +411,8 @@ def preprocess_data(
             previous_positions = torch.from_numpy(basis_dynamics)[:,:,:,indices]
             # now has shape (batch_size, n_masses, n_dimensions, n_timesteps, n_prev_points)
             previous_positions[:,:,:,indices<0] = 0
-            previous_positions += torch.randn(previous_positions.size())*0.01
+            # add noise to the previous positions as on evaluation we do not have the absolute truth.
+            previous_positions += torch.randn(previous_positions.size())*0.1
             previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
         else:
             previous_positions = torch.zeros((np.shape(split_dynamics)[0], 1))

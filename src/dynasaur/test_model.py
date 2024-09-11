@@ -3,143 +3,177 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 import os
 import numpy as np
 import copy
-from massdynamics.data_generation import (
+from dynasaur.config import read_config
+from dynasaur.data_generation import (
     data_generation,
     data_processing,
     compute_waveform
 )
-from massdynamics.create_model import (
+from dynasaur.create_model import (
     load_models,
     create_models
 )
 
-from massdynamics.plotting import plotting, make_animations
-from massdynamics.basis_functions import basis
+from dynasaur.plotting import plotting, make_animations
+from dynasaur.basis_functions import basis
 import h5py
 import matplotlib.pyplot as plt
 
 
-def run_testing(config:dict, make_plots=False, n_test=None) -> None:
+def run_testing(config, make_plots=False, n_test=None) -> None:
     """ run testing (loads saved model and runs testing scripts)
 
     Args:
         config (dict): _description_
     """
-    pre_model, model, weights = load_models(config, config["device"])
+    pre_model, model, weights = load_models(config, config.get("Training","device"))
 
-    config.setdefault("coordinate_type", "cartesian")
+    #config.setdefault("coordinate_type", "cartesian")
 
 
-    n_test = config["n_test_data"] if n_test is None else n_test
+    n_test = config.get("Data","n_test_data") if n_test is None else n_test
 
-    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr, basis_velocities = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr = data_generation.generate_data(
         n_test, 
-        config["basis_order"], 
-        config["n_masses"], 
-        config["sample_rate"], 
+        config.get("Data","basis_order"), 
+        config.get("Data","n_masses"), 
+        config.get("Data","sample_rate"), 
         n_dimensions=3, 
-        detectors=config["detectors"], 
-        window=config["window"], 
-        window_acceleration=config["window_acceleration"],
-        basis_type = config["basis_type"],
-        data_type = config["data_type"],
-        fourier_weight=config["fourier_weight"],
-        coordinate_type=config["coordinate_type"],
-        noise_variance=config["noise_variance"],
-        snr=config["snr"],
-        prior_args=config["prior_args"],
-        return_velocities=config["return_velocities"]
+        detectors=config.get("Data","detectors"), 
+        window_strain=config.get("Data","window_strain"), 
+        window_acceleration=config.get("Data","window_acceleration"),
+        basis_type = config.get("Data","basis_type"),
+        data_type = config.get("Data","data_type"),
+        fourier_weight=config.get("Data","fourier_weight"),
+        coordinate_type=config.get("Data","coordinate_type"),
+        noise_variance=config.get("Data","noise_variance"),
+        snr=config.get("Data","snr"),
+        prior_args=config.get("Data","prior_args")
         )
 
-    print(np.shape(basis_dynamics))
 
-    pre_model, labels, strain, batch_times, previous_positions = data_processing.preprocess_data(
+    pre_model, labels, strain = data_processing.preprocess_data(
         pre_model, 
         basis_dynamics,
         masses, 
         strain, 
-        window_strain=config["window_strain"], 
-        spherical_coords=config["spherical_coords"], 
+        window_strain=config.get("Data","window_strain"), 
+        spherical_coords=config.get("Data","spherical_coords"), 
         initial_run=False,
-        n_masses=config["n_masses"],
-        device=config["device"],
-        basis_type=config["basis_type"],
-        n_dimensions=config["n_dimensions"],
-        split_data=True,
-        basis_velocities=basis_velocities,
-        n_previous_positions=config["n_previous_positions"])
+        n_masses=config.get("Data","n_masses"),
+        device=config.get("Training","device"),
+        basis_type=config.get("Data","basis_type"),
+        n_dimensions=config.get("Data","n_dimensions"))
 
-    print(np.shape(labels), np.shape(strain), )
+    """
+    strain, norm_factor = data_processing.normalise_data(
+        strain, 
+        pre_model.norm_factor)
+    labels, label_norm_factor, mass_norm_factor = data_processing.normalise_labels(
+        labels, 
+        pre_model.label_norm_factor, 
+        pre_model.mass_norm_factor, 
+        n_masses=config.get("Data","n_masses"])
+    """
 
-    acc_basis_order = config["basis_order"]#cshape
+    """
+    print(labels)
+    t_mass, t_coeff = samples_to_positions_masses(
+                torch.from_numpy(labels[:1]), 
+                config.get("Data","n_masses"],
+                config.get("Data","basis_order"]+2,
+                config.get("Data","n_dimensions"],
+                config.get("Data","basis_type"])
 
-    #n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    print(np.min(t_coeff), np.max(t_coeff))
+ 
+    source_coeffs, source_masses, source_tseries = get_time_dynamics(
+                t_coeff[0],
+                t_mass[0], 
+                times, 
+                config.get("Data","n_masses"], 
+                config.get("Data","basis_order"]+2, 
+                config.get("Data","n_dimensions"], 
+                basis_type=config.get("Data","basis_type"])
 
-    #n_context = config["sample_rate"]*2
+
+    fig, ax = plt.subplots(nrows=3)
+    ax[0].plot(positions[0, :, 0].T, color="k", label="truth")
+    ax[1].plot(positions[0, :, 1].T, color="k")
+    ax[2].plot(positions[0, :, 2].T, color="k")
+
+    ax[0].plot(source_tseries[:, 0].T, ls="--", color="r", label="remake")
+    ax[1].plot(source_tseries[:, 1].T, ls="--", color="r")
+    ax[2].plot(source_tseries[:, 2].T, ls="--", color="r")
+
+    fig.savefig(os.path.join(config.get("Data","root_dir"], "test_pos0.png"))
+    
+    sys.exit()
+    """
+    acc_basis_order = config.get("Data","basis_order")#cshape
+
+    n_features = acc_basis_order*config.get("Data","n_masses")*config.get("Data","n_dimensions") + config.get("Data","n_masses")
+
+    n_context = config.get("Data","sample_rate")*2
+
+    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain))
+    test_loader = DataLoader(dataset, batch_size=1)
 
 
-    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
-    test_loader = DataLoader(dataset, batch_size=len(times))
+    upsample_times = np.linspace(np.min(times), np.max(times), config.get("Data","plot_sample_rate"))
 
 
-    upsample_times = np.linspace(np.min(times), np.max(times), config["plot_sample_rate"])
-
-
-    if config["n_dimensions"] == 1:
+    if config.get("Data","n_dimensions") == 1:
         test_model_1d(
             model, 
             test_loader, 
             times, 
-            config["n_masses"], 
-            config["basis_order"], 
-            config["n_dimensions"], 
-            config["root_dir"], 
-            config["device"],)
-    elif config["n_dimensions"] == 2:
+            config.get("Data","n_masses"), 
+            config.get("Data","basis_order"), 
+            config.get("Data","n_dimensions"), 
+            config.get("General","root_dir"), 
+            config.get("Training","device"),)
+    elif config.get("Data","n_dimensions") == 2:
         test_model_2d(
             model=model, 
             pre_model=pre_model, 
             dataloader=test_loader,
             times=times,
             upsample_times=upsample_times, 
-            n_masses=config["n_masses"], 
+            n_masses=config.get("Data","n_masses"), 
             basis_order=acc_basis_order, 
-            n_dimensions=config["n_dimensions"], 
-            detectors=config["detectors"], 
-            window=config["window"], 
-            root_dir=config["root_dir"], 
-            device=config["device"], 
-            window_acceleration=config["window_acceleration"],
-            window_strain=config["window_strain"],
-            spherical_coords=config["spherical_coords"],
-            basis_type=config["basis_type"],
-            sky_position=config["prior_args"]["sky_position"],
+            n_dimensions=config.get("Data","n_dimensions"), 
+            detectors=config.get("Data","detectors"), 
+            root_dir=config.get("General","root_dir"), 
+            device=config.get("Training","device"), 
+            window_acceleration=config.get("Data","window_acceleration"),
+            window_strain=config.get("Data","window_strain"),
+            spherical_coords=config.get("Data","spherical_coords"),
+            basis_type=config.get("Data","basis_type"),
+            sky_position=config.get("Data","prior_args")["sky_position"],
             make_plots=make_plots,
-            flow_package=config["flow_model_type"].split("-")[0],
-            return_velocities=config["return_velocities"],
-            include_previous_positions=config["include_previous_positions"],
-            n_previous_positions=config["n_previous_positions"])
-    elif config["n_dimensions"] == 3:
+            flow_package=config.get("FlowNetwork","flow_model_type").split("-")[0])
+    elif config.get("Data","n_dimensions") == 3:
         test_model_3d(
             model=model, 
             pre_model=pre_model, 
             dataloader=test_loader,
             times=times,
             upsample_times=upsample_times, 
-            n_masses=config["n_masses"], 
+            n_masses=config.get("Data","n_masses"), 
             basis_order=acc_basis_order, 
-            n_dimensions=config["n_dimensions"], 
-            detectors=config["detectors"], 
-            window=config["window"], 
-            root_dir=config["root_dir"], 
-            device=config["device"], 
-            window_acceleration=config["window_acceleration"],
-            window_strain=config["window_strain"],
-            spherical_coords=config["spherical_coords"],
-            basis_type=config["basis_type"],
-            sky_position=config["prior_args"]["sky_position"],
+            n_dimensions=config.get("Data","n_dimensions"), 
+            detectors=config.get("Data","detectors"), 
+            window=config.get("Data","window_strain"), 
+            root_dir=config.get("General","root_dir"), 
+            device=config.get("Training","device"), 
+            window_acceleration=config.get("Data","window_acceleration"),
+            window_strain=config.get("Data","window_strain"),
+            spherical_coords=config.get("Data","spherical_coords"),
+            basis_type=config.get("Data","basis_type"),
+            sky_position=config.get("Data","prior_args")["sky_position"],
             make_plots=make_plots,
-            flow_package=config["flow_model_type"].split("-")[0])
+            flow_package=config.get("Data","flow_model_type").split("-")[0])
 
 
 
@@ -180,43 +214,6 @@ def test_model_1d(model, dataloader, times, n_masses, basis_order, n_dimensions,
 
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
-def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previous_steps, includes_velocities=False, device="cpu"):
-    """gets samples recurrently
-
-    Args:
-        flow (_type_): _description_
-        input_data (_type_): _description_
-        n_samples (_type_): _description_
-        n_masses (_type_): _description_
-        n_dim (_type_): _description_
-        n_previous_steps (_type_): _description_
-    """
-    # starting point for previous positions is all zeros
-    temp_previous_positions = torch.zeros((n_samples, n_masses, n_dim, n_previous_steps)).to(device)
-    vel_factor = 2 if includes_velocities else 1
-    output_samples = torch.zeros((len(input_data), n_samples, n_masses*n_dim*vel_factor + n_masses))
-    for index, tstep_input in enumerate(input_data):
-        tstep_input = torch.concatenate([tstep_input.unsqueeze(0).repeat(n_samples, 1), temp_previous_positions.flatten(start_dim=1)], dim=-1)
-        #sampled_tstep_input = tstep_input.repeat_interleave(n_samples, dim=0) 
-        # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
-        multi_coeffmass_samples = model.sample(n_samples, conditional=tstep_input)
-        # add timesteps samples to output array
-        output_samples[index] = multi_coeffmass_samples
-
-        # get the positions of the objects from the sampled output and reshape
-        if includes_velocities:
-            reshape_samples = multi_coeffmass_samples[:,:-n_masses].reshape(n_samples, n_masses, 2, n_dim)[:,:,0,:]
-        else:
-            reshape_samples = multi_coeffmass_samples[:,:-n_masses].reshape(n_samples, n_masses, n_dim)
-
-        # roll previous positions to shift to next time step
-        temp_previous_positions = torch.roll(temp_previous_positions, shifts=-1, dims=-1)
-        # fill final time step with current sampled position
-        temp_previous_positions[:, :, :, -1] = reshape_samples
-
-    # permute indices so its (nsamples, ntime, ncoeffs)
-    output_samples = output_samples.permute(1,0,2).reshape((output_samples.size(0)*output_samples.size(1), output_samples.size(2)))
-    return output_samples
 
 def test_model_2d(
     model, 
@@ -228,7 +225,6 @@ def test_model_2d(
     basis_order, 
     n_dimensions, 
     detectors, 
-    window, 
     root_dir, 
     device, 
     n_samples=2000,
@@ -239,10 +235,7 @@ def test_model_2d(
     spherical_coords=False,
     make_plots=True,
     sky_position=(np.pi, np.pi/2),
-    flow_package="zuko",
-    return_velocities=False,
-    include_previous_positions=False,
-    n_previous_positions=2):
+    flow_package="zuko"):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -269,35 +262,34 @@ def test_model_2d(
     n_detectors = len(detectors)
     model.eval()
     with torch.no_grad():
-        for batch, (label, data, batch_times, previous_positions) in enumerate(dataloader):
-            label, data, batch_times = label.to(device), data.to(device), batch_times.to(device)
-            n_batch = len(label)//data.size(-1)
+        for batch, (label, data) in enumerate(dataloader):
+            label, data = label.to(device), data.to(device)
             input_data = pre_model(data)
-            # include the time 
-            input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1)
-            #print(input_data.size(), label.size(), data.size(), times.size())
-            if include_previous_positions:
-                multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, includes_velocities=return_velocities, device=device)
-                multi_coeffmass_samples = multi_coeffmass_samples.reshape(-1, 1, label.size(-1))
+            if flow_package == "zuko":
+                coeffmass_samples = model(input_data).sample().cpu().numpy()
+            elif flow_package == "glasflow":
+                coeffmass_samples = model.sample(1, conditional=input_data).cpu().numpy()
             else:
-                if flow_package == "zuko":
-                    multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu()
-                    multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
-                elif flow_package == "glasflow":
-                    # repeat the input data n time as glasflow needs conditional to be repeated (must be a better way)
-                    input_data = input_data.repeat_interleave(n_samples, dim=0) 
-                    # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
-                    multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
-                    multi_coeffmass_samples = multi_coeffmass_samples.view((-1, n_samples, label.size(-1))).permute(1,0,2).reshape(-1,label.size(-1))
-                    # undo interleaved repeat by splitting the times and samples, then permuting time  dimension to end
-                    multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
-                    #multi_coeffmass_samples = multi_coeffmass_samples.permute(1,2,3,0).cpu().numpy()
-                else:
-                    raise Exception(f"No flow package {flow_package}")
-            
-            # un preprocess the true masses and timeseries
+                raise Exception(f"No flow package {flow_package}")
+            print("ccoeff1", np.max(coeffmass_samples[:,:-2]))
+            print("cmass1", np.max(coeffmass_samples[:,-2:]))
+            pre_model, mass_samples, coeff_samples, _ = data_processing.unpreprocess_data(
+                pre_model, 
+                coeffmass_samples, 
+                data.cpu().numpy(), 
+                window_strain=window_strain, 
+                spherical_coords=spherical_coords, 
+                initial_run=False,
+                n_masses=n_masses,
+                n_dimensions=n_dimensions,
+                device=device,
+                basis_type=basis_type,
+                basis_order=basis_order)
+            print("ccoeff2",np.max(coeff_samples))
+            print("cmass2", np.max(mass_samples))
+            print("csshape:", np.shape(coeff_samples))
 
-            _, t_mass, t_coeff, _, t_vel = data_processing.unpreprocess_data(
+            _, t_mass, t_coeff, _ = data_processing.unpreprocess_data(
                 pre_model, 
                 label.cpu().numpy(), 
                 data.cpu().numpy(), 
@@ -308,40 +300,123 @@ def test_model_2d(
                 n_dimensions=n_dimensions,
                 device=device,
                 basis_type=basis_type,
-                basis_order=basis_order,
-                split_data=True,
-                return_velocities=return_velocities)
-       
+                basis_order=basis_order)
+            """
+            #label = label.cpu().numpy()
+            label, nf, mf = data_processing.unnormalise_labels(
+                label.cpu().numpy(), 
+                pre_model.label_norm_factor, 
+                pre_model.mass_norm_factor,
+                n_masses=n_masses)
+
+
+            t_mass, t_coeff = data_processing.samples_to_positions_masses(
+                label[:1], 
+                n_masses,
+                basis_order,
+                n_dimensions,
+                basis_type)
+            """
+            #print(np.shape(label), np.shape(coeffmass_samples))
+            #print(np.shape(coeff_samples), np.shape(t_coeff))
             source_coeffs = t_coeff[0]
             source_masses = t_mass[0]
-            source_velocities = t_vel[0] if t_vel is not None else None
+            recon_coeffs = coeff_samples[0]
+            recon_masses = mass_samples[0]
 
-            # compute true motion of masses
             source_tseries = compute_waveform.get_time_dynamics(
                 source_coeffs,
                 upsample_times,  
                 basis_type=basis_type)
+
+            recon_tseries = compute_waveform.get_time_dynamics(
+                recon_coeffs, 
+                upsample_times,  
+                basis_type=basis_type)
+
+            recon_strain, recon_energy, recon_coeffs = data_processing.get_strain_from_samples(
+                upsample_times, 
+                recon_masses,
+                recon_coeffs, 
+                detectors=detectors,
+                window_acceleration=window_acceleration, 
+                window_strain=window_strain, 
+                basis_type=basis_type,
+                basis_order=basis_order,
+                sky_position=sky_position)
             
-            # get the true strain
             source_strain, source_energy,source_coeffs = data_processing.get_strain_from_samples(
                 upsample_times, 
                 source_masses,  
                 source_coeffs, 
                 detectors=detectors,
                 window_acceleration=window_acceleration, 
-                window=window, 
+                window_strain=window_strain, 
                 basis_type=basis_type,
                 basis_order=basis_order,
                 sky_position=sky_position)
             
-            # normalise the strain as unpreprocess un(de) normalised it
-            source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
-    
-            # get the samples from the flow reprocessed into a timeseries array
-            # print(label.shape, data.shape, times.shape, multi_coeffmass_samples[:,0].shape)
-            pre_model, multi_mass_samples, multi_coeff_samples, _, multi_velocity_samples = data_processing.unpreprocess_data(
+            
+            # preprocess the strain again
+            #print("masses", source_masses, recon_masses)
+            #print("coeffs", source_coeffs, recon_coeffs)
+            #print("strain", source_strain, recon_strain)
+            #print("rstrain1", np.max(recon_strain))
+            _, _, recon_strain = data_processing.preprocess_data(
                 pre_model, 
-                multi_coeffmass_samples[:,0].cpu().numpy(), 
+                coeff_samples, 
+                mass_samples,
+                recon_strain, 
+                window_strain=window_strain, 
+                spherical_coords=spherical_coords, 
+                initial_run=False,
+                n_masses=n_masses,
+                device=device)
+            #print("rstrain2", np.max(recon_strain))
+
+            #print("sstrain1", np.max(source_strain))
+            _, _, source_strain = data_processing.preprocess_data(
+                pre_model, 
+                coeff_samples, 
+                mass_samples,
+                source_strain, 
+                window_strain=window_strain, 
+                spherical_coords=spherical_coords, 
+                initial_run=False,
+                n_masses=n_masses,
+                device=device)              
+            print("norms", pre_model.norm_factor, pre_model.label_norm_factor)
+            print("vals", np.max(coeff_samples), np.max(source_coeffs))
+            #recon_strain, _ = data_processing.normalise_data(recon_strain, pre_model.norm_factor)
+            #source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
+            source_plot_data = data[0].cpu().numpy()
+            #print("sstrain2", np.max(source_strain), np.max(source_plot_data), np.max(recon_strain))
+            #window = signal.windows.tukey(np.shape(source_strain)[-1], alpha=0.5)
+            #recon_strain = recon_strain * window[None, :]
+            if make_plots:
+                fig = plotting.plot_reconstructions(
+                                upsample_times, 
+                                detectors, 
+                                recon_strain, 
+                                source_strain, 
+                                source_plot_data, 
+                                source_energy,
+                                recon_energy,
+                                fname = os.path.join(plot_out, f"reconstructed_{batch}.png"))
+
+
+            if flow_package == "zuko":
+                multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu().numpy()
+            elif flow_package == "glasflow":
+                input_data = input_data.repeat_interleave(n_samples, dim=0) 
+                multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data).cpu().numpy()
+                multi_coeffmass_samples = multi_coeffmass_samples.reshape(n_samples,1,-1)
+            else:
+                raise Exception(f"No flow package {flow_package}")
+    
+            pre_model, multi_mass_samples, multi_coeff_samples, _ = data_processing.unpreprocess_data(
+                pre_model, 
+                multi_coeffmass_samples[:,0], 
                 data.cpu().numpy(), 
                 window_strain=window_strain, 
                 spherical_coords=spherical_coords, 
@@ -350,9 +425,7 @@ def test_model_2d(
                 n_dimensions=n_dimensions,
                 device=device,
                 basis_type=basis_type,
-                basis_order=basis_order, # set to 1 for the timstep predict
-                split_data=True,
-                return_velocities=return_velocities)
+                basis_order=basis_order)
 
             print("mcshape", np.shape(multi_coeff_samples))
 
@@ -387,20 +460,27 @@ def test_model_2d(
                     t_co,  
                     detectors=detectors,
                     window_acceleration=window_acceleration, 
-                    window=window, 
+                    window_strain=window_strain, 
                     basis_type=basis_type,
                     basis_order=basis_order,
                     sky_position=sky_position)
-                
-                temp_recon_strain, _ = data_processing.normalise_data(temp_recon_strain, pre_model.norm_factor)
 
+                _, _, temp_recon_strain = data_processing.preprocess_data(
+                    pre_model, 
+                    coeff_samples, 
+                    mass_samples,
+                    temp_recon_strain, 
+                    window_strain=window_strain, 
+                    spherical_coords=spherical_coords, 
+                    initial_run=False,
+                    n_masses=n_masses,
+                    device=device)
                 
                 #temp_recon_strain, _ = data_processing.normalise_data(temp_recon_strain, pre_model.norm_factor)
 
                 m_recon_strain[i] = temp_recon_strain
                 #m_recon_energy[i] = temp_recon_energy
 
-            """
             fig, ax = plt.subplots(ncols=n_detectors, nrows=3, figsize=(9,7))
             for pi in range(n_detectors):
                 for mi in range(2):
@@ -464,7 +544,7 @@ def test_model_2d(
             #ax[0,0].legend()
             fig.tight_layout()
             fig.savefig(os.path.join(plot_out, f"test_coeffs_{batch}.png"))
-            
+
             fig, ax = plt.subplots( nrows=n_detectors, figsize=(9,7))
             for pi in range(n_detectors):
                 ax[pi].boxplot(m_recon_strain[:,pi], showfliers=False)
@@ -476,7 +556,6 @@ def test_model_2d(
             #ax[2,0].set_xlim([lmsun-1, lmsun+1])
             #ax[0,0].legend()
             fig.savefig(os.path.join(plot_out, f"test_strain_{batch}.png"))
-            """
             #print("strainmax", np.max(source_strain), np.max(m_recon_strain))
             #print("labelmax", np.max(source_coeffs), np.max(multi_coeff_samples))
             if n_masses == 2:
@@ -553,6 +632,7 @@ def test_model_2d(
                     source_masses, 
                     os.path.join(plot_out,f"heatmap_projections_{batch}.gif"),
                     duration=5)
+    
     
 
 
