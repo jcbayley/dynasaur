@@ -328,7 +328,7 @@ def compute_strain_from_coeffs(times, pols, detectors=["H1"], basis_type="chebys
     return strain_timeseries
 
 def compute_hplus_hcross(masses, x, xdot, xddot):
-    """compute the plus and cross polarisations
+    """compute the plus and cross polarisations 
 
     Args:
         masses (_type_): (N_masses)
@@ -409,7 +409,10 @@ def get_waveform(
 
     duration = np.max(times) - np.min(times)
 
-    strain_coeffs = compute_hTT_coeffs(norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
+    #strain_coeffs = compute_hTT_coeffs(norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
+
+    hplus, hcross, x, xdot, xddot = dynamics_to_hplus_hcross(times, norm_masses, basis_dynamics, basis_type=basis_type)
+    strain_coeffs = np.array([[hplus, hcross], [hcross, -hplus]])
 
     if compute_energy:
         energy = compute_energy_loss(times, norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
@@ -417,6 +420,7 @@ def get_waveform(
         energy = None
 
     strain_timeseries = compute_strain_from_coeffs(times, strain_coeffs, detectors=detectors, basis_type=basis_type, sky_position=sky_position)
+
     """
     strain_timeseries = np.zeros((len(detectors), len(times)))
     for dind, detector in enumerate(detectors):
