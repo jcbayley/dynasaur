@@ -186,13 +186,24 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     indices = np.random.choice(np.arange(len(positions)), size=10)
     plotting.plot_data(times, positions[indices], strain[indices], 10, config.get("General","root_dir"))
 
-    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
-
     n_time_samples = config.get("Data", "duration")*config.get("Data", "sample_rate")
     if config.get("Data", "timestep-predict"):
-        train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data")*n_time_samples, config.get("Training", "n_val_data")*n_time_samples))
+        nkeepsamps = 2
+        # get random time samples
+        rints = torch.randint(n_time_samples, size=(config.get("Training", "n_train_data")*nkeepsamps + config.get("Training", "n_val_data")*nkeepsamps, ))
+        # add start index to samples for each piece of data
+        rints += torch.arange(config.get("Training", "n_train_data") + config.get("Training", "n_val_data")).repeat_interleave(nkeepsamps)
+        # get random data timesteps
+        lbs_item = torch.from_numpy(labels).to(torch.float32)[rints]
+        str_item = torch.Tensor(strain)[rints]
+        bt_items = torch.Tensor(batch_times)[rints]
+        pp_items = torch.Tensor(previous_positions)[rints]
+        dataset = TensorDataset(lbs_item, str_item, bt_items, pp_items)
+        train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data")*nkeepsamps, config.get("Training", "n_val_data")*nkeepsamps))
     else:
+        dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
         train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data"), config.get("Training", "n_val_data")))
+    
     train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config.get("Training", "batch_size"))
 

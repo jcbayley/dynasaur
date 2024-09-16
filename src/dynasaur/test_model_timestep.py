@@ -215,6 +215,26 @@ def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previ
     output_samples = output_samples.permute(1,0,2).reshape((output_samples.size(0)*output_samples.size(1), output_samples.size(2)))
     return output_samples
 
+
+def get_sample_latent(model, input_data, n_samples, device="cpu"):
+    """Draws samples from the flow, but uses the same latent space sample for each set of times (i.e. for each trajectory)
+
+    Args:
+        model (): _description_
+        input_data (_type_): _description_
+        n_samples (_type_): _description_
+        device (str, optional): _description_. Defaults to "cpu".
+
+    Returns:
+        _type_: _description_
+    """
+    noise = model._distribution.sample(n_samples)
+    noise = noise.repeat((input_data.size(0), 1))
+    input_data = input_data.repeat_interleave(n_samples, dim=0) 
+    # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
+    samples, _ = model._transform.inverse(noise, context=input_data)
+    return samples
+
 def test_model_2d(
     model, 
     pre_model, 
@@ -281,12 +301,14 @@ def test_model_2d(
                     multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
                 elif flow_package == "glasflow":
                     # repeat the input data n time as glasflow needs conditional to be repeated (must be a better way)
-                    input_data = input_data.repeat_interleave(n_samples, dim=0) 
+                    #input_data = input_data.repeat_interleave(n_samples, dim=0) 
                     # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
-                    multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
+                    #multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
+                    multi_coeffmass_samples = get_sample_latent(model, input_data, n_samples, device="cpu")
+                    print("multisshape: ", multi_coeffmass_samples.size())
                     multi_coeffmass_samples = multi_coeffmass_samples.view((-1, n_samples, label.size(-1))).permute(1,0,2).reshape(-1,label.size(-1))
                     # undo interleaved repeat by splitting the times and samples, then permuting time  dimension to end
-                    multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
+                    multi_coeffmass_samples = multi_coeffmass_samples.view((-1, n_batch, label.size(-1)))
                     #multi_coeffmass_samples = multi_coeffmass_samples.permute(1,2,3,0).cpu().numpy()
                 else:
                     raise Exception(f"No flow package {flow_package}")
