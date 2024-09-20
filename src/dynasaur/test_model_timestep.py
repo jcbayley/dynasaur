@@ -29,7 +29,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
 
     n_test = config.get("Data","n_test_data") if n_test is None else n_test
 
-    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr, basis_velocities = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr, basis_velocities, basis_accelerations = data_generation.generate_data(
         n_test, 
         config.get("Data","basis_order"), 
         config.get("Data","n_masses"), 
@@ -45,7 +45,8 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         noise_variance=config.get("Data","noise_variance"),
         snr=config.get("Data","snr"),
         prior_args=config.get("Data","prior_args"),
-        return_velocities=config.get("Data","return_velocities")
+        return_velocities=config.get("Data","return_velocities"),
+        return_accelerations=config.get("Data","return_accelerations")
         )
 
     print(np.shape(basis_dynamics))
@@ -64,6 +65,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         n_dimensions=config.get("Data","n_dimensions"),
         split_data=True,
         basis_velocities=basis_velocities,
+        basis_accelerations=basis_accelerations,
         n_previous_positions=config.get("Data","n_previous_positions"))
 
     print(np.shape(labels), np.shape(strain), )
@@ -114,6 +116,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             make_plots=make_plots,
             flow_package=config.get("FlowNetwork","flow_model_type").split("-")[0],
             return_velocities=config.get("Data","return_velocities"),
+            return_accelerations=config.get("Data","return_accelerations"),
             include_previous_positions=config.get("Data","include_previous_positions"),
             n_previous_positions=config.get("Data","n_previous_positions"))
     elif config.get("Data","n_dimensions") == 3:
@@ -228,8 +231,8 @@ def get_sample_latent(model, input_data, n_samples, device="cpu"):
     Returns:
         _type_: _description_
     """
-    noise = model._distribution.sample(n_samples)
-    noise = noise.repeat((input_data.size(0), 1))
+    noise = model._distribution.sample(n_samples*input_data.size(0))
+    #noise = noise.repeat((input_data.size(0), 1))
     input_data = input_data.repeat_interleave(n_samples, dim=0) 
     # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
     samples, _ = model._transform.inverse(noise, context=input_data)
@@ -257,6 +260,7 @@ def test_model_2d(
     sky_position=(np.pi, np.pi/2),
     flow_package="zuko",
     return_velocities=False,
+    return_accelerations=False,
     include_previous_positions=False,
     n_previous_positions=2):
     """test a 3d model sampling from the flow and producing possible trajectories
@@ -315,7 +319,7 @@ def test_model_2d(
             
             # un preprocess the true masses and timeseries
 
-            _, t_mass, t_coeff, _, t_vel = data_processing.unpreprocess_data(
+            _, t_mass, t_coeff, _, t_vel, t_acc = data_processing.unpreprocess_data(
                 pre_model, 
                 label.cpu().numpy(), 
                 data.cpu().numpy(), 
@@ -328,7 +332,8 @@ def test_model_2d(
                 basis_type=basis_type,
                 basis_order=basis_order,
                 split_data=True,
-                return_velocities=return_velocities)
+                return_velocities=return_velocities,
+                return_accelerations=return_accelerations)
        
             source_coeffs = t_coeff[0]
             source_masses = t_mass[0]
@@ -356,7 +361,7 @@ def test_model_2d(
     
             # get the samples from the flow reprocessed into a timeseries array
             # print(label.shape, data.shape, times.shape, multi_coeffmass_samples[:,0].shape)
-            pre_model, multi_mass_samples, multi_coeff_samples, _, multi_velocity_samples = data_processing.unpreprocess_data(
+            pre_model, multi_mass_samples, multi_coeff_samples, _, multi_velocity_samples, multi_acceleration_samples = data_processing.unpreprocess_data(
                 pre_model, 
                 multi_coeffmass_samples[:,0].cpu().numpy(), 
                 data.cpu().numpy(), 
@@ -369,7 +374,8 @@ def test_model_2d(
                 basis_type=basis_type,
                 basis_order=basis_order, # set to 1 for the timstep predict
                 split_data=True,
-                return_velocities=return_velocities)
+                return_velocities=return_velocities,
+                return_accelerations=return_accelerations)
 
             print("mcshape", np.shape(multi_coeff_samples))
 

@@ -94,6 +94,11 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     data_dimensions = 3
 
+
+    ########################
+    ## Loading and generating data
+    #########################
+
     if config.get("Data","load_data"):
         print("loading data ........")
         times, basis_dynamics, masses, strain, cshape, positions, snrs = data_generation.load_data(
@@ -108,13 +113,14 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             basis_type = config.get("Data","basis_type"),
             data_type = config.get("Data","data_type"),
             noise_variance=config.get("Data","noise_variance"),
-            return_velocities=config.get("Data","return_velocities")
+            return_velocities=config.get("Data","return_velocities"),
+            return_accelerations=config.get("Data","return_accelerations")
             )
    
         #config.get("Data","n_data") = len(labels)
     else:
         print("making data ........")
-        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snrs, basis_velocities = data_generation.generate_data(
+        times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snrs, basis_velocities, basis_accelerations = data_generation.generate_data(
             n_data=config.get("Training","n_train_data")+ config.get("Training", "n_val_data"), 
             basis_order=config.get("Data","basis_order"), 
             n_masses=config.get("Data","n_masses"), 
@@ -129,13 +135,14 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             noise_variance=config.get("Data","noise_variance"),
             snr=config.get("Data","snr"),
             prior_args=config.get("Data","prior_args"),
-            return_velocities=config.get("Data","return_velocities"))
+            return_velocities=config.get("Data","return_velocities"),
+            return_accelerations=config.get("Data","return_accelerations"))
 
     acc_basis_order = cshape
 
     #window = signal.windows.tukey(np.shape(strain)[-1], alpha=0.5)
     #strain = strain * window[None, None, :]
-
+    print("data generated, preprocessing .... ")
     n_features = cshape*config.get("Data","n_masses")*config.get("Data","n_dimensions") + config.get("Data","n_masses")
     n_context = config.get("FlowNetwork","n_context")
     flow_package = config.get("FlowNetwork","flow_model_type").split("-")[0]
@@ -144,6 +151,9 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     ax.plot(strain[0])
     fig.savefig(os.path.join(config.get("General","root_dir"), "test_data.png"))
 
+    ########################
+    ## Preprocessing data
+    #########################
 
     if continue_train:
         pre_model, model, weights = create_model.load_models(config, device=config.get("Training","device"))
@@ -161,6 +171,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             n_dimensions=config.get("Data","n_dimensions"),
             split_data=True,
             basis_velocities=basis_velocities,
+            basis_accelerations=basis_accelerations,
             n_previous_positions=config.get("Data","n_previous_positions"))
     else:   
         pre_model, model = create_model.create_models(config, device=config.get("Training","device"))
@@ -180,32 +191,41 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             n_dimensions=config.get("Data","n_dimensions"),
             split_data=True,
             basis_velocities=basis_velocities,
+            basis_accelerations=basis_accelerations,
             n_previous_positions=config.get("Data","n_previous_positions"))
 
+    ########################
+    ## Splitting data and creatings torch datasets
+    #########################
 
+    print("Preprocessing complete, splitting data ........")
     indices = np.random.choice(np.arange(len(positions)), size=10)
     plotting.plot_data(times, positions[indices], strain[indices], 10, config.get("General","root_dir"))
 
     n_time_samples = config.get("Data", "duration")*config.get("Data", "sample_rate")
     if config.get("Data", "timestep-predict"):
-        nkeepsamps = 2
+        nkeepsamps = config.get("Training", "timestep-ntrainsamps")
         # get random time samples
-        rints = torch.randint(n_time_samples, size=(config.get("Training", "n_train_data")*nkeepsamps + config.get("Training", "n_val_data")*nkeepsamps, ))
-        # add start index to samples for each piece of data
-        rints += torch.arange(config.get("Training", "n_train_data") + config.get("Training", "n_val_data")).repeat_interleave(nkeepsamps)
-        # get random data timesteps
+        #rints = torch.tensor([torch.randperm(n_time_samples)[:nkeepsamps] + i for i in range(config.get("Training", "n_train_data") + config.get("Training", "n_val_data"))])
+        rints = torch.arange(len(labels))
         lbs_item = torch.from_numpy(labels).to(torch.float32)[rints]
         str_item = torch.Tensor(strain)[rints]
         bt_items = torch.Tensor(batch_times)[rints]
         pp_items = torch.Tensor(previous_positions)[rints]
-        dataset = TensorDataset(lbs_item, str_item, bt_items, pp_items)
-        train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data")*nkeepsamps, config.get("Training", "n_val_data")*nkeepsamps))
+        split_index = config.get("Training", "n_train_data")*nkeepsamps - nkeepsamps*config.get("Training", "n_val_data")
+        train_set = TensorDataset(lbs_item[:split_index], str_item[:split_index], bt_items[:split_index], pp_items[:split_index])
+        val_set = TensorDataset(lbs_item[split_index:], str_item[split_index:], bt_items[split_index:], pp_items[split_index:])
+        #train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data")*nkeepsamps, config.get("Training", "n_val_data")*nkeepsamps))
     else:
         dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
         train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data"), config.get("Training", "n_val_data")))
     
     train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config.get("Training", "batch_size"))
+
+    ########################
+    ## Training
+    #########################
 
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config.get("Training","learning_rate"))
 

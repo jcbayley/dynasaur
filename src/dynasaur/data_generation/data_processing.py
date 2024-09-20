@@ -99,7 +99,8 @@ def positions_masses_to_samples(
     coeff_samples: np.array,
     mass_samples: np.array,
     basis_type: str = "chebyshev",
-    velocities = None
+    velocities = None,
+    accelerations = None,
     ):
     """convert dynamics into samples for network
 
@@ -119,18 +120,23 @@ def positions_masses_to_samples(
         output_coeffs = complex_to_real(coeff_samples).reshape(np.shape(coeff_samples)[0], -1)
         if velocities is not None:
             output_vels = complex_to_real(velocities).reshape(np.shape(coeff_samples)[0], -1)
+        if accelerations is not None:
+            output_accs = complex_to_real(accelerations).reshape(np.shape(coeff_samples)[0], -1)
     else:
         output_coeffs = coeff_samples.reshape(np.shape(coeff_samples)[0], -1)
         if velocities is not None:
             output_vels = velocities.reshape(np.shape(coeff_samples)[0], -1)
+        if accelerations is not None:
+            output_accs = accelerations.reshape(np.shape(coeff_samples)[0], -1)
     # flatten all dimensions apart from 1st which is samples
     #output_coeffs = coeff_samples.flatten(start_dim=1)
     # append masses to the flattened output coefficients 
     if velocities is not None:
-        output_coeffs = np.concatenate([output_coeffs, output_vels, mass_samples], axis=1)
-    else:
-        output_coeffs = np.concatenate([output_coeffs, mass_samples], axis=1)
+        output_coeffs = np.concatenate([output_coeffs, output_vels], axis=1)
+    if accelerations is not None:
+        output_coeffs = np.concatenate([output_coeffs, output_accs], axis=1)
 
+    output_coeffs = np.concatenate([output_coeffs, mass_samples], axis=1)
     return output_coeffs
 
 
@@ -360,6 +366,7 @@ def preprocess_data(
     masses, 
     strain, 
     basis_velocities=None,
+    basis_accelerations=None,
     window_strain=None, 
     spherical_coords=None, 
     initial_run=False,
@@ -384,6 +391,8 @@ def preprocess_data(
     basis_dynamics = basis_dynamics[...,:n_dimensions,:]
     if basis_velocities is not None:
         basis_velocities = basis_velocities[...,:n_dimensions,:]
+    if basis_accelerations is not None:
+        basis_accelerations = basis_accelerations[...,:n_dimensions,:]
     #print("b2", np.shape(basis_dynamics))
 
     if split_data:
@@ -396,6 +405,11 @@ def preprocess_data(
             split_velocities = reshape_to_time_batch(torch.from_numpy(basis_velocities)).numpy()
         else:
             split_velocities = None
+
+        if basis_accelerations is not None:
+            split_accelerations = reshape_to_time_batch(torch.from_numpy(basis_accelerations)).numpy()
+        else:
+            split_accelerations = None
         # make strain shape (batchsize*n_times, n_detectors, n_timesteps)
         strain = torch.from_numpy(strain).repeat_interleave(n_t, dim=0).numpy()
         masses = torch.from_numpy(masses).repeat_interleave(n_t, dim=0).numpy()
@@ -422,13 +436,15 @@ def preprocess_data(
         previous_positions = None
         split_dynamics = basis_dynamics
         split_velocities = basis_velocities
+        split_accelerations = basis_accelerations
     
     #print("basis vel shapes:", np.shape(split_dynamics), np.shape(split_velocities))
     labels = positions_masses_to_samples(
         split_dynamics,
         masses,
         basis_type = basis_type,
-        velocities = split_velocities
+        velocities = split_velocities,
+        accelerations = split_accelerations
         )
 
     if initial_run:
@@ -469,7 +485,8 @@ def unpreprocess_data(
     basis_order=16,
     device="cpu",
     split_data=False,
-    return_velocities=False):
+    return_velocities=False,
+    return_accelerations=False):
 
 
     if spherical_coords:
@@ -505,7 +522,16 @@ def unpreprocess_data(
         masses = masses.numpy()
 
         # if velocities included, split them from positionsal coeffs
-        if return_velocities:
+        if return_velocities and return_accelerations:
+            basis_m_dynamics = labels2[:,:-n_masses].reshape(-1, 3, n_masses, n_dimensions)
+            basis_dynamics = basis_m_dynamics[:,0,:,:]
+            basis_velocities = basis_m_dynamics[:,1,:,:]
+            basis_accelerations = basis_m_dynamics[:,2,:,:]
+        elif return_accelerations and not return_velocities:
+            basis_m_dynamics = labels2[:,:-n_masses].reshape(-1, 2, n_masses, n_dimensions)
+            basis_dynamics = basis_m_dynamics[:,0,:,:]
+            basis_accelerations = basis_m_dynamics[:,1,:,:]
+        elif return_velocities and not return_accelerations:
             basis_m_dynamics = labels2[:,:-n_masses].reshape(-1, 2, n_masses, n_dimensions)
             basis_dynamics = basis_m_dynamics[:,0,:,:]
             basis_velocities = basis_m_dynamics[:,1,:,:]
@@ -518,6 +544,11 @@ def unpreprocess_data(
             basis_velocities = reshape_to_original(torch.from_numpy(basis_velocities), n_samp_batch, basis_order).numpy()
         else:
             basis_velocities = None
+
+        if return_accelerations:
+            basis_accelerations = reshape_to_original(torch.from_numpy(basis_accelerations), n_samp_batch, basis_order).numpy()
+        else:
+            basis_accelerations = None
         #print(np.shape(basis_dynamics))
     else:
         # convert the samples into separate positions and masses
@@ -536,7 +567,7 @@ def unpreprocess_data(
         bd_shape[-2] = 3 - n_dimensions
         basis_dynamics = np.concatenate([basis_dynamics, np.zeros(bd_shape)], axis=-2)
 
-    return pre_model, masses, basis_dynamics, strain, basis_velocities
+    return pre_model, masses, basis_dynamics, strain, basis_velocities, basis_accelerations
 
 def reshape_to_time_batch(tensor):
     """

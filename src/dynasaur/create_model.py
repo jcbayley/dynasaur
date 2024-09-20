@@ -71,7 +71,9 @@ def create_models(config, device=None):
     if config.get("Data", "basis_type") == "fourier":
         n_basis += 2
 
-    if config.get("Data","return_velocities"):
+    if config.get("Data","return_velocities") and config.get("Data","return_accelerations"):
+        vel_features = 3
+    elif config.get("Data","return_velocities"):
         vel_features = 2
     else:
         vel_features = 1
@@ -227,7 +229,7 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
-    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics, snr, basis_velocities = data_generation.generate_data(
+    times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics, snr, basis_velocities, basis_accelerations = data_generation.generate_data(
         2, 
         config.get("Data", "basis_order"), 
         config.get("Data", "n_masses"), 

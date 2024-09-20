@@ -40,6 +40,7 @@ def generate_data(
     noise_variance = 0.0,
     snr = None,
     return_velocities = False,
+    return_accelerations=False,
     prior_args={}):
 
     if data_type.split("-")[0] == "random":
@@ -129,15 +130,18 @@ def generate_data(
     output_coeffs_mass = np.zeros((n_data, basis_order*n_masses*n_dimensions + n_masses))
     all_time_dynamics = np.zeros((n_data, n_masses, n_dimensions, len(times)))
     all_time_velocities = np.zeros((n_data, n_masses, n_dimensions, len(times)))
+    all_time_accelerations = np.zeros((n_data, n_masses, n_dimensions, len(times)))
     strain_timeseries = np.zeros((n_data, len(detectors), len(times)))
     if basis_type == "fourier":
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
         all_basis_velocities = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
+        all_basis_accelerations = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
         all_basis_dynamics_coord = np.zeros((n_data, n_masses, n_dimensions, int(0.5*basis_order + 1)), dtype=dtype)
 
     else:
         all_basis_dynamics = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
         all_basis_velocities = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
+        all_basis_accelerations = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
         all_basis_dynamics_coord = np.zeros((n_data, n_masses, n_dimensions, basis_order), dtype=dtype)
 
 
@@ -228,6 +232,17 @@ def generate_data(
             all_basis_velocities = None
             all_time_velocities = None
 
+        if return_accelerations:
+            all_basis_accelerations = basis[basis_type]["derivative"](all_basis_dynamics, m=2)
+
+            all_time_accelerations[data_index] = compute_waveform.get_time_dynamics(
+                all_basis_accelerations[data_index], 
+                times, 
+                basis_type=basis_type)
+        else:
+            all_basis_accelerations = None
+            all_time_accelerations = None
+
         all_time_dynamics[data_index] = compute_waveform.get_time_dynamics(
             all_basis_dynamics[data_index], 
             times, 
@@ -275,7 +290,7 @@ def generate_data(
     else:
         snr = np.ones(n_data)*np.inf
 
-    return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics, snr, all_basis_velocities
+    return times, all_basis_dynamics, all_masses, strain_timeseries, feature_shape, all_time_dynamics, all_basis_dynamics, snr, all_basis_velocities, all_basis_accelerations
 
 def compute_individual_snrs_and_noise_variance(signal, total_snr, sampling_frequency):
     """
