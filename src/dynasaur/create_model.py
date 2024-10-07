@@ -67,6 +67,9 @@ def create_models(config, device=None):
         data_type=config.get("data_type"])
     """
 
+    if device is None:
+        device = config.get("Training", "device")
+
     n_basis = config.get("Data", "basis_order")
     if config.get("Data", "basis_type") == "fourier":
         n_basis += 2
@@ -77,9 +80,6 @@ def create_models(config, device=None):
     n_context = config.get("FlowNetwork", "n_context")
         
     n_input = config.get("Data", "sample_rate")*config.get("Data", "duration")
-
-    #if device is not None:
-    #    config.get("Training", "device") = device
 
     # pre processing creation
     if config.get("PreNetwork", "transformer_layers") not in ["none", None]:
@@ -148,14 +148,14 @@ def create_models(config, device=None):
         model = Flow(
             transform=transforms, 
             base=base
-            ).to(config.get("Training", "device"))
+            ).to(device)
         
     elif config.get("FlowNetwork", "flow_model_type") == "zuko-cnf":
         model = zuko.flows.CNF(
             n_features, 
             context=n_context, 
             hidden_features=config.get("FlowNetwork", "hidden_features")
-            ).to(config.get("Training","device"))
+            ).to(device)
 
     elif config.get("FlowNetwork", "flow_model_type") == "zuko_nsf":
         model = zuko.flows.spline.NSF(
@@ -164,7 +164,7 @@ def create_models(config, device=None):
             transforms=config.get("FlowNetwork", "ntransforms"), 
             bins=config.get("FlowNetwork", "nsplines"), 
             hidden_features=config.get("FlowNetwork", "hidden_features")
-            ).to(config.get("Training", "device"))
+            ).to(device)
         
     elif config.get("FlowNetwork", "flow_model_type") == "glasflow-nsf":
         model = glasflow.CouplingNSF(
@@ -174,7 +174,7 @@ def create_models(config, device=None):
             n_conditional_inputs=n_context,
             n_neurons=config.get("FlowNetwork", "hidden_features")[0],
             num_bins=config.get("FlowNetwork", "nsplines")
-        ).to(config.get("Training", "device"))
+        ).to(device)
 
     elif config.get("FlowNetwork", "flow_model_type") == "glasflow-enflow":
         # Not working yet
@@ -184,7 +184,7 @@ def create_models(config, device=None):
             n_conditional_inputs=n_context,
             n_neurons=config.get("FlowNetwork", "hidden_features"),
             num_bins=config.get("FlowNetwork", "nsplines")
-        ).to(config.get("Training", "device"))
+        ).to(device)
     else:
         print("-- No flow specified -- Using zuko nsf --")
         model = zuko.flows.spline.NSF(
@@ -193,11 +193,11 @@ def create_models(config, device=None):
             transforms=config.get("FlowNetwork", "ntransforms"), 
             bins=config.get("FlowNetwork", "nsplines"), 
             hidden_features=config.get("FlowNetwork", "hidden_features")
-            ).to(config.get("Training", "device"))
+            ).to(device)
 
     return pre_model, model
 
-def load_models(config, device):
+def load_models(config, device=None):
     """Load in models from config
 
     Args:
@@ -207,6 +207,10 @@ def load_models(config, device):
     Returns:
         tuple: pre_model, model
     """
+
+    if device is None:
+        device = config.get("Training", "device")
+
     times, basis_dynamics, masses, strain, feature_shape, positions, all_dynamics, snr = data_generation.generate_data(
         2, 
         config.get("Data", "basis_order"), 

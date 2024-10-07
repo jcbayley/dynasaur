@@ -5,7 +5,7 @@ import lalpulsar
 
 def generate_strain_coefficients(coeffs: np.array, basis_type="chebyshev", duration=2) -> np.array:
     """
-
+    Generate the strain coefficients from the dynamics coefficients
     Args:
         coeffs (np.array): _description_
 
@@ -398,7 +398,7 @@ def get_waveform(
     
 
     duration = np.max(times) - np.min(times)
-
+    
     strain_coeffs = compute_hTT_coeffs(norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
 
     if compute_energy:

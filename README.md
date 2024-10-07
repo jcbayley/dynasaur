@@ -13,3 +13,25 @@ The left panel of each of these plots also shows many pairs of	blue and orange	p
 The main goal here was to train on lots of random orbits, where the fourier components of the positions of the masses are randomly sampled between [0,1]. 
 
 ![Alt Text](https://media.githubusercontent.com/media/jcbayley/dynasaur/main/figures/animation_random_0.gif)
+
+# Installation
+
+In the root directory run:
+
+```bash
+pip install .
+```
+
+# Usage
+
+To use train a model based on a config (examples can be found in the examples directory):
+
+```bash
+python -m dynasaur.train_model --config config.ini --train
+```
+
+To test the model 
+
+```bash
+python -m dynasaur.train_model --config config.ini --test --ntest 10 --makeplots
+```
