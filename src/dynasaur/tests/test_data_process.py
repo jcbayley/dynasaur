@@ -1,4 +1,5 @@
-from dynasaur.data_generation import data_processing
+from dynasaur.data_generation import data_processing, data_generation
+import dynasaur
 import numpy as np
 import torch
 
@@ -160,6 +161,152 @@ def test_strain_reconstruct():
 
 
     source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
+
+def test_split_order():
+    n_data = 2
+    n_masses = 2
+    n_dimensions = 3
+    n_detectors = 3
+    n_times = 16
+
+    basis_dynamics = np.arange(n_data*n_masses*n_dimensions*n_times).reshape(n_data, n_masses, n_dimensions, n_times)
+    strain = np.arange(n_data*n_detectors*n_times).reshape(n_data, n_detectors, n_times)
+    masses = np.arange(n_data*n_masses).reshape(n_data, n_masses)
+
+    split_batch_times, split_strain, split_masses, split_previous_positions, split_dynamics, split_velocities, split_accelerations = dynasaur.data_generation.data_processing.split_time_data(
+        basis_dynamics, 
+        strain, masses, 
+        None, 
+        None, 
+        None)
+
+    #basis_dynamics [n_data, n_masses, n_dimensions, n_times]
+    #split_dynamics [n_data*n_times, n_masses, n_dimensions]
+
+    # check strain and masses for the 1st time of the 1st data
+    assert np.all(split_strain[0] == strain[0])
+    assert np.all(split_masses[0] == masses[0])
+    assert np.all(split_dynamics[0, 0] == basis_dynamics[0,0,:,0])
+
+    # check strain and masses for the last time of the 1st data
+    assert np.all(split_strain[n_times - 1] == strain[0])
+    assert np.all(split_masses[n_times - 1] == masses[0])
+    assert np.all(split_dynamics[n_times-1, 0] == basis_dynamics[0,0,:,n_times-1])
+    assert np.all(split_dynamics[:n_times] == np.transpose(basis_dynamics[0,:,:,:n_times], (2,0,1)))
+
+    # check strain and masses for the 1st time of the 2nd data
+    assert np.all(split_strain[n_times + 1] == strain[1])
+    assert np.all(split_masses[n_times + 1] == masses[1])
+    assert np.all(split_dynamics[n_times, 0] == basis_dynamics[1,0,:,0])
+
+    # check batch times repeat in same way
+    assert np.all(split_batch_times[:n_times] == split_batch_times[n_times:2*n_times])
+
+
+def test_split_opt(return_accelerations=True, return_velocities=True, n_previous_positions=None):
+
+    n_data = 5
+    n_masses = 2
+    n_dimensions = 3
+    n_detectors = 3
+    n_times = 16
+
+    basis_dynamics = np.arange(n_data*n_masses*n_dimensions*n_times).reshape(n_data, n_masses, n_dimensions, n_times)
+    strain = np.arange(n_data*n_detectors*n_times).reshape(n_data, n_detectors, n_times)
+    masses = np.arange(n_data*n_masses).reshape(n_data, n_masses)
+    if return_velocities:
+        basis_velocities = np.arange(n_data*n_masses*n_dimensions*n_times).reshape(n_data, n_masses, n_dimensions, n_times)
+    else:
+        basis_velocities = None
+    if return_accelerations:
+        basis_accelerations = np.arange(n_data*n_masses*n_dimensions*n_times).reshape(n_data, n_masses, n_dimensions, n_times)
+    else:
+        basis_accelerations = None
+
+    split_batch_times, split_strain, split_masses, split_previous_positions, split_dynamics, split_velocities, split_accelerations = dynasaur.data_generation.data_processing.split_time_data(
+        basis_dynamics, 
+        strain, masses, 
+        n_previous_positions, 
+        basis_velocities, 
+        basis_accelerations)
+
+    split_labels = dynasaur.data_generation.data_processing.positions_masses_to_samples(
+        split_dynamics,
+        split_masses,
+        basis_type = "timeseries",
+        velocities = split_velocities,
+        accelerations = split_accelerations
+        )
+
+    unsplit_strain, unsplit_masses, unsplit_basis_dynamics, unsplit_basis_velocities, unsplit_basis_accelerations = dynasaur.data_generation.data_processing.unsplit_time_data(
+        split_labels, 
+        split_strain, 
+        n_masses,
+        n_dimensions,
+        n_times,
+        return_accelerations, 
+        return_velocities)
+
+    assert np.all(unsplit_strain == strain)
+    assert np.all(unsplit_masses == masses)
+    assert np.all(unsplit_basis_dynamics == basis_dynamics)
+    if return_velocities:
+        assert np.all(unsplit_basis_velocities == basis_velocities)
+    if return_accelerations:
+        assert np.all(unsplit_basis_accelerations == basis_accelerations)
+
+def test_split():
+    test_split_opt(return_accelerations=True, return_velocities=True, n_previous_positions=None)
+    test_split_opt(return_accelerations=True, return_velocities=False, n_previous_positions=None)
+    test_split_opt(return_accelerations=False, return_velocities=True, n_previous_positions=None)
+    test_split_opt(return_accelerations=False, return_velocities=False, n_previous_positions=None)
+    test_split_opt(return_accelerations=False, return_velocities=False, n_previous_positions=1)
+
+def reshape_test():
+
+    batch, n_mass, n_dim, n_time = 10,2,3,10
+    input_data = np.arange(batch*n_mass*n_dim*n_time).reshape(batch, n_mass, n_dim, n_time)
+    
+    reshape_input = reshape_to_time_batch(input_data)
+
+    reshape_output = reshape_to_original(reshape_input, batch, n_time)
+
+    assert reshape_output == input_data
+
+
+def preprocess_full_test():
+
+    n_data = 5
+    n_masses = 2
+    n_dimensions = 3
+    n_detectors = 3
+    n_times = 16
+    return_accelerations=True
+    return_velocities=True
+
+    basis_dynamics = np.arange(n_data*n_masses*n_dimensions*n_times).reshape(n_data, n_masses, n_dimensions, n_times)
+    strain = np.arange(n_data*n_detectors*n_times).reshape(n_data, n_detectors, n_times)
+    masses = np.arange(n_data*n_masses).reshape(n_data, n_masses)
+    n_previous_positions = None
+    basis_velocities = np.arange(n_data*n_masses*n_dimensions*n_times).reshape(n_data, n_masses, n_dimensions, n_times)
+    basis_accelerations = np.arange(n_data*n_masses*n_dimensions*n_times).reshape(n_data, n_masses, n_dimensions, n_time)
+
+    pre_model, labels, strain, batch_times, previous_positions = preprocess_data(
+        pre_model, 
+        basis_dynamics,
+        masses, 
+        strain, 
+        basis_velocities=basis_velocities,
+        basis_accelerations=basis_accelerations,
+        window_strain=None, 
+        spherical_coords=None, 
+        initial_run=False,
+        n_masses=2,
+        device="cpu",
+        basis_type="fourier",
+        n_dimensions=3,
+        split_data=False,
+        n_previous_positions="none")
 
 if __name__ == "__main__":
 

@@ -26,21 +26,29 @@ import torch.nn as nn
 import os
 
 class PreNetworkAttention(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, embed_dim, num_heads=2, num_layers=2):
+    def __init__(self, input_dim, output_dim, embed_dim, num_heads=2, num_layers=2, embed_time=False):
         super(PreNetworkAttention, self).__init__()
+        self.embed_time = embed_time
         self.embedding = torch.nn.Linear(input_dim, embed_dim)
         encoder_layers = torch.nn.TransformerEncoderLayer(embed_dim, num_heads)
         self.transformer_encoder = torch.nn.TransformerEncoder(encoder_layers, num_layers)
         self.fc = torch.nn.Linear(embed_dim, output_dim)
+        self.sigmoid = torch.nn.Sigmoid()
+        if embed_time:
+            self.time_embedding = torch.nn.Linear(1, embed_dim)
+        else:
+            self.time_embedding = None
         
-    def forward(self, x, layer_number=None):
+    def forward(self, x, layer_number=None, time=None):
+        if time is not None and self.embed_time:
+            x = x + self.time_embedding(time)
         x = self.embedding(x)
         x = x.permute(1, 0, 2)  # Change to shape (seq_len, batch_size, embed_dim) for Transformer encoder
         x = self.transformer_encoder(x)
         x = x.permute(1, 0, 2)  # Change back to shape (batch_size, seq_len, embed_dim)
         x = torch.mean(x, dim=1)  # Global average pooling
         x = self.fc(x)
-        return x
+        return x#self.sigmoid(x)
 
 def create_models(config, device=None):
     """create a convolutional to linear model with n_context outputs and a 
@@ -84,7 +92,7 @@ def create_models(config, device=None):
         extra_context = 0
 
     if config.get("Data", "timestep-predict"):
-        tstep_context = 1
+        tstep_context = config.get("Data", "timestep-context")
     else:
         tstep_context = 0
 
@@ -96,7 +104,7 @@ def create_models(config, device=None):
 
     n_features = feature_shape#cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
     
-    n_context = config.get("FlowNetwork", "n_context") + tstep_context + extra_context
+    n_context = config.get("FlowNetwork", "n_context") + tstep_context + int(extra_context)
 
     n_input = config.get("Data", "sample_rate")*config.get("Data", "duration")
 
@@ -200,6 +208,7 @@ def create_models(config, device=None):
 
     elif config.get("FlowNetwork", "flow_model_type") == "glasflow-enflow":
         # Not working yet
+        raise Exception("En flow Not implemented yet")
         model = glasflow.EnFlow(
             n_inputs=n_features,
             n_transforms=config.get("FlowNetwork", "n_transforms"),

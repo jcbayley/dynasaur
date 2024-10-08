@@ -28,7 +28,9 @@ def train_epoch(
     device:str = "cpu", 
     train:bool = True,
     flow_package="zuko",
-    include_previous_positions=False) -> float:
+    include_previous_positions=False,
+    include_time_context=False,
+    embed_time=False) -> float:
     """train one epoch for data
 
     Args:
@@ -51,13 +53,13 @@ def train_epoch(
         label, data, times, previous_positions = label.to(device), data.to(device), times.to(device), previous_positions.to(device)
 
         optimiser.zero_grad()
-        input_data = pre_model(data)
+        input_data = pre_model(data, time=times if embed_time else None)
         # concatenate the time of the sample to the embedded data
         #print(input_data.size(), times.size())
+        if include_time_context:
+            input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1).to(torch.float32)
         if include_previous_positions:
-            input_data = torch.cat([input_data, times.unsqueeze(-1), previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32)
-        else:
-            input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
+            input_data = torch.cat([input_data, previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32)
         
         if flow_package == "zuko":
             loss = -model(input_data).log_prob(label).mean()
@@ -208,10 +210,10 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         # get random time samples
         #rints = torch.tensor([torch.randperm(n_time_samples)[:nkeepsamps] + i for i in range(config.get("Training", "n_train_data") + config.get("Training", "n_val_data"))])
         rints = torch.arange(len(labels))
-        lbs_item = torch.from_numpy(labels).to(torch.float32)[rints]
-        str_item = torch.Tensor(strain)[rints]
-        bt_items = torch.Tensor(batch_times)[rints]
-        pp_items = torch.Tensor(previous_positions)[rints]
+        lbs_item = torch.from_numpy(labels).to(torch.float32)#[rints]
+        str_item = torch.Tensor(strain)#[rints]
+        bt_items = torch.Tensor(batch_times)#[rints]
+        pp_items = torch.Tensor(previous_positions)#[rints]
         split_index = config.get("Training", "n_train_data")*nkeepsamps - nkeepsamps*config.get("Training", "n_val_data")
         train_set = TensorDataset(lbs_item[:split_index], str_item[:split_index], bt_items[:split_index], pp_items[:split_index])
         val_set = TensorDataset(lbs_item[split_index:], str_item[split_index:], bt_items[split_index:], pp_items[split_index:])
@@ -248,11 +250,31 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         if continue_train:
             epoch = epoch + start_epoch
 
-        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=True, flow_package=flow_package, include_previous_positions=config.get("Data","include_previous_positions"))
+        train_loss = train_epoch(
+            train_loader, 
+            model, 
+            pre_model, 
+            optimiser, 
+            device=config.get("Training","device"), 
+            train=True, 
+            flow_package=flow_package, 
+            include_previous_positions=config.get("Data","include_previous_positions"),
+            include_time_context=config.get("Data","timestep-context")>0,
+            embed_time=config.get("Data","embed-time"))
         train_losses.append(train_loss)
 
         with torch.no_grad():
-            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=False, flow_package=flow_package, include_previous_positions=config.get("Data","include_previous_positions"))
+            val_loss = train_epoch(
+                val_loader,
+                model, 
+                pre_model, 
+                optimiser, 
+                device=config.get("Training","device"), 
+                train=False, 
+                flow_package=flow_package, 
+                include_previous_positions=config.get("Data","include_previous_positions"),
+                include_time_context=config.get("Data","timestep-context")>0,
+                embed_time=config.get("Data","embed-time"))
             val_losses.append(val_loss)
             
         if epoch % 100 == 0:

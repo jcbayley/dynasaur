@@ -415,7 +415,7 @@ def get_waveform(
     strain_coeffs = np.array([[hplus, hcross], [hcross, -hplus]])
 
     if compute_energy:
-        energy = compute_energy_loss(times, norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
+        energy = None#compute_energy_loss(times, norm_masses, basis_dynamics, basis_type=basis_type, duration=duration)
     else:
         energy = None
 

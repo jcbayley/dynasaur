@@ -77,6 +77,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
     #n_context = config.get("Data","sample_rate"]*2
 
     dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
+    #dataset = TensorDataset(labels, strain, batch_times, previous_positions)
 
 
     test_loader = DataLoader(dataset, batch_size=len(times))
@@ -118,7 +119,9 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             return_velocities=config.get("Data","return_velocities"),
             return_accelerations=config.get("Data","return_accelerations"),
             include_previous_positions=config.get("Data","include_previous_positions"),
-            n_previous_positions=config.get("Data","n_previous_positions"))
+            n_previous_positions=config.get("Data","n_previous_positions"),
+            include_time_context=config.get("Data","timestep-context")>0,
+            embed_time=config.get("Data","embed-time"))
     elif config.get("Data","n_dimensions") == 3:
         test_model_3d(
             model=model, 
@@ -231,11 +234,15 @@ def get_sample_latent(model, input_data, n_samples, device="cpu"):
     Returns:
         _type_: _description_
     """
-    noise = model._distribution.sample(n_samples*input_data.size(0))
-    #noise = noise.repeat((input_data.size(0), 1))
+    insize = input_data.size(0)
+    #noise = model._distribution.sample(n_samples*input_data.size(0))
+    noise = model._distribution.sample(n_samples)
+    noise = noise.repeat((insize, 1))
+    # input data is then shape [nsamples*ntimes, nfeatures]
     input_data = input_data.repeat_interleave(n_samples, dim=0) 
-    # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
     samples, _ = model._transform.inverse(noise, context=input_data)
+    # output should be [nsamples*ntimes, n_features]
+    samples = samples.view((insize, n_samples, -1)).permute(1,0,2).reshape(insize*n_samples,-1)
     return samples
 
 def test_model_2d(
@@ -262,7 +269,9 @@ def test_model_2d(
     return_velocities=False,
     return_accelerations=False,
     include_previous_positions=False,
-    n_previous_positions=2):
+    n_previous_positions=2,
+    embed_time=False,
+    include_time_context=False):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -292,10 +301,13 @@ def test_model_2d(
         for batch, (label, data, batch_times, previous_positions) in enumerate(dataloader):
             label, data, batch_times = label.to(device), data.to(device), batch_times.to(device)
             n_batch = len(label)//data.size(-1)
-            input_data = pre_model(data)
-            # include the time 
-            input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1)
-            #print(input_data.size(), label.size(), data.size(), times.size())
+            batch_times = batch_times * 2
+            #print(data[-3:])
+            input_data = pre_model(data, time=batch_times if embed_time else None)
+            # include the time context in the input data
+            if include_time_context:
+                input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1).to(torch.float32)
+
             if include_previous_positions:
                 multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, includes_velocities=return_velocities, device=device)
                 multi_coeffmass_samples = multi_coeffmass_samples.reshape(-1, 1, label.size(-1))
@@ -309,14 +321,18 @@ def test_model_2d(
                     # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
                     #multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
                     multi_coeffmass_samples = get_sample_latent(model, input_data, n_samples, device="cpu")
-                    print("multisshape: ", multi_coeffmass_samples.size())
-                    multi_coeffmass_samples = multi_coeffmass_samples.view((-1, n_samples, label.size(-1))).permute(1,0,2).reshape(-1,label.size(-1))
                     # undo interleaved repeat by splitting the times and samples, then permuting time  dimension to end
                     multi_coeffmass_samples = multi_coeffmass_samples.view((-1, n_batch, label.size(-1)))
                     #multi_coeffmass_samples = multi_coeffmass_samples.permute(1,2,3,0).cpu().numpy()
                 else:
                     raise Exception(f"No flow package {flow_package}")
             
+            print(data.size())
+            print(input_data.size())
+            m2 = get_sample_latent(model, input_data, 1, device="cpu")
+            print("m2size", m2[:10])
+            #print(input_data.size(), m2.size())
+            sys.exit()
             # un preprocess the true masses and timeseries
 
             _, t_mass, t_coeff, _, t_vel, t_acc = data_processing.unpreprocess_data(
@@ -344,6 +360,7 @@ def test_model_2d(
                 source_coeffs,
                 upsample_times,  
                 basis_type=basis_type)
+
             
             # get the true strain
             source_strain, source_energy,source_coeffs = data_processing.get_strain_from_samples(
@@ -355,6 +372,7 @@ def test_model_2d(
                 basis_type=basis_type,
                 basis_order=basis_order,
                 sky_position=sky_position)
+
             
             # normalise the strain as unpreprocess un(de) normalised it
             source_strain, _ = data_processing.normalise_data(source_strain, pre_model.norm_factor)
@@ -377,7 +395,14 @@ def test_model_2d(
                 return_velocities=return_velocities,
                 return_accelerations=return_accelerations)
 
-            print("mcshape", np.shape(multi_coeff_samples))
+            multi_mass_samples = multi_mass_samples if type(multi_mass_samples) == np.ndarray else multi_mass_samples.numpy()
+            multi_coeff_samples = multi_coeff_samples if type(multi_coeff_samples) == np.ndarray else multi_coeff_samples.numpy()
+            if multi_velocity_samples is not None:
+                multi_velocity_samples = multi_velocity_samples if type(multi_velocity_samples) == np.ndarray else multi_velocity_samples.numpy()
+            if multi_acceleration_samples is not None:
+                multi_acceleration_samples = multi_acceleration_samples if type(multi_acceleration_samples) == np.ndarray else multi_acceleration_samples.numpy()
+
+            #print("mcshape", np.shape(multi_coeff_samples))
 
             n_dimensions_out = 3
             #print("multishape", multi_coeffmass_samples.shape)
@@ -533,6 +558,11 @@ def test_model_2d(
             #############################
             ## SAVE THE DATA
             #############################
+            source_tseries = source_tseries.numpy() if type(source_tseries) != np.ndarray else source_tseries
+            source_masses = source_masses.numpy() if type(source_masses) != np.ndarray else source_masses
+            source_coeffs = source_coeffs.numpy() if type(source_coeffs) != np.ndarray else source_coeffs
+            source_strain = source_strain.numpy() if type(source_strain) != np.ndarray else source_strain
+
 
             with h5py.File(os.path.join(data_out, f"data_{batch}.hdf5"), "w") as f:
                 f.create_dataset("recon_timeseries", data=m_recon_tseries)
@@ -546,14 +576,12 @@ def test_model_2d(
                 f.create_dataset("recon_basis", data=multi_coeff_samples)
 
             if make_plots:
-
                 plotting.plot_dimension_projection(
                     m_recon_tseries[:10], 
                     source_tseries, 
                     fname=os.path.join(plot_out, f"dim_projection_{batch}.png"), 
                     alpha=0.2)
 
-                print("source_Strain", np.shape(source_strain))
                 plotting.plot_sampled_reconstructions(
                     upsample_times, 
                     detectors, 

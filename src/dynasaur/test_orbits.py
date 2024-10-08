@@ -4,13 +4,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import os
-from data_generation import generate_data, compute_hTT_coeffs, compute_strain_from_coeffs, perform_window, polynomial_dict, compute_energy_loss
-import data_generation
-import make_animations as animations
-import plotting
-from train_model import get_dynamics, get_strain_from_samples
-from create_model import create_models, load_models
-from data_generation import (
+#from dynasaur.data_generation import compute_hTT_coeffs, compute_strain_from_coeffs, perform_window, polynomial_dict, compute_energy_loss
+import dynasaur.data_generation
+#import make_animations as animations
+import dynasaur.plotting
+#from dynasaur.train_model import get_dynamics, get_strain_from_samples
+from dynasaur.create_model import create_models, load_models
+from dynasaur.data_generation import (
     data_generation,
     compute_waveform,
     data_processing

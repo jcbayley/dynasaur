@@ -4,7 +4,7 @@ from dynasaur.data_generation import (
     data_processing
 )
 
-from dynasaur.basis import basis
+from dynasaur.basis_functions import basis
 
 def test_fixed_velocity(output_dir):
 

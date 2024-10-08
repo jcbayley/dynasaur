@@ -34,6 +34,6 @@ if __name__ == "__main__":
 
     if test_model:
         if config.get("Data", "timestep-predict"):
-            run_testing_timestep(config, ntest=args.ntest, make_plots=args.makeplots)
+            run_testing_timestep(config, n_test=args.ntest, make_plots=args.makeplots)
         else:
-            run_testing(config, ntest=args.ntest, make_plots=args.makeplots)
+            run_testing(config, n_test=args.ntest, make_plots=args.makeplots)
