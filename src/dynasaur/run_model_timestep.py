@@ -25,30 +25,30 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
     Args:
         config (dict): _description_
     """
-    pre_model, model, weights = load_models(config, config["device"])
+    pre_model, model, weights = load_models(config, config.get("Training", "device"))
 
-    config.setdefault("coordinate_type", "cartesian")
+    #config.setdefault("coordinate_type", "cartesian")
 
 
-    n_test = config["n_test_data"] if n_test is None else n_test
+    n_test = config.get("Data", "n_test_data") if n_test is None else n_test
 
     times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snr, basis_velocities = data_generation.generate_data(
         n_test, 
-        config["basis_order"], 
-        config["n_masses"], 
-        config["sample_rate"], 
+        config.get("Data", "basis_order"), 
+        config.get("Data", "n_masses"), 
+        config.get("Data", "sample_rate"), 
         n_dimensions=3, 
-        detectors=config["detectors"], 
-        window=config["window"], 
-        window_acceleration=config["window_acceleration"],
-        basis_type = config["basis_type"],
-        data_type = config["data_type"],
-        fourier_weight=config["fourier_weight"],
-        coordinate_type=config["coordinate_type"],
-        noise_variance=config["noise_variance"],
-        snr=config["snr"],
-        prior_args=config["prior_args"],
-        return_velocities=config["return_velocities"]
+        detectors=config.get("Data", "detectors"), 
+        window_strain=config.get("Data", "window_strain"), 
+        window_acceleration=config.get("Data", "window_acceleration"),
+        basis_type = config.get("Data", "basis_type"),
+        data_type = config.get("Data", "data_type"),
+        fourier_weight=config.get("Data", "fourier_weight"),
+        coordinate_type=config.get("Data", "coordinate_type"),
+        noise_variance=config.get("Data", "noise_variance"),
+        snr=config.get("Data", "snr"),
+        prior_args=config.get("Data", "prior_args"),
+        return_velocities=config.get("Data", "return_velocities")
         )
 
     print(np.shape(basis_dynamics))
@@ -58,88 +58,86 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         basis_dynamics,
         masses, 
         strain, 
-        window_strain=config["window_strain"], 
-        spherical_coords=config["spherical_coords"], 
+        window_strain=config.get("Data", "window_strain"), 
+        spherical_coords=config.get("Data", "spherical_coords"), 
         initial_run=False,
-        n_masses=config["n_masses"],
-        device=config["device"],
-        basis_type=config["basis_type"],
-        n_dimensions=config["n_dimensions"],
+        n_masses=config.get("Data", "n_masses"),
+        device=config.get("Training", "device"),
+        basis_type=config.get("Data", "basis_type"),
+        n_dimensions=config.get("Data", "n_dimensions"),
         split_data=True,
         basis_velocities=basis_velocities,
-        n_previous_positions=config["n_previous_positions"])
+        n_previous_positions=config.get("Data", "n_previous_positions"))
 
     print(np.shape(labels), np.shape(strain), )
 
-    acc_basis_order = config["basis_order"]#cshape
+    acc_basis_order = config.get("Data", "basis_order")#cshape
 
-    #n_features = acc_basis_order*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
+    #n_features = acc_basis_order*config.get("Data", "n_masses"]*config.get("Data", "n_dimensions"] + config.get("Data", "n_masses"]
 
-    #n_context = config["sample_rate"]*2
+    #n_context = config.get("Data", "sample_rate"]*2
 
 
     dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
     test_loader = DataLoader(dataset, batch_size=len(times))
 
 
-    upsample_times = np.linspace(np.min(times), np.max(times), config["plot_sample_rate"])
+    upsample_times = np.linspace(np.min(times), np.max(times), config.get("Data", "plot_sample_rate"))
 
 
-    if config["n_dimensions"] == 1:
+    if config.get("Data", "n_dimensions") == 1:
         test_model_1d(
             model, 
             test_loader, 
             times, 
-            config["n_masses"], 
-            config["basis_order"], 
-            config["n_dimensions"], 
-            config["root_dir"], 
-            config["device"],)
-    elif config["n_dimensions"] == 2:
+            config.get("Data", "n_masses"), 
+            config.get("Data", "basis_order"), 
+            config.get("Data", "n_dimensions"), 
+            config.get("General", "root_dir"), 
+            config.get("Training", "device"),)
+    elif config.get("Data", "n_dimensions") == 2:
         test_model_2d(
             model=model, 
             pre_model=pre_model, 
             dataloader=test_loader,
             times=times,
             upsample_times=upsample_times, 
-            n_masses=config["n_masses"], 
+            n_masses=config.get("Data", "n_masses"), 
             basis_order=acc_basis_order, 
-            n_dimensions=config["n_dimensions"], 
-            detectors=config["detectors"], 
-            window=config["window"], 
-            root_dir=config["root_dir"], 
-            device=config["device"], 
-            window_acceleration=config["window_acceleration"],
-            window_strain=config["window_strain"],
-            spherical_coords=config["spherical_coords"],
-            basis_type=config["basis_type"],
-            sky_position=config["prior_args"]["sky_position"],
+            n_dimensions=config.get("Data", "n_dimensions"), 
+            detectors=config.get("Data", "detectors"), 
+            window_strain=config.get("Data", "window_strain"), 
+            root_dir=config.get("General", "root_dir"), 
+            device=config.get("Training", "device"), 
+            window_acceleration=config.get("Data", "window_acceleration"),
+            spherical_coords=config.get("Data", "spherical_coords"),
+            basis_type=config.get("Data", "basis_type"),
+            sky_position=config.get("Data", "prior_args")["sky_position"],
             make_plots=make_plots,
-            flow_package=config["flow_model_type"].split("-")[0],
-            return_velocities=config["return_velocities"],
-            include_previous_positions=config["include_previous_positions"],
-            n_previous_positions=config["n_previous_positions"])
-    elif config["n_dimensions"] == 3:
+            flow_package=config.get("FlowNetwork", "flow_model_type").split("-")[0],
+            return_velocities=config.get("Data", "return_velocities"),
+            n_previous_positions=config.get("Data", "n_previous_positions"))
+    elif config.get("Data", "n_dimensions") == 3:
         test_model_3d(
             model=model, 
             pre_model=pre_model, 
             dataloader=test_loader,
             times=times,
             upsample_times=upsample_times, 
-            n_masses=config["n_masses"], 
+            n_masses=config.get("Data", "n_masses"), 
             basis_order=acc_basis_order, 
-            n_dimensions=config["n_dimensions"], 
-            detectors=config["detectors"], 
-            window=config["window"], 
-            root_dir=config["root_dir"], 
-            device=config["device"], 
-            window_acceleration=config["window_acceleration"],
-            window_strain=config["window_strain"],
-            spherical_coords=config["spherical_coords"],
-            basis_type=config["basis_type"],
-            sky_position=config["prior_args"]["sky_position"],
+            n_dimensions=config.get("Data", "n_dimensions"), 
+            detectors=config.get("Data", "detectors"), 
+            window=config.get("Data", "window"), 
+            root_dir=config.get("Data", "root_dir"), 
+            device=config.get("Data", "device"), 
+            window_acceleration=config.get("Data", "window_acceleration"),
+            window_strain=config.get("Data", "window_strain"),
+            spherical_coords=config.get("Data", "spherical_coords"),
+            basis_type=config.get("Data", "basis_type"),
+            sky_position=config.get("Data", "prior_args")["sky_position"],
             make_plots=make_plots,
-            flow_package=config["flow_model_type"].split("-")[0])
+            flow_package=config.get("Data", "flow_model_type").split("-")[0])
 
 
 
@@ -228,7 +226,6 @@ def test_model_2d(
     basis_order, 
     n_dimensions, 
     detectors, 
-    window, 
     root_dir, 
     device, 
     n_samples=2000,
@@ -241,7 +238,6 @@ def test_model_2d(
     sky_position=(np.pi, np.pi/2),
     flow_package="zuko",
     return_velocities=False,
-    include_previous_positions=False,
     n_previous_positions=2):
     """test a 3d model sampling from the flow and producing possible trajectories
 
@@ -276,7 +272,7 @@ def test_model_2d(
             # include the time 
             input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1)
             #print(input_data.size(), label.size(), data.size(), times.size())
-            if include_previous_positions:
+            if n_previous_positions > 0:
                 multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, includes_velocities=return_velocities, device=device)
                 multi_coeffmass_samples = multi_coeffmass_samples.reshape(-1, 1, label.size(-1))
             else:
@@ -329,7 +325,7 @@ def test_model_2d(
                 source_coeffs, 
                 detectors=detectors,
                 window_acceleration=window_acceleration, 
-                window=window, 
+                window_strain=window_strain, 
                 basis_type=basis_type,
                 basis_order=basis_order,
                 sky_position=sky_position)
@@ -387,7 +383,7 @@ def test_model_2d(
                     t_co,  
                     detectors=detectors,
                     window_acceleration=window_acceleration, 
-                    window=window, 
+                    window_strain=window_strain, 
                     basis_type=basis_type,
                     basis_order=basis_order,
                     sky_position=sky_position)
@@ -705,7 +701,7 @@ def test_model_3d(
                 recon_coeffs, 
                 detectors=detectors,
                 window_acceleration=window_acceleration, 
-                window=window, 
+                window_strain=window_strain, 
                 basis_type=basis_type,
                 basis_order=basis_order,
                 sky_position=sky_position)
@@ -725,7 +721,7 @@ def test_model_3d(
                 source_coeffs, 
                 detectors=detectors,
                 window_acceleration=window_acceleration, 
-                window=window, 
+                window_strain=window_strain, 
                 basis_type=basis_type,
                 basis_order=basis_order,
                 sky_position=sky_position)
