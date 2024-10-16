@@ -616,7 +616,7 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 3, 
     detectors=["H1"], 
-    window="none", 
+    _strain="none", 
     window_acceleration=True, 
     basis_type="chebyshev",
     data_type="newtonian-kepler",

@@ -1,4 +1,4 @@
-from massdynamics.data_generation import data_processing
+from dynasaur.data_generation import data_processing
 import numpy as np
 import torch
 
