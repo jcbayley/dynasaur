@@ -1,5 +1,5 @@
 [project]
-name = "massdynamics"
+name = "dynasaur"
 description = "compute mass dynamics from strain"
 version = "0.0.1"
 readme = "README.rst"

@@ -4,9 +4,245 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import time
 import timeit
-from massdynamics.basis_functions import basis
-from massdynamics.data_generation import orbits_functions, data_processing
-from massdynamics.data_generation.models.newtonian_eom import newton_derivative
+from dynasaur.basis_functions import basis
+from dynasaur.data_generation import orbits_functions, data_processing
+
+def acceleration_1pn(m0, m1, r, v, rvect, vvect, G, c):
+
+    prefact = 4*(G**2)/(5*(c**5)*(r**3))*m0*m1*(m1/(m0 + m1))
+
+    fact1 = rvect*np.dot(rvect, vvect)*((34/3)*G*(m0+m1)/r + 6*v**2)
+
+    fact2 = vvect*(-6*G*(m0+m1)/r - 2*v**2)
+    #print(prefact, fact1, fact2)
+    #print(c,G,m0,m1, r, v)
+    return prefact * (fact1 + fact2)
+
+def acceleration_c2(m1, m2, r12, v12, r1, r2, v1, v2, G, c):
+    """taken from https://doi.org/10.12942/lrr-2014-2
+
+    Args:
+        m1: 
+        m2: 
+        r1 (_type_): _description_
+        r2 (_type_): _description_
+        v1 (_type_): _description_
+        v2 (_type_): _description_
+        G (_type_): _description_
+        c (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    #r12 = np.sum((r1 - r2)**2)
+    n12 = (r1 - r2)/r12
+    #v12 = v1 - v2
+
+    fact1 = 5*(G**2)*m1*m2/(r12**3)
+
+    fact2 = 4*(G**2)*(m2**2)/(r12**2)
+
+    fact3 = G*m2/(r12**2)
+
+    bracket1 = (3/2)*np.dot(n21*v2)**2 - np.dot(v1, v1) + 4*np.dot(v1,v2) - 2*np.dot(v2, v2)
+
+    term1 = fact1 + fact2 + fact3*bracket2
+
+    fact4 = G*m2/(r12**2)
+
+    bracket2 = 2*np.dot(n12, v1) - 2*np.dot(n12,v2)
+
+    term2 = fact4*bracket2
+
+    return 1/c^2*(term1*n12 + term2*v12)
+
+def acceleration_c4(m1, m2, r12, v12, r1, r2, v1, v2, G, c):
+    """taken from https://doi.org/10.12942/lrr-2014-2
+
+    Args:
+        r1 (_type_): _description_
+        r2 (_type_): _description_
+        v1 (_type_): _description_
+        v2 (_type_): _description_
+        G (_type_): _description_
+        c (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    #r12 = np.sum((r1 - r2)**2)
+    n12 = (r1 - r2)/r12
+    #v12 = v1 - v2
+    term1 = (
+        (-57 * G ** 3 * m1 ** 2 * m2 ** 2 / (4 * r12 ** 4)) +
+        (-69 * G ** 3 * m1 * m2 ** 2 / (2 * r12 ** 4)) +
+        (-9 * G ** 3 * m2 ** 2 / (r12 ** 4)) +
+        (G * m2 / (r12 ** 2)) * (
+            (-15 / 8) * (np.dot(n12,v2) ** 4) +
+            (3 / 2) * (np.dot(n12, v2) ** 2 * np.dot(v1, v1)) -
+            6 * (np.dot(n1, v2) ** 2 * np.dot(v1, v2)) -
+            2 * np.dot(v1, v2) ** 2 +
+            (9 / 2) * (np.dot(n1, v2) ** 2 * np.dot(v2, v2)) +
+            4 * np.dot(v1, v2) * np.dot(v2, v2) -
+            2 * (np.dot(v2, v2) ** 4)
+        ) +
+        (G ** 2 * m1 * m2 / (r12 ** 3)) * (
+            (39 / 2) * (np.dot(n12, v1) ** 2) -
+            39 * (np.dot(n12 , v1) * np.dot(n12, v2)) +
+            (17 / 2) * (np.dot(n12, v2) ** 2) -
+            (15 / 4) * np.dot(v1, v1) -
+            (5 / 2) * np.dot(v1 , v2) +
+            (5 / 4) * np.dot(v2, v2)
+        ) +
+        (G ** 2 * m2 ** 2 / (r12 ** 3)) * (
+            2 * (np.dot(n12, v1) ** 2) -
+            4 * (np.dot(n12, v1) * np.dot(n12 , v2)) -
+            6 * (np.dot(n12, v2) ** 2) -
+            8 * np.dot(v1, v2) +
+            4 * np.dot(v2, v2)
+        )
+    )
+
+    term2 = (
+        (G ** 2 * m2 ** 2 / (r12 ** 3)) * (
+            -2 * (np.dot(n12, v1)) -
+            2 * np.dot(n12, v2)
+        ) +
+        (G ** 2 * m1 * m2 / (r12 ** 3)) * (
+            (-63 / 4) * np.dot(n12, v1) +
+            (55 / 4) * np.dot(n12, v2)
+        ) +
+        (G * m2 / (r12 ** 2)) * (
+            -6 * (np.dot(n12 * v1) * np.dot(n12, v2) ** 2) +
+            (9 / 2) * (np.dot(n12, v2) ** 3) +
+            (np.dot(n12, v2) * np.pdot(v1, v1)) -
+            4 * (np.dot(n12, v1) * np.dot(v2, v2)) +
+            4 * (np.dot(n12, v2) * np.dot(v2, v2)) +
+            4 * (np.dot(n12, v1) * np.dot(v2, v2)) -
+            5 * (np.dot(n12, v2) * np.dot(v2, v2))
+        )
+    )
+
+    return (1/c**4) * (term1 * n12 + term2 * v12)
+
+def newton_derivative(
+    t, 
+    x_posvels, 
+    masses, 
+    factor=1, 
+    n_dimensions=3, 
+    EPS=1e-13,
+    second_scale=86400,
+    mass_scale=1.989e30,
+    distance_scale=1.4e11,
+    G=6.67e-11,
+    c=3e8
+    ):
+    """compute the derivative of the position and velocity
+
+    Args:
+        x_positions (_type_): _description_
+        masses (_type_): _description_
+    """
+    n_masses = len(masses)
+
+    # define some constants 
+    #G = 6.67e-11
+    #c = 3e8
+    # compute G in gaussian gravitational units to prevent overflows
+    # G * (s/day)/(m/Au) * Msun(kg)
+
+    # reshape posvels to more useful shape
+    x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
+    x_positions = x_posvels[:, 0:n_dimensions]
+    x_vels = x_posvels[:, n_dimensions:2*n_dimensions]
+
+    seps = np.zeros((n_masses, n_masses))
+    decay = 0.9
+
+    x_derivative = np.zeros((n_masses, 2*n_dimensions))
+    for i, mass_1 in enumerate(masses):
+        x_derivative[i][0:n_dimensions] = x_vels[i]
+        for j, mass_2 in enumerate(masses):
+            if i == j: continue
+            separation = np.sqrt(np.sum((x_positions[i] - x_positions[j])**2) + EPS)
+            separation_cubed = separation**3
+            absvel = np.sqrt(np.sum((x_vels[i] - x_vels[j])**2))
+            #seps[i,j] = separation_cubed
+            diff = x_positions[j] - x_positions[i]
+            veldiff = x_vels[i] - x_vels[j]
+            acceleration = G*mass_2*diff/separation_cubed
+            """
+            acc_1pn = acceleration_1pn(
+                mass_1, 
+                mass_2, 
+                separation, 
+                absvel, 
+                diff, 
+                veldiff, 
+                G, 
+                c)
+            """
+            acc_c2 = acceleration_c2(mass_1, mass_2, separation, veldiff, x_positions[i], x_positions[j], x_vels[i], x_vels[j], G, c)
+            acc_c4 = acceleration_c2(mass_1, mass_2, separation, veldiff, x_positions[i], x_positions[j], x_vels[i], x_vels[j], G, c)
+            #print(acceleration, gw_acceleration)
+            x_derivative[i][n_dimensions:2*n_dimensions] += acceleration + acc_c2 + acc_c4
+         
+        """
+        # get all other masses but this one
+        other_positions = np.delete(x_positions, i)
+        other_vels = np.delete(x_vels, i)
+        # compute separations
+        rs = np.sqrt(np.sum((other_positions - x_positions[j])**2))
+        """
+    #energy_loss_term = x_derivative[i][3:6] * factor
+
+    return x_derivative.flatten()
+
+def newton_derivative_vect(
+    t, 
+    x_posvels, 
+    masses, 
+    factor=1, 
+    n_dimensions=3, 
+    EPS=1e-11,
+    second_scale=86400,
+    mass_scale=1.989e30,
+    distance_scale=1.4e11,
+    G=6.67e-11,
+    c=3e8):
+    """compute the derivative of the position and velocity
+
+    Args:
+        x_positions (_type_): (Nmasses*6, )
+        masses (_type_): _description_
+    """
+    n_masses = len(masses)
+
+    # define some constants 
+    # compute G in gaussian gravitational units to prevent overflows
+    # G * (s/day)/(m/Au) * Msun(kg)
+
+    x_posvels = x_posvels.reshape(n_masses, 2*n_dimensions)
+    x_derivative = np.zeros((n_masses, 2*n_dimensions))
+
+    # compute separations of each object and the absolute distance
+    diff_xyz = x_posvels[:,0:3,None].T - x_posvels[:,0:3,None] # Nx3xxN matrix
+    #inv_r_cubed = (np.sum(diff_xyz**2, axis=1) + EPS)**(-1.5) # NxN matrix
+    inv_r_cubed = (np.einsum("ijk,ijk->ik", diff_xyz, diff_xyz) + EPS)**-1.5
+    #print("invdiff", np.sum(diff_xyz**2, axis=1) - inv_r_cubed2)
+
+    # below two lines are the same
+    # take matrix multiplication of masses with last dimensions
+    #acceleration = G*(dxyz * inv_r_cubed) @ masses
+    #acceleration = np.einsum("ijk,k", G*(dxyz * inv_r_cubed), masses)
+
+    x_derivative[:, 0:3] = x_posvels[:, 3:6]
+    #div_r_cubed = np.einsum("ijk, ik->ijk", G_ggravunits*diff_xyz, inv_r_cubed)
+    x_derivative[:, 3:6] = np.einsum("ijk, ik, k->ij", G_ggravunits*diff_xyz, inv_r_cubed, masses)
+    #x_derivative[:, 3:6] = np.einsum("ijk,k->ij", div_r_cubed, masses)
+
+    return x_derivative.flatten()
 
 
 def get_masses(n_masses):
@@ -155,6 +391,39 @@ def kepler_apoapsis(semi_major_axis, eccentricity, theta, masses, G):
 
     return np.concatenate([[r0],[r1]], axis=0), np.concatenate([[v0],[v1]], axis=0)
 
+def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G):
+    """generate initial conditionss for a kepler orbit in 2d plane starting at apoapsis
+
+    Args:
+        semi_major_axis (_type_): _description_
+        eccentricity (_type_): _description_
+        theta (_type_): _description_
+        masses (_type_): _description_
+        G (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    ra = semi_major_axis*(1+eccentricity)
+    velocity = np.sqrt(G*np.sum(masses)/ra*(1-eccentricity))
+
+    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
+                                [np.sin(theta), np.cos(theta), 0],
+                                [0,0,0]])
+
+    r0 = np.array([-ra, 0, 0])
+    v0 = np.array([0,-velocity, 0])
+
+    r1 = np.array([ra,0,0])
+    v1 = np.array([0,velocity,0])
+
+    r0 = rotation_matrix.dot(masses[1]/np.sum(masses) * r0)
+    r1 = rotation_matrix.dot(masses[0]/np.sum(masses) * r1)
+
+    v0 = rotation_matrix.dot(masses[1]/np.sum(masses) * v0)
+    v1 = rotation_matrix.dot(masses[0]/np.sum(masses) * v1)
+
+    return np.concatenate([[r0],[r1]], axis=0), np.concatenate([[v0],[v1]], axis=0)
 
     
 def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale):
@@ -181,55 +450,15 @@ def get_initial_positions_velocities(n_masses, n_dimensions, position_scale, vel
     """
     return initial_positions, initial_velocities
 
-def kepler_apoapsis_binary(semi_major_axis, eccentricity, theta, masses, G, handed_orbit=False):
-    """generate initial conditionss for a kepler orbit in 2d plane starting at apoapsis
-
-    Args:
-        semi_major_axis (_type_): _description_
-        eccentricity (_type_): _description_
-        theta (_type_): _description_
-        masses (_type_): _description_
-        G (_type_): _description_
-
-    Returns:
-        _type_: _description_
-    """
-    ra = semi_major_axis*(1+eccentricity)
-    velocity = np.sqrt(G*np.sum(masses)/ra*(1-eccentricity))
-    if not handed_orbit:
-        # randomly switch the handedness of the orbit
-        if np.random.uniform(0,1) > 0.5:
-            velocity = -velocity 
-    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
-                                [np.sin(theta), np.cos(theta), 0],
-                                [0,0,0]])
-
-    r0 = np.array([-ra, 0, 0])
-    v0 = np.array([0,-velocity, 0])
-
-    r1 = np.array([ra,0,0])
-    v1 = np.array([0,velocity,0])
-
-    r0 = rotation_matrix.dot(masses[1]/np.sum(masses) * r0)
-    r1 = rotation_matrix.dot(masses[0]/np.sum(masses) * r1)
-
-    v0 = rotation_matrix.dot(masses[1]/np.sum(masses) * v0)
-    v1 = rotation_matrix.dot(masses[0]/np.sum(masses) * v1)
-
-    return np.concatenate([[r0],[r1]], axis=0), np.concatenate([[v0],[v1]], axis=0)
-
-
 def get_initial_conditions(
     times, 
     G,  
-    c,
     n_masses, 
     n_dimensions,
     position_scale, 
     mass_scale, 
     velocity_scale,
-    data_type = "kepler",
-    prior_args={}):
+    data_type = "kepler"):
     """return initial positions, velocities and masses
        these should be in units of 
        mass: kg
@@ -251,8 +480,9 @@ def get_initial_conditions(
         _type_: _description_
     """
     if data_type == "equalmass_3d":
-        masses = np.array([0.5,0.5])*mass_scale*1e-2
+        masses = np.array([0.5,0.5])*mass_scale*1e2
         initial_positions, initial_velocities = get_initial_positions_velocities(n_masses, n_dimensions, position_scale, velocity_scale)
+        
     elif data_type == "kepler_fixedperiod":
         M = 1e30
         duration = np.max(times) - np.min(times)
@@ -316,12 +546,13 @@ def get_initial_conditions(
         n_samples = len(times)
         period = duration
         min_period = 2.*duration/n_samples
+        max_period = duration/10
 
         M = mass_scale
 
-        masses = np.array([M, np.random.uniform(1e-5*M, 1e-3*M)])
+        masses = 10*np.array([M, np.random.uniform(1e-3*M, 1e-2*M)])
 
-        period = np.random.uniform(duration/4, duration*2)
+        period = np.random.uniform(min_period, max_period)
 
         semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = 0.0
@@ -336,33 +567,22 @@ def get_initial_conditions(
             arg_periapsis, 
             masses, 
             G)
-    elif data_type == "circularbinary_old":
-        ## should all be in normalised units
-        prior_args.setdefault("mass_min", 10)
-        prior_args.setdefault("mass_max", 100)
-        prior_args.setdefault("cycles_min", 1)
-        prior_args.setdefault("cycles_max", 4)
-        prior_args.setdefault("semi_maj_ax_min", 1e-6)
-        prior_args.setdefault("semi_maj_ax_max", 1e-1)
-        M = 1e30 # solar masses
+        
+    elif data_type == "circularbinary":
+        M = 1e30
         duration = np.max(times) - np.min(times)
         n_samples = len(times)
         period = duration
         min_period = 2.*duration/n_samples
-        if duration/prior_args["cycles_max"] < min_period:
-            raise Exception("number of cycles larger than half the sample rate")
+        max_period = min_period*2
         M = mass_scale
 
-        # in M_sun
-        masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
+        masses = np.random.uniform(20, 30)*np.array([M, M])
+        #masses = np.random.uniform(2, 1000)*np.array([M, M])
 
-        # days
-        period = np.random.uniform(duration/prior_args["cycles_max"], duration/prior_args["cycles_min"])
+        period = np.random.uniform(min_period, max_period)
 
-        semi_major_axes = ((G*(np.sum(masses))/(4*np.pi**2)) * period**2)**(1/3)
-
-        #semi_major_axes = np.random.uniform(prior_args["semi_maj_ax_min"], prior_args["semi_maj_ax_max"])
-
+        semi_major_axes = (G*(np.sum(masses))/(4*np.pi**2) * period**2)**(1/3)
         eccentricities = 0.0
         #inclinations = np.array([0.0])
         #long_ascending_node = 0.0#np.random.uniform(0.0, 2*np.pi, size=1) # Longitude of the ascending node in degrees
@@ -375,106 +595,29 @@ def get_initial_conditions(
             arg_periapsis, 
             masses, 
             G)
-        print(initial_positions)
-        print(semi_major_axes)
-    elif data_type == "circularbinary":
-
-        prior_args.setdefault("mass_min", 1)
-        prior_args.setdefault("mass_max", 10)
-        prior_args.setdefault("cycles_min", 1)
-        prior_args.setdefault("cycles_max", 4)
-        prior_args.setdefault("separation_add_min", 6)
-        prior_args.setdefault("separation_add_max", 10)
-        prior_args.setdefault("arg_periapsis_min", 0)
-        prior_args.setdefault("arg_periapsis_max", 2*np.pi)
-        prior_args.setdefault("handed_orbit", False)
-
-        masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
-
-        schwarz_rad = 2*G*masses/(c**2)
-        min_sep = np.sum(schwarz_rad)
-        semi_major_axes = min_sep*np.random.uniform(prior_args["separation_add_min"],prior_args["separation_add_max"])
-
-        eccentricities = 0.0
-        arg_periapsis = np.random.uniform(prior_args["arg_periapsis_min"], prior_args["arg_periapsis_max"])
-
-        initial_positions, initial_velocities = kepler_apoapsis_binary(
-            semi_major_axes, 
-            eccentricities, 
-            arg_periapsis, 
-            masses, 
-            G,
-            handed_orbit=prior_args["handed_orbit"])
-
-    elif data_type == "circularbinarymasstriangle":
-
-        prior_args.setdefault("mass_min", 1)
-        prior_args.setdefault("mass_max", 10)
-        prior_args.setdefault("cycles_min", 1)
-        prior_args.setdefault("cycles_max", 4)
-        prior_args.setdefault("separation_add_min", 6)
-        prior_args.setdefault("separation_add_max", 10)
-        prior_args.setdefault("arg_periapsis_min", 0)
-        prior_args.setdefault("arg_periapsis_max", 2*np.pi)
-        prior_args.setdefault("handed_orbit", False)
-
-        masses = np.random.uniform(prior_args["mass_min"], prior_args["mass_max"], size=2)
-
-        m1 = masses[0]
-        m2 = masses[1]
-        if m2 > m1:
-            masses = np.array([m2, m1])
-
-        schwarz_rad = 2*G*masses/(c**2)
-        min_sep = np.sum(schwarz_rad)
-        #semi_major_axes = min_sep*np.random.uniform(prior_args["separation_add_min"],prior_args["separation_add_max"])
-
-        # days
-        duration = np.max(times) - np.min(times)
-        period = np.random.uniform(duration/prior_args["cycles_max"], duration/prior_args["cycles_min"])
-
-        semi_major_axes = ((G*(np.sum(masses))/(4*np.pi**2)) * period**2)**(1/3)
-
-        eccentricities = 0.0
-        arg_periapsis = np.random.uniform(prior_args["arg_periapsis_min"], prior_args["arg_periapsis_max"])
-
-        initial_positions, initial_velocities = kepler_apoapsis_binary(
-            semi_major_axes, 
-            eccentricities, 
-            arg_periapsis, 
-            masses, 
-            G,
-            handed_orbit=prior_args["handed_orbit"])
-
-    else:
-        raise Exception(f"Model {data_type} not implemented")
 
     return masses, initial_positions, initial_velocities
 
 def resample_initial_conditions(
     times, 
     G, 
-    c,
     n_masses, 
     n_dimensions, 
     position_scale, 
     mass_scale, 
     velocity_scale,
-    data_type = "kepler_fixedperiod",
-    prior_args = {}
+    data_type = "kepler_fixedperiod"
     ):
 
     masses, initial_positions, initial_velocities = get_initial_conditions(
         times, 
         G, 
-        c,
         n_masses, 
         n_dimensions, 
         position_scale, 
         mass_scale, 
         velocity_scale,
-        data_type = data_type,
-        prior_args = prior_args)
+        data_type = data_type)
 
 
     """
@@ -529,20 +672,19 @@ def solve_ode(
     initial_velocities,
     G=6.67e-11,
     c=3e8,
-    n_samples=128,
-    correction=False,
-    newtoniandecay=False,
-    interpolate=True):
+    n_samples=128):
 
     # scalings for the ode solver
     # scale to 1 year
-    second_scale = 1
+    second_scale = 86400
     # scale to 1 au
     distance_scale = 1.4e11
     #  solar masses
     mass_scale = 1.989e30
 
-    ode_times = times#/second_scale
+    ode_times = times/second_scale
+    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
+    c_ggravunits = c * ((second_scale**2)/(distance_scale))
 
     n_masses, n_dimensions = np.shape(initial_positions)
 
@@ -551,13 +693,10 @@ def solve_ode(
 
     initial_positions = data_processing.subtract_center_of_mass(initial_positions[:,:,np.newaxis], masses)[:,:,0]
 
-    #ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
-    #ode_initial_positions = initial_positions/distance_scale                # now in AU
-    #ode_masses = masses/mass_scale
+    ode_initial_velocities = initial_velocities*second_scale/distance_scale # now in AU/day
+    ode_initial_positions = initial_positions/distance_scale                # now in AU
+    ode_masses = masses/mass_scale
 
-    ode_initial_velocities = initial_velocities
-    ode_initial_positions = initial_positions
-    ode_masses = masses
 
     #print(ode_initial_positions, initial_positions)
     #print(ode_initial_velocities, initial_velocities)
@@ -565,16 +704,18 @@ def solve_ode(
 
     initial_conditions = np.concatenate([ode_initial_positions, ode_initial_velocities], axis=-1)
 
-    ##print("ndec", newtoniandecay, "G: ", G, "C:", c)
+    #print(initial_conditions)
     ode = lambda t, x: newton_derivative(
         t, 
         x, 
         masses=ode_masses, 
+        factor=1, 
         n_dimensions=n_dimensions,
-        G=G,
-        c=c,
-        correction_1pn=newtoniandecay,
-        correction_2pn=newtoniandecay)
+        second_scale=second_scale,
+        distance_scale=distance_scale,
+        mass_scale=mass_scale,
+        G=G_ggravunits,
+        c=c_ggravunits)
     
     #too_close_event.terminal = True
 
@@ -584,8 +725,8 @@ def solve_ode(
         y0=initial_conditions.flatten(), 
         tfirst=True,
         method="RK45",
-        rtol=1e-14,
-        atol=1e-14)
+        rtol=1e-6,
+        atol=1e-6)
     
     """
     if max(outputs.t) < max(times):
@@ -594,17 +735,21 @@ def solve_ode(
     """
     # y is shape (nvals, ntimes, )
 
+    print(outputs.y)
+
     positions = outputs.y.reshape(n_masses, 2*n_dimensions, len(outputs.t))[:,:3] # get positions only
     positions = positions.reshape(n_masses*n_dimensions, len(outputs.t))
 
-    if interpolate:
-        ode_interp_positions = interpolate_positions(outputs.t, ode_times, positions).T # ntimes, nvals
-        ode_interp_positions = ode_interp_positions.reshape(len(ode_times), n_masses, n_dimensions)
-        ode_interp_positions = ode_interp_positions #- np.mean(ode_interp_positions, axis=(0, 1))[None,None,:]
-
+    ode_interp_positions = interpolate_positions(outputs.t, ode_times, positions).T # ntimes, nvals
+    ode_interp_positions = ode_interp_positions.reshape(len(ode_times), n_masses, n_dimensions)
+    ode_interp_positions = ode_interp_positions #- np.mean(ode_interp_positions, axis=(0, 1))[None,None,:]
+    
     #scaled_interp_positions = ode_interp_positions*distance_scale/position_scale
     scaled_interp_positions = ode_interp_positions*distance_scale                # now in AU
     scaled_masses = masses*mass_scale
+
+    times = outputs.t
+    scaled_interp_positions = positions*distance_scale
     
     return times, scaled_interp_positions, scaled_masses
 
@@ -619,8 +764,7 @@ def generate_data(
     window="none", 
     window_acceleration=True, 
     basis_type="chebyshev",
-    data_type="newtonian-kepler",
-    prior_args = {}) -> np.array:
+    data_type="newtonian-kepler") -> np.array:
     """_summary_
 
     Args:
@@ -638,50 +782,40 @@ def generate_data(
     else:
         dtype = np.float64
 
-    newtoniandecay = True if data_type.split("-")[0] in ["newtoniandecay", "newtonian_decay"] else False
-
     ntimeseries = [0, 1, 3, 6, 10]
 
     strain_timeseries = np.zeros((n_data, len(detectors), sample_rate))
 
-    prior_args.setdefault("sample_rate", sample_rate)
-    prior_args.setdefault("n_samples", sample_rate)
-    prior_args.setdefault("duration", 1)
-
     second = 1./(24*3600)
-    times = np.linspace(0,1,prior_args["n_samples"]) #in days for ode
-    solve_times = np.linspace(0,prior_args["duration"],prior_args["n_samples"])
+    n_samples = sample_rate
+    times = np.linspace(0,1,sample_rate) #in days for ode
+    solve_times = np.linspace(0,2,sample_rate)
 
     G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
     c = 3e8
 
-    # seconds
-    second_scale = 1
-    # au
+    # scale to 1 year
+    second_scale = 86400
+    # between 0 and au/100
     distance_scale = 1.4e11
-    # solar masses
+    # between 0 and 100 solar masses
     mass_scale = 1.989e30
-
-    G_ggravunits = G * ((second_scale**2)/((distance_scale)**3)) * mass_scale
-    c_ggravunits = c * ((second_scale)/(distance_scale))
 
     position_scale = 2*distance_scale                             # in m
     velocity_scale = np.sqrt(2*G*mass_scale/distance_scale)*1e-1       # in m/s
 
-    all_positions = np.zeros((n_data, n_masses, n_dimensions, prior_args["n_samples"]))
+    all_positions = np.zeros((n_data, n_masses, n_dimensions, n_samples))
     all_masses = np.zeros((n_data, n_masses))
     for i in range(n_data):
         masses, initial_positions, initial_velocities = resample_initial_conditions(
             solve_times, 
-            G_ggravunits, 
-            c_ggravunits,
+            G, 
             n_masses, 
             n_dimensions, 
             position_scale, 
             mass_scale, 
             velocity_scale,
-            data_type = data_type.split("-")[1],
-            prior_args = prior_args
+            data_type = data_type.split("-")[1]
             )
 
         t_times, positions, masses = solve_ode(
@@ -689,12 +823,9 @@ def generate_data(
             masses=masses, 
             initial_positions=initial_positions,
             initial_velocities=initial_velocities,
-            n_samples=len(times),
-            newtoniandecay=newtoniandecay,
-            G=G_ggravunits,
-            c=c_ggravunits)
+            n_samples=len(times))
 
-        #print(f"solved: {i}")
+        print(f"solved: {i}")
         all_positions[i] = np.transpose(positions, (1,2,0))
         all_masses[i] = masses
 

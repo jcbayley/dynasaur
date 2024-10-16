@@ -4,7 +4,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import time
 import timeit
-from massdynamics.basis_functions import basis
+from dynasaur.basis_functions import basis
 
 def newton_derivative_vect(
     t, 

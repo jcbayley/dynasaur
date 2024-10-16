@@ -1,7 +1,7 @@
 import torch
 import numpy as np
-import massdynamics.data_generation.compute_waveform as compute_waveform
-import massdynamics.window_functions as window_functions
+import dynasaur.data_generation.compute_waveform as compute_waveform
+import dynasaur.window_functions as window_functions
 import scipy
 import copy
 

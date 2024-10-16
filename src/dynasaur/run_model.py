@@ -3,18 +3,18 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 import os
 import numpy as np
 import copy
-from massdynamics.data_generation import (
+from dynasaur.data_generation import (
     data_generation,
     data_processing,
     compute_waveform
 )
-from massdynamics.create_model import (
+from dynasaur.create_model import (
     load_models,
     create_models
 )
 
-from massdynamics.plotting import plotting, make_animations
-from massdynamics.basis_functions import basis
+from dynasaur.plotting import plotting, make_animations
+from dynasaur.basis_functions import basis
 import h5py
 import matplotlib.pyplot as plt
 

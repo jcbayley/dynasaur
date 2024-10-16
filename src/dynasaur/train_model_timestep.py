@@ -1,20 +1,20 @@
 import zuko
-from massdynamics.data_generation import (
+from dynasaur.data_generation import (
     data_generation,
     compute_waveform,
     data_processing
 )
-from massdynamics.basis_functions import basis
-import massdynamics.create_model as create_model
+from dynasaur.basis_functions import basis
+import dynasaur.create_model as create_model
 from scipy import signal
-from massdynamics.test_model_timestep import run_testing
+from dynasaur.run_model_timestep import run_testing
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from massdynamics.plotting import plotting
+from dynasaur.plotting import plotting
 import json
 import argparse
 import copy

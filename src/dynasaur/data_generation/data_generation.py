@@ -7,12 +7,12 @@ import argparse
 import h5py
 import os
 import torch
-from massdynamics import window_functions
-from massdynamics.data_generation import (
+from dynasaur import window_functions
+from dynasaur.data_generation import (
     compute_waveform,
     data_processing,
 )
-from massdynamics.data_generation.models import (
+from dynasaur.data_generation.models import (
     random_orbits,
     newtonian_orbits,
     newtonian_orbits_decay,
@@ -21,7 +21,7 @@ from massdynamics.data_generation.models import (
     oscillating_orbits,
     circular_orbits
 )
-from massdynamics.basis_functions import basis
+from dynasaur.basis_functions import basis
 
 
 def generate_data(

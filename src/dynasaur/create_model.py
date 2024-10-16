@@ -17,7 +17,7 @@ from zuko.flows import (
 import glasflow
 from zuko.distributions import DiagNormal
 import numpy as np
-from massdynamics.data_generation import (
+from dynasaur.data_generation import (
     data_generation,
 )
 

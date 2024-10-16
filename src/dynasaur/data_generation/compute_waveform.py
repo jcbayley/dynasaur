@@ -1,5 +1,5 @@
 import numpy as np
-from massdynamics.basis_functions import basis
+from dynasaur.basis_functions import basis
 import lal
 import lalpulsar
 
