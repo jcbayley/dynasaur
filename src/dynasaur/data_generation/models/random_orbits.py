@@ -79,7 +79,7 @@ def generate_data(
     sample_rate: int, 
     n_dimensions: int = 1, 
     detectors=["H1"], 
-    window="none", 
+    window_strain="none", 
     window_acceleration=True, 
     basis_type="chebyshev",
     fourier_weight=0.0,

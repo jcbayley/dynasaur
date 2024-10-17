@@ -6,8 +6,9 @@ from dynasaur.data_generation import (
 )
 from dynasaur.basis_functions import basis
 import dynasaur.create_model as create_model
+from dynasaur.config import read_config
 from scipy import signal
-from dynasaur.run_model import run_testing
+from dynasaur.test_model import run_testing
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 import torch.nn as nn
@@ -74,117 +75,120 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         root_dir (str): _description_
         config (dict): _description_
     """
-    if not os.path.isdir(config["root_dir"]):
-        os.makedirs(config["root_dir"])
+    if not os.path.isdir(config.get("General", "root_dir")):
+        os.makedirs(config.get("General","root_dir"))
 
-    with open(os.path.join(config["root_dir"], "config.json"),"w") as f:
-        configstring = json.dumps(config, indent=4)
-        f.write(configstring)
+    config.write_to_file(os.path.join(config.get("General", "root_dir"), "config.ini"))
 
-    device = torch.device(config["device"])
+    #with open(os.path.join(config.get("root_dir"], "config.json"),"w") as f:
+    #    configstring = json.dumps(config, indent=4)
+    #    f.write(configstring)
+
+    device = torch.device(config.get("Training","device"))
     if torch.cuda.is_available():
         print(torch.cuda.get_device_name(device))
 
     data_dimensions = 3
 
-    if config["load_data"]:
+    if config.get("Data","load_data") == True:
         print("loading data ........")
         times, basis_dynamics, masses, strain, cshape, positions, snrs = data_generation.load_data(
-            data_dir = config["data_dir"], 
-            basis_order = config["basis_order"],
-            n_masses = config["n_masses"],
-            sample_rate = config["sample_rate"],
+            data_dir = config.get("General","data_dir"), 
+            basis_order = config.get("Data", "basis_order"),
+            n_masses = config.get("Data","n_masses"),
+            sample_rate = config.get("Data", "sample_rate"),
             n_dimensions = data_dimensions,
-            detectors = config["detectors"],
-            window = config["window"],
-            window_acceleration = config["window_acceleration"],
-            basis_type = config["basis_type"],
-            data_type = config["data_type"],
-            noise_variance=config["noise_variancce"]
+            detectors = config.get("Data", "detectors"),
+            window_strain = config.get("Data", "window_strain"),
+            window_acceleration = config.get("Data", "window_acceleration"),
+            basis_type = config.get("Data", "basis_type"),
+            data_type = config.get("Data", "data_type"),
+            noise_variance=config.get("Data", "noise_variance")
             )
    
-        config["n_data"] = len(labels)
+        #config.get("Training", "n_train_data") = len(labels)
     else:
         print("making data ........")
         times, basis_dynamics, masses, strain, cshape, positions, all_dynamics, snrs = data_generation.generate_data(
-            n_data=config["n_data"], 
-            basis_order=config["basis_order"], 
-            n_masses=config["n_masses"], 
-            sample_rate=config["sample_rate"], 
+            n_data=config.get("Training", "n_train_data") + config.get("Training", "n_val_data"), 
+            basis_order=config.get("Data", "basis_order"), 
+            n_masses=config.get("Data", "n_masses"), 
+            sample_rate=config.get("Data", "sample_rate"), 
             n_dimensions=data_dimensions, 
-            detectors=config["detectors"], 
-            window=config["window"], 
-            window_acceleration=config["window_acceleration"],
-            basis_type = config["basis_type"],
-            data_type = config["data_type"],
-            fourier_weight=config["fourier_weight"],
-            noise_variance=config["noise_variance"],
-            snr=config["snr"],
-            prior_args=config["prior_args"])
+            detectors=config.get("Data", "detectors"), 
+            window_strain=config.get("Data", "window_strain"), 
+            window_acceleration=config.get("Data", "window_acceleration"),
+            basis_type = config.get("Data", "basis_type"),
+            data_type = config.get("Data", "data_type"),
+            fourier_weight=config.get("Data", "fourier_weight"),
+            noise_variance=config.get("Data", "noise_variance"),
+            snr=config.get("Data", "snr"),
+            prior_args=config.get("Data", "prior_args"))
 
     acc_basis_order = cshape
 
     #window = signal.windows.tukey(np.shape(strain)[-1], alpha=0.5)
     #strain = strain * window[None, None, :]
 
-    n_features = cshape*config["n_masses"]*config["n_dimensions"] + config["n_masses"]
-    n_context = config["n_context"]
-    flow_package = config["flow_model_type"].split("-")[0]
+    n_features = cshape*config.get("Data", "n_masses")*config.get("Data", "n_dimensions") + config.get("Data","n_masses")
+    n_context = config.get("FlowNetwork", "n_context")
+    flow_package = config.get("FlowNetwork","flow_model_type").split("-")[0]
 
     fig, ax = plt.subplots()
     ax.plot(strain[0])
-    fig.savefig(os.path.join(config["root_dir"], "test_data.png"))
+    fig.savefig(os.path.join(config.get("General", "root_dir"), "test_data.png"))
 
 
     if continue_train:
-        pre_model, model, weights = create_model.load_models(config, device=config["device"])
+        pre_model, model, weights = create_model.load_models(config, device=config.get("Training", "device"))
         pre_model, labels, strain = data_processing.preprocess_data(
             pre_model, 
             basis_dynamics,
             masses, 
             strain, 
-            window_strain=config["window_strain"], 
-            spherical_coords=config["spherical_coords"], 
+            window_strain=config.get("Data", "window_strain"), 
+            spherical_coords=config.get("Data", "spherical_coords"), 
             initial_run=False,
-            n_masses=config["n_masses"],
-            device=config["device"],
-            basis_type=config["basis_type"],
-            n_dimensions=config["n_dimensions"],
-            convert_to_timestep=config["timestep-predict"])
+            n_masses=config.get("Data", "n_masses"),
+            device=config.get("Training", "device"),
+            basis_type=config.get("Data", "basis_type"),
+            n_dimensions=config.get("Data", "n_dimensions"),
+            convert_to_timestep=config.get("Data", "timestep-predict"))
     else:   
-        pre_model, model = create_model.create_models(config, device=config["device"])
-        pre_model.to(config["device"])
-        model.to(config["device"])
+        pre_model, model = create_model.create_models(config, device=config.get("Training", "device"))
+        pre_model.to(config.get("Training", "device"))
+        model.to(config.get("Training", "device"))
         pre_model, labels, strain = data_processing.preprocess_data(
             pre_model, 
             basis_dynamics,
             masses, 
             strain, 
-            window_strain=config["window_strain"], 
-            spherical_coords=config["spherical_coords"], 
+            window_strain=config.get("Data", "window_strain"), 
+            spherical_coords=config.get("Data","spherical_coords"), 
             initial_run=True,
-            n_masses=config["n_masses"],
-            device=config["device"],
-            basis_type=config["basis_type"],
-            n_dimensions=config["n_dimensions"],
-            convert_to_timestep=config["timestep-predict"])
+            n_masses=config.get("Data", "n_masses"),
+            device=config.get("Training", "device"),
+            basis_type=config.get("Data", "basis_type"),
+            n_dimensions=config.get("Data", "n_dimensions"),
+            convert_to_timestep=config.get("Data", "timestep-predict"))
 
 
-    plotting.plot_data(times, positions, strain, 10, config["root_dir"])
+    plotting.plot_data(times, positions, strain, 10, config.get("General", "root_dir"))
 
     dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain))
 
-    train_size = int(0.9*config["n_data"])
+    train_size = int(0.9*config.get("Training", "n_train_data"))
     #test_size = 10
-    train_set, val_set = random_split(dataset, (train_size, config["n_data"] - train_size))
-    train_loader = DataLoader(train_set, batch_size=config["batch_size"],shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=config["batch_size"])
+    train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data"), config.get("Training", "n_val_data")))
+    train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
+    val_loader = DataLoader(val_set, batch_size=config.get("Training", "batch_size"))
 
-    optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config["learning_rate"])
+    optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config.get("Training", "learning_rate"))
 
+    print("Train Length:", len(train_loader), dir(train_loader))
 
     if continue_train:
-        with open(os.path.join(config["root_dir"], "train_losses.txt"), "r") as f:
+        with open(os.path.join(config.get("General", "root_dir"), "train_losses.txt"), "r") as f:
             losses = np.loadtxt(f)
         train_losses = list(losses[0])
         val_losses = list(losses[1])
@@ -197,21 +201,21 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         start_epoch = 0
 
     print("Start training")
-    for epoch in range(config["n_epochs"]):
+    for epoch in range(config.get("Training", "n_epochs")):
         if continue_train:
             epoch = epoch + start_epoch
 
-        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config["device"], train=True, flow_package=flow_package)
+        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config.get("Training", "device"), train=True, flow_package=flow_package)
         train_losses.append(train_loss)
 
         with torch.no_grad():
-            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config["device"], train=False, flow_package=flow_package)
+            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=False, flow_package=flow_package)
             val_losses.append(val_loss)
             
         if epoch % 100 == 0:
             print(f"Epoch: {epoch}, Train loss: {train_loss}, Val loss: {val_loss}")
 
-            with open(os.path.join(config["root_dir"], "train_losses.txt"), "w") as f:
+            with open(os.path.join(config.get("General", "root_dir"), "train_losses.txt"), "w") as f:
                 np.savetxt(f, [train_losses, val_losses])
 
             torch.save({
@@ -223,7 +227,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
                 "label_norm_factor": pre_model.label_norm_factor,
                 "mass_norm_factor": pre_model.mass_norm_factor
             },
-            os.path.join(config["root_dir"],"test_model.pt"))
+            os.path.join(config.get("General", "root_dir"),"test_model.pt"))
 
         fig, ax = plt.subplots(nrows=2)
         ax[0].plot(train_losses)
@@ -234,7 +238,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         ax[1].set_xlabel("Time")
         ax[0].set_ylabel("Loss")
         ax[1].set_ylabel("Loss")
-        fig.savefig(os.path.join(config["root_dir"], "lossplot.png"))
+        fig.savefig(os.path.join(config.get("General", "root_dir"), "lossplot.png"))
 
     print("Completed Training")
 
@@ -252,47 +256,12 @@ if __name__ == "__main__":
     parser.add_argument("--ntest", type=int, required=False, default=10)
     args = parser.parse_args()
 
-    if args.config == "none":
-        config = dict(
-            n_data = 500000,
-            n_test_data = 10,
-            batch_size = 1024,
-            basis_order = 6,
-            n_masses = 2,
-            n_dimensions = 3,
-            detectors=["H1", "L1", "V1"],
-            conv_layers = [(3, 32, 16, 1), (32, 16, 16, 2), (16, 16, 16, 2) ],
-            linear_layers = [256, 256, 256],
-            sample_rate = 64,
-            n_epochs = 4000,
-            window="none",
-            basis_type="chebyshev",
-            custom_flow=True,
-            window_acceleration=False,
-            learning_rate = 5e-5,
-            device = "cuda:0",
-            nsplines = 8,
-            ntransforms = 8,
-            hidden_features = [256,256,256],
-            root_dir = "customflow_test_2mass_cheb6_3d_3det_nowindow_batch1024_lr5e-5"
-        )
-    else:
-        with open(os.path.abspath(args.config), "r") as f:
-            config = json.load(f)
+    config = read_config(os.path.abspath(args.config))
 
     continue_train = args.continuetrain
     train_model = args.train
     test_model = args.test
     print("makeplots", args.makeplots)
-
-    if "custom_flow" not in config.keys():
-        config["custom_flow"] = False
-    if config["window"] == False:
-        config["window"] = "none"
-    if "data_dir" not in config.keys():
-        config["data_dir"] = "./data"
-    if "fourier_weight" not in config.keys():
-        config["fourier_weight"] = 0.0
         
     if train_model:
         run_training(config, continue_train=continue_train)

@@ -199,7 +199,7 @@ def get_strain_from_samples(
     coeffs, 
     detectors=["H1"],
     window_acceleration=False, 
-    window="none", 
+    window_strain="none", 
     basis_type="chebyshev",
     basis_order=16,
     sky_position=(np.pi, np.pi/2)):
