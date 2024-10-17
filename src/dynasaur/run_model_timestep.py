@@ -218,6 +218,29 @@ def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previ
     output_samples = output_samples.permute(1,0,2).reshape((output_samples.size(0)*output_samples.size(1), output_samples.size(2)))
     return output_samples
 
+def sample_fixed_latent(model, n_samples, n_data, conditional, device="cpu"):
+    """Draws samples from the flow, but uses the same latent space sample for each set of times (i.e. for each trajectory)
+
+    Args:
+        model (): _description_
+        input_data (_type_): _description_
+        n_samples (_type_): _description_
+        device (str, optional): _description_. Defaults to "cpu".
+
+    Returns:
+        _type_: _description_
+    """
+    #noise = model._distribution.sample(n_samples*input_data.size(0))
+    noise = model._distribution.sample(n_samples)
+    #noise = noise.repeat_interleave(n_data, dim=0)
+    noise = noise.repeat((n_data, 1))
+    # input data is then shape [nsamples*ntimes, nfeatures]
+
+    samples, _ = model._transform.inverse(noise, context=conditional)
+    # output should be [nsamples*ntimes, n_features]
+    #samples = samples.view((n_data, n_samples, -1)).permute(1,0,2).reshape(n_data*n_samples,-1)
+    return samples
+
 def test_model_2d(
     model, 
     pre_model, 
@@ -271,7 +294,7 @@ def test_model_2d(
     with torch.no_grad():
         for batch, (label, data, batch_times, previous_positions) in enumerate(dataloader):
             label, data, batch_times = label.to(device), data.to(device), batch_times.to(device)
-            n_batch = len(label)//data.size(-1)
+            n_batch = len(label)//basis_order
             input_data = pre_model(data)
             # include the time 
             input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1)
@@ -287,7 +310,8 @@ def test_model_2d(
                     # repeat the input data n time as glasflow needs conditional to be repeated (must be a better way)
                     input_data = input_data.repeat_interleave(n_samples, dim=0) 
                     # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
-                    multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
+                    #multi_coeffmass_samples = model.sample(input_data.size(0), conditional=input_data)
+                    multi_coeffmass_samples = sample_fixed_latent(model, input_data.size(0), n_batch, conditional=input_data)
                     multi_coeffmass_samples = multi_coeffmass_samples.view((-1, n_samples, label.size(-1))).permute(1,0,2).reshape(-1,label.size(-1))
                     # undo interleaved repeat by splitting the times and samples, then permuting time  dimension to end
                     multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
