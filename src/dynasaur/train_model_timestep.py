@@ -168,10 +168,36 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     #train_size = int(0.9*config.get("Training","n_train_data")*config.get("Data","basis_order"))
     #print(train_size, config.get("Training","n_train_data")*config.get("Data","basis_order"), len(dataset))
-    train_set, val_set = random_split(dataset, (config.get("Training","n_train_data")*config.get("Data","basis_order"), config.get("Training","n_val_data")*config.get("Data","basis_order")))
-    train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=config.get("Training","batch_size"))
+    #train_set, val_set = random_split(dataset, (config.get("Training","n_train_data")*config.get("Data","basis_order"), config.get("Training","n_val_data")*config.get("Data","basis_order")))
+    #train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
+    #val_loader = DataLoader(val_set, batch_size=config.get("Training","batch_size"))
 
+
+    n_time_samples = int(config.get("Data", "duration")*config.get("Data", "sample_rate"))
+    if config.get("Data", "timestep-predict"):
+        nkeepsamps = int(config.get("Training", "timestep-ntrainsamps"))
+        # get random time samples
+
+        rints = torch.cat(
+            [torch.randperm(n_time_samples)[:nkeepsamps] + i*nkeepsamps for i in range(config.get("Training", "n_train_data") + config.get("Training", "n_val_data"))],
+            dim=0)
+        #rints = torch.arange(len(labels))
+        lbs_item = torch.from_numpy(labels).to(torch.float32)[rints]
+        str_item = torch.Tensor(strain)[rints]
+        bt_items = torch.Tensor(batch_times)[rints]
+        pp_items = torch.Tensor(previous_positions)[rints]
+        split_index = config.get("Training", "n_train_data")*nkeepsamps - nkeepsamps*config.get("Training", "n_val_data")
+        train_set = TensorDataset(lbs_item[:split_index], str_item[:split_index], bt_items[:split_index], pp_items[:split_index])
+        val_set = TensorDataset(lbs_item[split_index:], str_item[split_index:], bt_items[split_index:], pp_items[split_index:])
+        #train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data")*nkeepsamps, config.get("Training", "n_val_data")*nkeepsamps))
+    else:
+        dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
+        train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data"), config.get("Training", "n_val_data")))
+
+    train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
+    val_loader = DataLoader(val_set, batch_size=config.get("Training", "batch_size"))
+
+    
     flow_package = config.get("FlowNetwork","flow_model_type").split("-")[0]
 
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config.get("Training","learning_rate"))
