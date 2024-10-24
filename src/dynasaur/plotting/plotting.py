@@ -193,6 +193,27 @@ def plot_positions(
     if fname is not None:
         fig.savefig(fname)
 
+def plot_position_timeseries(times, source_tseries, recon_tseries, n_plot_samps=10, fname=None):
+    """_summary_
+
+    Args:
+        times (_type_): _description_
+        source_tseries (_type_): _description_
+        recon_tseries (_type_): _description_
+        fname (_type_): _description_
+    """
+    n_masses, n_dimensions, n_samples = np.shape(source_tseries)
+    fig, ax = plt.subplots(nrows = n_dimensions)
+    for i in range(n_dimensions):
+        for j in range(n_masses):
+            ax[i].plot(times, source_tseries[j, i, :], label="source", color="k")
+            ax[i].plot(times, recon_tseries[:n_plot_samps, j, i, :].T, label="recon", color=f"C{j}", alpha=0.5)
+
+        ax[i].set_ylabel(f" Dimension {i}")
+
+    if fname is not None:
+        fig.savefig(fname)
+
 def plot_sample_separations(
     times, 
     source_tseries, 

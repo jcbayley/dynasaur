@@ -17,6 +17,7 @@ from zuko.flows import (
 import glasflow
 from zuko.distributions import DiagNormal
 import numpy as np
+from dynasaur.networks.multimode_base import SymmetricLatentDistribution
 from dynasaur.data_generation import (
     data_generation,
 )
@@ -100,6 +101,11 @@ def create_models(config, device=None):
     n_context = config.get("FlowNetwork", "n_context") + tstep_context + extra_context
 
     n_input = config.get("Data", "sample_rate")*config.get("Data", "duration")
+
+    if config.get("FlowNetwork", "multimodes"):
+        joint_latent_distribution = SymmetricLatentDistribution(feature_shape - config.get("Data", "n_masses"), config.get("Data", "n_masses"))
+    else:
+        joint_latent_distribution = None
 
     # pre processing creation
     if config.get("PreNetwork", "transformer_layers") not in ["none", None]:
@@ -188,6 +194,7 @@ def create_models(config, device=None):
         
     elif config.get("FlowNetwork", "flow_model_type") == "glasflow-nsf":
         model = glasflow.CouplingNSF(
+            distribution=joint_latent_distribution,
             n_inputs=n_features,
             n_transforms=config.get("FlowNetwork", "ntransforms"),
             n_blocks_per_transform=len(config.get("FlowNetwork", "hidden_features")),

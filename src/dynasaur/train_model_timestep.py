@@ -94,6 +94,15 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     data_dimensions = 3
 
+    if continue_train:
+        pre_model, model, weights = create_model.load_models(config, device=config.get("Training", "device"))
+        initial_run = False
+    else:   
+        pre_model, model = create_model.create_models(config, device=config.get("Training", "device"))
+        pre_model.to(config.get("Training", "device"))
+        model.to(config.get("Training", "device"))
+        initial_run = True
+
     if config.get("Data","load_data") == True:
         print("loading data ........")
         times, basis_dynamics, masses, strain, cshape, positions, snrs = data_generation.load_data(
@@ -134,15 +143,6 @@ def run_training(config: dict, continue_train:bool = False) -> None:
 
     acc_basis_order = cshape
 
-
-    if continue_train:
-        pre_model, model, weights = create_model.load_models(config, device=config.get("Training", "device"))
-        initial_run = False
-    else:   
-        pre_model, model = create_model.create_models(config, device=config.get("Training", "device"))
-        pre_model.to(config.get("Training", "device"))
-        model.to(config.get("Training", "device"))
-        initial_run = True
 
     pre_model, labels, strain, batch_times, previous_positions = data_processing.preprocess_data(
         pre_model, 
@@ -201,6 +201,9 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     flow_package = config.get("FlowNetwork","flow_model_type").split("-")[0]
 
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config.get("Training","learning_rate"))
+    if config.get("Training","sched_T_max") not in ["None", "none"]:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, T_max=config.get("Training","sched_T_max"), eta_min=config.get("Training","sched_eta_min"))
+
 
 
     if continue_train:
@@ -227,6 +230,9 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         with torch.no_grad():
             val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=False, flow_package=flow_package, n_previous_positions=config.get("Data","n_previous_positions"))
             val_losses.append(val_loss)
+
+        if config.get("Training","sched_T_max") not in ["None", "none"]:
+            scheduler.step()
             
         if epoch % 100 == 0:
             print(f"Epoch: {epoch}, Train loss: {train_loss}, Val loss: {val_loss}")

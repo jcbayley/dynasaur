@@ -229,10 +229,11 @@ def sample_fixed_latent(model, input_data, n_samples, n_data, device="cpu"):
         _type_: _description_
     """
     #noise = model._distribution.sample(n_samples*input_data.size(0))
+    model.to("cpu")
     noise = model._distribution.sample(n_samples)
     noise = noise.repeat((n_data, 1))
     # input data is then shape [nsamples*ntimes, nfeatures]
-    samples, _ = model._transform.inverse(noise, context=input_data)
+    samples, _ = model._transform.inverse(noise.to(device), context=input_data.to(device))
     # output should be [nsamples*ntimes, n_features]
     #samples = samples.view((n_data, n_samples, -1)).permute(1,0,2).reshape(n_data*n_samples,-1)
     return samples
@@ -418,83 +419,6 @@ def test_model_2d(
                 m_recon_strain[i] = temp_recon_strain
                 #m_recon_energy[i] = temp_recon_energy
 
-            """
-            fig, ax = plt.subplots(ncols=n_detectors, nrows=3, figsize=(9,7))
-            for pi in range(n_detectors):
-                for mi in range(2):
-                    ax[mi,pi].boxplot(np.abs(multi_coeff_samples[:,mi,pi]), showfliers=False)
-                    ax[mi,pi].plot(np.arange(len(source_coeffs[mi][pi])) + 1, np.abs(source_coeffs[mi][pi]), label="source", color="C0", ls="--")
-     
-            ax[2,0].hist(np.log(multi_mass_samples[:,0]), bins=100)
-            ax[2,1].hist(np.log(multi_mass_samples[:,1]), bins=100)
-            ax[2,0].axvline(np.log(source_masses[0]), color="r")
-            ax[2,1].axvline(np.log(source_masses[1]), color="r")
-            msun=1.0e30
-            lmsun = np.log(msun)
-            ax[2,1].set_xlabel("Mass 2")
-            ax[2,0].set_xlabel("Mass 1")
-            ax[0,0].set_ylabel("Mass 2")
-            ax[1,0].set_ylabel("Mass 1")
-            ax[1,0].set_xlabel("x dimension power")
-            ax[1,1].set_xlabel("y dimension power")
-            #ax[2,1].set_xlim([1e-6*msun, 7e-3*msun])
-            #ax[2,0].set_xlim([1.8*msun, 2.2*msun])
-            #ax[2,1].set_xlim([lmsun-4, lmsun])
-            #ax[2,0].set_xlim([lmsun-1, lmsun+1])
-            #ax[0,0].legend()
-            fig.tight_layout()
-            fig.savefig(os.path.join(plot_out, f"test_power_{batch}.png"))
-
-            fig, ax = plt.subplots(ncols=n_detectors*2, nrows=3, figsize=(9,7))
-            for pi in range(n_detectors):
-                for mi in range(2):
-                    t_re = np.real(multi_coeff_samples[:,mi,pi])
-                    t_im = np.imag(multi_coeff_samples[:,mi,pi])
-                    s_re = np.real(source_coeffs[mi][pi])
-                    s_im = np.imag(source_coeffs[mi][pi])
-                    ax[mi,pi].violinplot(t_re, widths=1.0)
-                    ax[mi,pi+n_detectors].violinplot(t_im,widths=1.0)
-                    ax[mi,pi].plot(np.arange(len(source_coeffs[mi][pi])) + 1, s_re, label="source real", color="k", ls="--")
-                    ax[mi,pi+n_detectors].plot(np.arange(len(source_coeffs[mi][pi])) + 1, s_im, label="source imag", color="k", ls="--")
-
-                    ax[mi,pi].set_ylim(np.min(s_re), np.max(s_re))
-                    ax[mi,pi+n_detectors].set_ylim(np.min(s_im), np.max(s_im))
-
-            ax[2,0].hist(np.log(multi_mass_samples[:,0]), bins=100)
-            ax[2,1].hist(np.log(multi_mass_samples[:,1]), bins=100)
-            ax[2,0].axvline(np.log(source_masses[0]), color="r")
-            ax[2,1].axvline(np.log(source_masses[1]), color="r")
-            msun=1.0e30
-            lmsun = np.log(msun)
-            ax[0,0].set_ylabel("Mass 1")
-            ax[1,0].set_ylabel("Mass 2")
-            ax[2,1].set_xlabel("Mass 2")
-            ax[2,0].set_xlabel("Mass 1")
-            ax[1,0].set_xlabel("x dimension real")
-            ax[1,1].set_xlabel("x dimension imag")
-            ax[1,2].set_xlabel("y dimension real")
-            ax[1,3].set_xlabel("y dimension imag")
-            #ax[2,1].set_xlim([1e-6*msun, 7e-3*msun])
-            #ax[2,0].set_xlim([1.8*msun, 2.2*msun])
-            #ax[2,1].set_xlim([lmsun-4, lmsun])
-            #ax[2,0].set_xlim([lmsun-1, lmsun+1])
-
-            #ax[0,0].legend()
-            fig.tight_layout()
-            fig.savefig(os.path.join(plot_out, f"test_coeffs_{batch}.png"))
-            
-            fig, ax = plt.subplots( nrows=n_detectors, figsize=(9,7))
-            for pi in range(n_detectors):
-                ax[pi].boxplot(m_recon_strain[:,pi], showfliers=False)
-                ax[pi].plot(np.arange(len(source_strain[pi])) + 1, source_strain[pi], label="source", color="C0", ls="--")
-     
-            #ax[2,1].set_xlim([1e-6*msun, 7e-3*msun])
-            #ax[2,0].set_xlim([1.8*msun, 2.2*msun])
-            #ax[2,1].set_xlim([lmsun-4, lmsun])
-            #ax[2,0].set_xlim([lmsun-1, lmsun+1])
-            #ax[0,0].legend()
-            fig.savefig(os.path.join(plot_out, f"test_strain_{batch}.png"))
-            """
             #print("strainmax", np.max(source_strain), np.max(m_recon_strain))
             #print("labelmax", np.max(source_coeffs), np.max(multi_coeff_samples))
             if n_masses == 2:
@@ -549,6 +473,14 @@ def test_model_2d(
                     fname=os.path.join(plot_out, f"dim_projection_{batch}.png"), 
                     alpha=0.2)
 
+                plotting.plot_position_timeseries(
+                    upsample_times, 
+                    source_tseries,
+                    m_recon_tseries,  
+                    n_plot_samps = 5,
+                    fname=os.path.join(plot_out, f"position_timeseries_{batch}.png")
+                )
+
                 print("source_Strain", np.shape(source_strain))
                 plotting.plot_sampled_reconstructions(
                     upsample_times, 
@@ -562,7 +494,6 @@ def test_model_2d(
                     source_masses,
                     fname=os.path.join(plot_out,f"massdistributions_{batch}.png"))
                 
-
                 
                 make_animations.heatmap_projections(
                     m_recon_tseries, 
@@ -571,6 +502,8 @@ def test_model_2d(
                     source_masses, 
                     os.path.join(plot_out,f"heatmap_projections_{batch}.gif"),
                     duration=5)
+
+                
     
 
 
