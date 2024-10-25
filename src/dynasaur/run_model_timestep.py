@@ -477,7 +477,7 @@ def test_model_2d(
                     upsample_times, 
                     source_tseries,
                     m_recon_tseries,  
-                    n_plot_samps = 5,
+                    n_plot_samps = 10,
                     fname=os.path.join(plot_out, f"position_timeseries_{batch}.png")
                 )
 

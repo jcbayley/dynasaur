@@ -240,6 +240,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             with open(os.path.join(config.get("General","root_dir"), "train_losses.txt"), "w") as f:
                 np.savetxt(f, [train_losses, val_losses])
 
+        if val_loss < np.min(val_losses):
             torch.save({
                 "epoch":epoch,
                 "model_state_dict": model.state_dict(),

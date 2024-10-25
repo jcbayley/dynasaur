@@ -218,6 +218,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             with open(os.path.join(config.get("General", "root_dir"), "train_losses.txt"), "w") as f:
                 np.savetxt(f, [train_losses, val_losses])
 
+
+        if val_loss < np.min(val_losses):
             torch.save({
                 "epoch":epoch,
                 "model_state_dict": model.state_dict(),
@@ -227,7 +229,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
                 "label_norm_factor": pre_model.label_norm_factor,
                 "mass_norm_factor": pre_model.mass_norm_factor
             },
-            os.path.join(config.get("General", "root_dir"),"test_model.pt"))
+            os.path.join(config.get("General","root_dir"),"test_model.pt"))
 
         fig, ax = plt.subplots(nrows=2)
         ax[0].plot(train_losses)
