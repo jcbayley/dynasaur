@@ -3,10 +3,7 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 import os
 import numpy as np
 import copy
-<<<<<<<< HEAD:src/dynasaur/run_model.py
-========
 from dynasaur.config import read_config
->>>>>>>> origin/main:src/dynasaur/test_model.py
 from dynasaur.data_generation import (
     data_generation,
     data_processing,

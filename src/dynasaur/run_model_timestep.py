@@ -535,6 +535,7 @@ def test_model_2d(
     
     latent_samples = np.concatenate(latent_samples, axis=0)
     back_latent_sample = np.concatenate(back_latent_sample, axis=0)
+    back_latent_mode2 = np.concatenate(back_latent_mode2, axis=0)
 
     fig = corner.corner(latent_samples, labels=["latent_{li}" for li in range(latent_samples.shape[-1])], color="C0")
     corner.corner(back_latent_sample, fig=fig, color="C1")
