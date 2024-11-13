@@ -17,6 +17,7 @@ from dynasaur.plotting import plotting, make_animations
 from dynasaur.basis_functions import basis
 import h5py
 import matplotlib.pyplot as plt
+import corner
 
 
 def run_testing(config:dict, make_plots=False, n_test=None) -> None:
@@ -238,6 +239,16 @@ def sample_fixed_latent(model, input_data, n_samples, n_data, device="cpu"):
     #samples = samples.view((n_data, n_samples, -1)).permute(1,0,2).reshape(n_data*n_samples,-1)
     return samples
 
+def get_inverse_samples(model, input_data, truths, device="cpu"):
+
+    model.to(device)
+    back_z_samples, _ = model._transform.forward(truths.to(device), context=input_data.to(device))
+
+    z_samples = model._distribution.sample(truths.size(0))
+
+
+    return back_z_samples.cpu(), z_samples.cpu()
+
 def test_model_2d(
     model, 
     pre_model, 
@@ -284,6 +295,11 @@ def test_model_2d(
     if not os.path.isdir(data_out):
         os.makedirs(data_out)
 
+    latent_samples = []
+    back_latent_sample = []
+    back_latent_mode2 = []
+    
+
     n_detectors = len(detectors)
     model.eval()
     with torch.no_grad():
@@ -293,6 +309,15 @@ def test_model_2d(
             input_data = pre_model(data)
             # include the time 
             input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1)
+
+            back_z_samp, z_samp = get_inverse_samples(model, input_data, label, device="cpu")
+            latent_samples.append(z_samp.cpu().numpy())
+            back_latent_sample.append(back_z_samp.cpu().numpy())
+            label2 = label.detach().clone()
+            label2[:, -n_masses:] *= -1
+            back_z_samp_2, _ = get_inverse_samples(model, input_data, label2, device="cpu")
+            back_latent_mode2.append(back_z_samp_2.cpu().numpy())
+
             #print(input_data.size(), label.size(), data.size(), times.size())
             if n_previous_positions > 0:
                 multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, includes_velocities=return_velocities, device=device)
@@ -301,6 +326,7 @@ def test_model_2d(
                 if flow_package == "zuko":
                     multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu()
                     multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
+
                 elif flow_package == "glasflow":
                     # repeat the input data n time as glasflow needs conditional to be repeated (must be a better way)
                     input_data = input_data.repeat_interleave(n_samples, dim=0) 
@@ -311,8 +337,11 @@ def test_model_2d(
                     # undo interleaved repeat by splitting the times and samples, then permuting time  dimension to end
                     multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
                     #multi_coeffmass_samples = multi_coeffmass_samples.permute(1,2,3,0).cpu().numpy()
+
                 else:
                     raise Exception(f"No flow package {flow_package}")
+
+        
             
             # un preprocess the true masses and timeseries
 
@@ -503,6 +532,15 @@ def test_model_2d(
                     os.path.join(plot_out,f"heatmap_projections_{batch}.gif"),
                     duration=5)
 
+    
+    latent_samples = np.concatenate(latent_samples, axis=0)
+    back_latent_sample = np.concatenate(back_latent_sample, axis=0)
+
+    fig = corner.corner(latent_samples, labels=["latent_{li}" for li in range(latent_samples.shape[-1])], color="C0")
+    corner.corner(back_latent_sample, fig=fig, color="C1")
+    corner.corner(back_latent_mode2, fig=fig, color="C2")
+    fig.savefig(os.path.join(plot_out, "latent_corner.png"))
+
                 
     
 
@@ -552,6 +590,7 @@ def test_model_3d(
     if not os.path.isdir(data_out):
         os.makedirs(data_out)
 
+
     model.eval()
     with torch.no_grad():
         for batch, (label, data) in enumerate(dataloader):
@@ -565,6 +604,8 @@ def test_model_3d(
                 coeffmass_samples = model.sample(1, conditional=input_data).cpu().numpy()
             else:
                 raise Exception(f"No flow package {flow_package}")
+
+
             print("ccoeff1", np.max(coeffmass_samples[:,:-2]))
             print("cmass1", np.max(coeffmass_samples[:,-2:]))
             pre_model, mass_samples, coeff_samples, _ = data_processing.unpreprocess_data(

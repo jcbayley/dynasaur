@@ -47,6 +47,7 @@ def train_epoch(
         model.eval()
 
     train_loss = 0
+    
     for batch, (label, data, times, previous_positions) in enumerate(dataloader):
         label, data, times, previous_positions = label.to(device), data.to(device), times.to(device), previous_positions.to(device)
 
@@ -201,23 +202,29 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     flow_package = config.get("FlowNetwork","flow_model_type").split("-")[0]
 
     optimiser = torch.optim.AdamW(list(model.parameters()) + list(pre_model.parameters()), lr=config.get("Training","learning_rate"))
-    if config.get("Training","sched_T_max") not in ["None", "none"]:
+    if config.get("Training","scheduler") == "cosine":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, T_max=config.get("Training","sched_T_max"), eta_min=config.get("Training","sched_eta_min"))
-
-
+    elif config.get("Training", "scheduler") == "step":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimiser, step_size=config.get("Training", "step_size"), gamma=config.get("Training", "step_gamma"))
+    else:
+        print(f"No scheduler chosen, or not supported {config.get('Training','scheduler')}")
 
     if continue_train:
         with open(os.path.join(config.get("General","root_dir"), "train_losses.txt"), "r") as f:
             losses = np.loadtxt(f)
         train_losses = list(losses[0])
+        learning_rates = list(losses[2])
         val_losses = list(losses[1])
         start_epoch = len(train_losses)
-
+        minloss = np.min(val_losses)
         optimiser.load_state_dict(weights["optimiser_state_dict"])
     else:
         train_losses = []
         val_losses = []
+        learning_rates = []
         start_epoch = 0
+        minloss = np.inf
+
 
     print("Start training")
     for epoch in range(config.get("Training","n_epochs")):
@@ -231,16 +238,21 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=False, flow_package=flow_package, n_previous_positions=config.get("Data","n_previous_positions"))
             val_losses.append(val_loss)
 
-        if config.get("Training","sched_T_max") not in ["None", "none"]:
-            scheduler.step()
+        if config.get("Training","scheduler") not in [None, "None", "none"]:
+            if epoch < config.get("Training", "scheduler_max_epoch") and epoch > config.get("Training", "scheduler_min_epoch"):
+                scheduler.step()
+            learning_rates.append(scheduler.get_last_lr()[0])
+        else:
+            learning_rates.append(scheduler.get_last_lr()[0])
             
         if epoch % 100 == 0:
             print(f"Epoch: {epoch}, Train loss: {train_loss}, Val loss: {val_loss}")
 
             with open(os.path.join(config.get("General","root_dir"), "train_losses.txt"), "w") as f:
-                np.savetxt(f, [train_losses, val_losses])
+                np.savetxt(f, [train_losses, val_losses, learning_rates])
 
-        if val_loss < np.min(val_losses):
+        if val_loss < minloss:
+            minloss = val_loss
             torch.save({
                 "epoch":epoch,
                 "model_state_dict": model.state_dict(),
@@ -252,11 +264,12 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             },
             os.path.join(config.get("General","root_dir"),"test_model.pt"))
 
-        fig, ax = plt.subplots(nrows=2)
+        fig, ax = plt.subplots(nrows=3)
         ax[0].plot(train_losses)
         ax[0].plot(val_losses)
         ax[1].plot(train_losses)
         ax[1].plot(val_losses)
+        ax[2].plot(learning_rates)
         ax[1].set_xscale("log")
         ax[1].set_xlabel("Time")
         ax[0].set_ylabel("Loss")

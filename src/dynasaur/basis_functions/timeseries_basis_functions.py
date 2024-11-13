@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import fftpack, signal
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 
 def multiply(amps1, amps2):
         return amps1 * amps2
@@ -23,7 +23,7 @@ def derivative(amps1, m=1, duration=2):
     return output
 
 def int1(t1, t0):
-    rt0 = cumtrapz(t1, axis=-1) + np.tile(t0[...,0:1], (np.shape(t0)[-1]-1))
+    rt0 = cumulative_trapezoid(t1, axis=-1) + np.tile(t0[...,0:1], (np.shape(t0)[-1]-1))
     rt0 = np.insert(rt0, 0, t0[...,0], axis=-1)
     return rt0
 
@@ -36,16 +36,16 @@ def integrate(amps1, amps0=None, amps05=None,  m=1, duration=2):
         if amps0 is not None:
             amps_int = int1(amps1, amps0)
         else:
-            amps_int = cumtrapz(amps1, axis=-1)
+            amps_int = cumulative_trapezoid(amps1, axis=-1)
     elif m == 2:
         if amps0 is not None:
             amps_int = int1(amps1, amps0)
         else:
-            amps_int = cumtrapz(amps1, axis=-1)
+            amps_int = cumulative_trapezoid(amps1, axis=-1)
         if amps05 is not None:
             amps_int = int1(amps_int, amps05)
         else:
-            amps_int = cumtrapz(amps_int, axis=-1)
+            amps_int = cumulative_trapezoid(amps_int, axis=-1)
             
     return amps_int
 
