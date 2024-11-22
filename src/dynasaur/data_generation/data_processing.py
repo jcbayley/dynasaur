@@ -401,7 +401,7 @@ def preprocess_data(
         masses = torch.from_numpy(masses).repeat_interleave(n_t, dim=0).numpy()
         batch_times = torch.linspace(0,1,n_t).repeat(batch_size).numpy()
 
-        if n_previous_positions not in ["none", None, False]:
+        if n_previous_positions not in ["none", None, False, 0]:
             # repeat basis dynamics n_time times
             # define indices as the index minus 2 data points
             indices = torch.stack([torch.arange(i-n_previous_positions, i) for i in range(n_t)])
@@ -410,9 +410,26 @@ def preprocess_data(
             # select indices to use and move them to the second dimension equivalent to above dynamics, then flatten as before
             previous_positions = torch.from_numpy(basis_dynamics)[:,:,:,indices]
             # now has shape (batch_size, n_masses, n_dimensions, n_timesteps, n_prev_points)
-            previous_positions[:,:,:,indices<0] = 0
-            previous_positions += torch.randn(previous_positions.size())*0.01
+            #previous_positions[:,:,:,indices<0] = torch.rand(previous_positions[:,:,:,indices<0].size()).to(torch.float64) * 2 - 1
+            previous_positions[:,:,:,indices<0] = torch.zeros(previous_positions[:,:,:,indices<0].size()).to(torch.float64) 
+            #previous_positions += torch.randn(previous_positions.size())*0.1
             previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
+            """
+            print(previous_positions.shape)
+            print("0")
+            print(previous_positions[0,0,0])
+            print(split_dynamics[0,0,0])
+            print(basis_dynamics[0,0,0,0])
+            print("1")
+            print(previous_positions[1,0,0])
+            print(split_dynamics[1,0,0])
+            print(basis_dynamics[0,0,0,1])
+            print("2")
+            print(previous_positions[2,0,0])
+            print(split_dynamics[2,0,0])
+            print(basis_dynamics[0,0,0,2])
+            sys.exit()
+            """
         else:
             previous_positions = torch.zeros((np.shape(split_dynamics)[0], 1))
 
@@ -442,6 +459,7 @@ def preprocess_data(
             n_masses=n_masses)
         pre_model.label_norm_factor = label_norm_factor
         pre_model.mass_norm_factor = mass_norm_factor
+        previous_positions, _ = normalise_data(previous_positions, pre_model.label_norm_factor)
     else:
         strain, norm_factor = normalise_data(
             strain, 
@@ -451,6 +469,7 @@ def preprocess_data(
             label_norm_factor=pre_model.label_norm_factor, 
             mass_norm_factor=pre_model.mass_norm_factor, 
             n_masses=n_masses)
+        previous_positions, _ = normalise_data(previous_positions, pre_model.label_norm_factor)
 
 
     return pre_model, labels, strain, batch_times, previous_positions

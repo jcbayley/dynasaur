@@ -57,6 +57,12 @@ def train_epoch(
         #print(input_data.size(), times.size())
         if n_previous_positions > 0:
             input_data = torch.cat([input_data, times.unsqueeze(-1), previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32)
+            """
+            print(previous_positions[0], label[0])
+            print(previous_positions[1], label[1])
+            print(previous_positions[2], label[2])
+            sys.exit()
+            """
         else:
             input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
         
@@ -165,7 +171,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     indices = np.random.choice(np.arange(len(positions)), size=10)
     plotting.plot_data(times, positions[indices], strain[indices], 10, config.get("General", "root_dir"))
 
-    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
+    #dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
 
     #train_size = int(0.9*config.get("Training","n_train_data")*config.get("Data","basis_order"))
     #print(train_size, config.get("Training","n_train_data")*config.get("Data","basis_order"), len(dataset))
@@ -178,15 +184,21 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     if config.get("Data", "timestep-predict"):
         nkeepsamps = int(config.get("Training", "timestep-ntrainsamps"))
         # get random time samples
-
-        rints = torch.cat(
-            [torch.randperm(n_time_samples)[:nkeepsamps] + i*nkeepsamps for i in range(config.get("Training", "n_train_data") + config.get("Training", "n_val_data"))],
-            dim=0)
-        #rints = torch.arange(len(labels))
-        lbs_item = torch.from_numpy(labels).to(torch.float32)[rints]
-        str_item = torch.Tensor(strain)[rints]
-        bt_items = torch.Tensor(batch_times)[rints]
-        pp_items = torch.Tensor(previous_positions)[rints]
+        if nkeepsamps >= n_time_samples:
+            lbs_item = torch.from_numpy(labels).to(torch.float32)
+            str_item = torch.Tensor(strain)
+            bt_items = torch.Tensor(batch_times)
+            pp_items = torch.Tensor(previous_positions)
+        else:
+            rints = torch.cat(
+                [torch.randperm(n_time_samples)[:nkeepsamps] + i*nkeepsamps for i in range(config.get("Training", "n_train_data") + config.get("Training", "n_val_data"))],
+                dim=0)
+            #rints = torch.arange(len(labels))
+            lbs_item = torch.from_numpy(labels).to(torch.float32)[rints]
+            str_item = torch.Tensor(strain)[rints]
+            bt_items = torch.Tensor(batch_times)[rints]
+            pp_items = torch.Tensor(previous_positions)[rints]
+            
         split_index = config.get("Training", "n_train_data")*nkeepsamps - nkeepsamps*config.get("Training", "n_val_data")
         train_set = TensorDataset(lbs_item[:split_index], str_item[:split_index], bt_items[:split_index], pp_items[:split_index])
         val_set = TensorDataset(lbs_item[split_index:], str_item[split_index:], bt_items[split_index:], pp_items[split_index:])
@@ -195,7 +207,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
         train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data"), config.get("Training", "n_val_data")))
 
-    train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
+    train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=False)
     val_loader = DataLoader(val_set, batch_size=config.get("Training", "batch_size"))
 
     

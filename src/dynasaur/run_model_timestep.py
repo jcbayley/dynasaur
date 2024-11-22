@@ -191,11 +191,13 @@ def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previ
         n_previous_steps (_type_): _description_
     """
     # starting point for previous positions is all zeros
+    model.to(device)
+    #temp_previous_positions = torch.rand((n_samples, n_masses, n_dim, n_previous_steps)).to(device)*2 - 1
     temp_previous_positions = torch.zeros((n_samples, n_masses, n_dim, n_previous_steps)).to(device)
     vel_factor = 2 if includes_velocities else 1
     output_samples = torch.zeros((len(input_data), n_samples, n_masses*n_dim*vel_factor + n_masses))
     for index, tstep_input in enumerate(input_data):
-        tstep_input = torch.concatenate([tstep_input.unsqueeze(0).repeat(n_samples, 1), temp_previous_positions.flatten(start_dim=1)], dim=-1)
+        tstep_input = torch.concatenate([tstep_input.unsqueeze(0).repeat(n_samples, 1), temp_previous_positions.flatten(start_dim=1)], dim=-1).to(device)
         #sampled_tstep_input = tstep_input.repeat_interleave(n_samples, dim=0) 
         # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
         multi_coeffmass_samples = model.sample(n_samples, conditional=tstep_input)
@@ -208,10 +210,12 @@ def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previ
         else:
             reshape_samples = multi_coeffmass_samples[:,:-n_masses].reshape(n_samples, n_masses, n_dim)
 
+
         # roll previous positions to shift to next time step
         temp_previous_positions = torch.roll(temp_previous_positions, shifts=-1, dims=-1)
         # fill final time step with current sampled position
         temp_previous_positions[:, :, :, -1] = reshape_samples
+
 
     # permute indices so its (nsamples, ntime, ncoeffs)
     output_samples = output_samples.permute(1,0,2).reshape((output_samples.size(0)*output_samples.size(1), output_samples.size(2)))
@@ -271,7 +275,7 @@ def test_model_2d(
     sky_position=(np.pi, np.pi/2),
     flow_package="zuko",
     return_velocities=False,
-    n_previous_positions=2):
+    n_previous_positions=0):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -304,25 +308,34 @@ def test_model_2d(
     model.eval()
     with torch.no_grad():
         for batch, (label, data, batch_times, previous_positions) in enumerate(dataloader):
-            label, data, batch_times = label.to(device), data.to(device), batch_times.to(device)
+            label, data, batch_times, previous_positions = label.to(device), data.to(device), batch_times.to(device), previous_positions.to(device)
             n_batch = len(label)//basis_order
             input_data = pre_model(data)
             # include the time 
             input_data = torch.cat([input_data, batch_times.unsqueeze(-1)], dim=-1)
 
-            back_z_samp, z_samp = get_inverse_samples(model, input_data, label, device="cpu")
-            latent_samples.append(z_samp.cpu().numpy())
-            back_latent_sample.append(back_z_samp.cpu().numpy())
-            label2 = label.detach().clone()
-            label2[:, :-n_masses] *= -1
-            back_z_samp_2, _ = get_inverse_samples(model, input_data, label2, device="cpu")
-            back_latent_mode2.append(back_z_samp_2.cpu().numpy())
-
             #print(input_data.size(), label.size(), data.size(), times.size())
             if n_previous_positions > 0:
+                input_data2 = torch.cat([input_data, previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32) 
+                back_z_samp, z_samp = get_inverse_samples(model, input_data2, label, device="cpu")
+                latent_samples.append(z_samp.cpu().numpy())
+                back_latent_sample.append(back_z_samp.cpu().numpy())
+                label2 = label.detach().clone()
+                label2[:, :-n_masses] *= -1
+                back_z_samp_2, _ = get_inverse_samples(model, input_data2, label2, device="cpu")
+                back_latent_mode2.append(back_z_samp_2.cpu().numpy())
+
                 multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, includes_velocities=return_velocities, device=device)
                 multi_coeffmass_samples = multi_coeffmass_samples.reshape(-1, 1, label.size(-1))
             else:
+                back_z_samp, z_samp = get_inverse_samples(model, input_data, label, device="cpu")
+                latent_samples.append(z_samp.cpu().numpy())
+                back_latent_sample.append(back_z_samp.cpu().numpy())
+                label2 = label.detach().clone()
+                label2[:, :-n_masses] *= -1
+                back_z_samp_2, _ = get_inverse_samples(model, input_data, label2, device="cpu")
+                back_latent_mode2.append(back_z_samp_2.cpu().numpy())
+                
                 if flow_package == "zuko":
                     multi_coeffmass_samples = model(input_data).sample((n_samples, )).cpu()
                     multi_coeffmass_samples = multi_coeffmass_samples.view((input_data.size(0), n_batch, label.size(-1)))
@@ -340,6 +353,8 @@ def test_model_2d(
 
                 else:
                     raise Exception(f"No flow package {flow_package}")
+
+                
 
         
             
