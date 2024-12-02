@@ -43,6 +43,22 @@ class PreNetworkAttention(torch.nn.Module):
         x = self.fc(x)
         return x
 
+class MaskedAttention(torch.nn.Module):
+    def __init__(self, input_dim, output_dim, embed_dim, num_heads=1, num_layers=1):
+        super(MaskedAttention, self).__init__()
+        encoder_layers = torch.nn.TransformerEncoderLayer(input_dim, num_heads)
+        self.transformer_encoder = torch.nn.TransformerEncoder(encoder_layers, num_layers)
+        self.fc = torch.nn.Linear(embed_dim, output_dim)
+        
+    def forward(self, x, mask=None):
+        x = x * mask
+        x = x.permute(1, 0, 2)  # Change to shape (seq_len, batch_size, input_dim) for Transformer encoder
+        x = self.transformer_encoder(x)
+        x = x.permute(1, 0, 2)  # Change back to shape (batch_size, seq_len, input_dim)
+        x = torch.mean(x, dim=1)  # Global average pooling
+        x = self.fc(x)
+        return x
+
 def create_models(config, device=None):
     """create a convolutional to linear model with n_context outputs and a 
     flow model taking in n_context parameters and layers defined in config file

@@ -199,7 +199,6 @@ def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previ
     for index, tstep_input in enumerate(input_data):
         tstep_input = torch.concatenate([tstep_input.unsqueeze(0).repeat(n_samples, 1), temp_previous_positions.flatten(start_dim=1)], dim=-1).to(device)
         #sampled_tstep_input = tstep_input.repeat_interleave(n_samples, dim=0) 
-        # set nsamples to 1 for flow, not sure if there is a better workaround for glasflows
         multi_coeffmass_samples = model.sample(n_samples, conditional=tstep_input)
         # add timesteps samples to output array
         output_samples[index] = multi_coeffmass_samples

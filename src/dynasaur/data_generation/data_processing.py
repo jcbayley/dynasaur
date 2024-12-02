@@ -412,24 +412,8 @@ def preprocess_data(
             # now has shape (batch_size, n_masses, n_dimensions, n_timesteps, n_prev_points)
             #previous_positions[:,:,:,indices<0] = torch.rand(previous_positions[:,:,:,indices<0].size()).to(torch.float64) * 2 - 1
             previous_positions[:,:,:,indices<0] = torch.zeros(previous_positions[:,:,:,indices<0].size()).to(torch.float64) 
-            #previous_positions += torch.randn(previous_positions.size())*0.1
+            #previous_positions += torch.randn(previous_positions.size())*0.01
             previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
-            """
-            print(previous_positions.shape)
-            print("0")
-            print(previous_positions[0,0,0])
-            print(split_dynamics[0,0,0])
-            print(basis_dynamics[0,0,0,0])
-            print("1")
-            print(previous_positions[1,0,0])
-            print(split_dynamics[1,0,0])
-            print(basis_dynamics[0,0,0,1])
-            print("2")
-            print(previous_positions[2,0,0])
-            print(split_dynamics[2,0,0])
-            print(basis_dynamics[0,0,0,2])
-            sys.exit()
-            """
         else:
             previous_positions = torch.zeros((np.shape(split_dynamics)[0], 1))
 

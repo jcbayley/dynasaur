@@ -57,12 +57,6 @@ def train_epoch(
         #print(input_data.size(), times.size())
         if n_previous_positions > 0:
             input_data = torch.cat([input_data, times.unsqueeze(-1), previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32)
-            """
-            print(previous_positions[0], label[0])
-            print(previous_positions[1], label[1])
-            print(previous_positions[2], label[2])
-            sys.exit()
-            """
         else:
             input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
         
@@ -207,7 +201,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
         train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data"), config.get("Training", "n_val_data")))
 
-    train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=False)
+    train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config.get("Training", "batch_size"))
 
     
@@ -219,6 +213,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     elif config.get("Training", "scheduler") == "step":
         scheduler = torch.optim.lr_scheduler.StepLR(optimiser, step_size=config.get("Training", "step_size"), gamma=config.get("Training", "step_gamma"))
     else:
+        scheduler = None
         print(f"No scheduler chosen, or not supported {config.get('Training','scheduler')}")
 
     if continue_train:
@@ -255,7 +250,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
                 scheduler.step()
             learning_rates.append(scheduler.get_last_lr()[0])
         else:
-            learning_rates.append(scheduler.get_last_lr()[0])
+            learning_rates.append(config.get("Training","learning_rate"))
             
         if epoch % 100 == 0:
             print(f"Epoch: {epoch}, Train loss: {train_loss}, Val loss: {val_loss}")
