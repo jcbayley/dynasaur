@@ -50,8 +50,13 @@ class MaskedAttention(torch.nn.Module):
         self.transformer_encoder = torch.nn.TransformerEncoder(encoder_layers, num_layers)
         self.fc = torch.nn.Linear(embed_dim, output_dim)
         
-    def forward(self, x, mask=None):
-        x = x * mask
+    def forward(self, x, n_mask=None):
+        if n_mask is not None:
+            mask = torch.ones(x.size(1), dtype=torch.bool)
+            mask[:n_mask] = False
+            mask = mask.unsqueeze(0).expand(x.size(0), -1)
+            x = x.masked_fill(mask, 0)
+        self.embedding = torch.nn.Linear(input_dim, embed_dim)
         x = x.permute(1, 0, 2)  # Change to shape (seq_len, batch_size, input_dim) for Transformer encoder
         x = self.transformer_encoder(x)
         x = x.permute(1, 0, 2)  # Change back to shape (batch_size, seq_len, input_dim)
