@@ -54,7 +54,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
 
     print(np.shape(basis_dynamics))
 
-    pre_model, labels, strain, batch_times, previous_positions = data_processing.preprocess_data(
+    pre_model, labels, strain, batch_times, previous_positions, previous_times = data_processing.preprocess_data(
         pre_model, 
         basis_dynamics,
         masses, 
@@ -68,7 +68,8 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
         n_dimensions=config.get("Data", "n_dimensions"),
         split_data=True,
         basis_velocities=basis_velocities,
-        n_previous_positions=config.get("Data", "n_previous_positions"))
+        n_previous_positions=config.get("Data", "n_previous_positions"),
+        random_previous_positions_range=config.get("Data", "random_previous_positions_range"))
 
     print(np.shape(labels), np.shape(strain), )
 
@@ -79,7 +80,7 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
     #n_context = config.get("Data", "sample_rate"]*2
 
 
-    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
+    dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions), torch.Tensor(previous_times))
     test_loader = DataLoader(dataset, batch_size=len(times))
 
 
@@ -117,7 +118,8 @@ def run_testing(config:dict, make_plots=False, n_test=None) -> None:
             make_plots=make_plots,
             flow_package=config.get("FlowNetwork", "flow_model_type").split("-")[0],
             return_velocities=config.get("Data", "return_velocities"),
-            n_previous_positions=config.get("Data", "n_previous_positions"))
+            n_previous_positions=config.get("Data", "n_previous_positions"),
+            random_previous_positions_range=config.get("Data", "random_previous_positions_range"))
     elif config.get("Data", "n_dimensions") == 3:
         test_model_3d(
             model=model, 
@@ -179,7 +181,16 @@ def test_model_1d(model, dataloader, times, n_masses, basis_order, n_dimensions,
 
             fig.savefig(os.path.join(plot_out, f"reconstructed_{batch}.png"))
 
-def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previous_steps, includes_velocities=False, device="cpu"):
+def get_recurrent_samples(
+    model, 
+    input_data, 
+    n_samples, 
+    n_masses, 
+    n_dim, 
+    n_previous_steps, 
+    includes_velocities=False, 
+    random_previous_times=None,
+    device="cpu"):
     """gets samples recurrently
 
     Args:
@@ -194,10 +205,14 @@ def get_recurrent_samples(model, input_data, n_samples, n_masses, n_dim, n_previ
     model.to(device)
     #temp_previous_positions = torch.rand((n_samples, n_masses, n_dim, n_previous_steps)).to(device)*2 - 1
     temp_previous_positions = torch.zeros((n_samples, n_masses, n_dim, n_previous_steps)).to(device)
+    # temporary set previous times to a linspace
+    previous_times = torch.cat((torch.tensor([0.0]), torch.linspace(0, 1, 63))).to(device)
     vel_factor = 2 if includes_velocities else 1
     output_samples = torch.zeros((len(input_data), n_samples, n_masses*n_dim*vel_factor + n_masses))
     for index, tstep_input in enumerate(input_data):
         tstep_input = torch.concatenate([tstep_input.unsqueeze(0).repeat(n_samples, 1), temp_previous_positions.flatten(start_dim=1)], dim=-1).to(device)
+        if random_previous_times is not None:
+            tstep_input = torch.concatenate([tstep_input, previous_times[index].unsqueeze(0).repeat(n_samples, 1)], dim=-1)
         #sampled_tstep_input = tstep_input.repeat_interleave(n_samples, dim=0) 
         multi_coeffmass_samples = model.sample(n_samples, conditional=tstep_input)
         # add timesteps samples to output array
@@ -274,7 +289,8 @@ def test_model_2d(
     sky_position=(np.pi, np.pi/2),
     flow_package="zuko",
     return_velocities=False,
-    n_previous_positions=0):
+    n_previous_positions=0,
+    random_previous_positions_range=0):
     """test a 3d model sampling from the flow and producing possible trajectories
 
         makes animations and plots comparing models
@@ -306,8 +322,8 @@ def test_model_2d(
     n_detectors = len(detectors)
     model.eval()
     with torch.no_grad():
-        for batch, (label, data, batch_times, previous_positions) in enumerate(dataloader):
-            label, data, batch_times, previous_positions = label.to(device), data.to(device), batch_times.to(device), previous_positions.to(device)
+        for batch, (label, data, batch_times, previous_positions, previous_times) in enumerate(dataloader):
+            label, data, batch_times, previous_positions, previous_times = label.to(device), data.to(device), batch_times.to(device), previous_positions.to(device), previous_times.to(device)
             n_batch = len(label)//basis_order
             input_data = pre_model(data)
             # include the time 
@@ -316,6 +332,8 @@ def test_model_2d(
             #print(input_data.size(), label.size(), data.size(), times.size())
             if n_previous_positions > 0:
                 input_data2 = torch.cat([input_data, previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32) 
+                if random_previous_positions_range > 0:
+                    input_data2 = torch.cat([input_data2, previous_times], dim=-1)
                 back_z_samp, z_samp = get_inverse_samples(model, input_data2, label, device="cpu")
                 latent_samples.append(z_samp.cpu().numpy())
                 back_latent_sample.append(back_z_samp.cpu().numpy())
@@ -324,7 +342,10 @@ def test_model_2d(
                 back_z_samp_2, _ = get_inverse_samples(model, input_data2, label2, device="cpu")
                 back_latent_mode2.append(back_z_samp_2.cpu().numpy())
 
-                multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, includes_velocities=return_velocities, device=device)
+
+                if random_previous_positions_range == 0:
+                    previous_times = None
+                multi_coeffmass_samples = get_recurrent_samples(model, input_data, n_samples, n_masses, n_dimensions, n_previous_positions, random_previous_times=previous_times, includes_velocities=return_velocities, device=device)
                 multi_coeffmass_samples = multi_coeffmass_samples.reshape(-1, 1, label.size(-1))
             else:
                 back_z_samp, z_samp = get_inverse_samples(model, input_data, label, device="cpu")

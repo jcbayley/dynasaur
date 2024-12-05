@@ -28,7 +28,8 @@ def train_epoch(
     device:str = "cpu", 
     train:bool = True,
     flow_package="zuko",
-    n_previous_positions=0) -> float:
+    n_previous_positions=0,
+    random_previous_positions=False) -> float:
     """train one epoch for data
 
     Args:
@@ -48,8 +49,8 @@ def train_epoch(
 
     train_loss = 0
     
-    for batch, (label, data, times, previous_positions) in enumerate(dataloader):
-        label, data, times, previous_positions = label.to(device), data.to(device), times.to(device), previous_positions.to(device)
+    for batch, (label, data, times, previous_positions, previous_times) in enumerate(dataloader):
+        label, data, times, previous_positions, previous_times = label.to(device), data.to(device), times.to(device), previous_positions.to(device), previous_times.to(device)
 
         optimiser.zero_grad()
         input_data = pre_model(data)
@@ -57,6 +58,8 @@ def train_epoch(
         #print(input_data.size(), times.size())
         if n_previous_positions > 0:
             input_data = torch.cat([input_data, times.unsqueeze(-1), previous_positions.flatten(start_dim=1)], dim=-1).to(torch.float32)
+            if random_previous_positions:
+                input_data = torch.cat([input_data, previous_times.flatten(start_dim=-1)], dim=-1).to(torch.float32)
         else:
             input_data = torch.cat([input_data, times.unsqueeze(-1)], dim=-1)
         
@@ -145,7 +148,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
     acc_basis_order = cshape
 
 
-    pre_model, labels, strain, batch_times, previous_positions = data_processing.preprocess_data(
+    pre_model, labels, strain, batch_times, previous_positions, previous_times = data_processing.preprocess_data(
         pre_model, 
         basis_dynamics,
         masses, 
@@ -159,7 +162,8 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         n_dimensions=config.get("Data", "n_dimensions"),
         split_data=True,
         basis_velocities=basis_velocities,
-        n_previous_positions=config.get("Data", "n_previous_positions"))
+        n_previous_positions=config.get("Data", "n_previous_positions"),
+        random_previous_positions_range=config.get("Data", "random_previous_positions_range"))
 
 
     indices = np.random.choice(np.arange(len(positions)), size=10)
@@ -183,6 +187,7 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             str_item = torch.Tensor(strain)
             bt_items = torch.Tensor(batch_times)
             pp_items = torch.Tensor(previous_positions)
+            pt_items = torch.Tensor(previous_times)
         else:
             rints = torch.cat(
                 [torch.randperm(n_time_samples)[:nkeepsamps] + i*nkeepsamps for i in range(config.get("Training", "n_train_data") + config.get("Training", "n_val_data"))],
@@ -192,13 +197,15 @@ def run_training(config: dict, continue_train:bool = False) -> None:
             str_item = torch.Tensor(strain)[rints]
             bt_items = torch.Tensor(batch_times)[rints]
             pp_items = torch.Tensor(previous_positions)[rints]
+            pt_items = torch.Tensor(previous_times)[rints]
+
             
         split_index = config.get("Training", "n_train_data")*nkeepsamps - nkeepsamps*config.get("Training", "n_val_data")
-        train_set = TensorDataset(lbs_item[:split_index], str_item[:split_index], bt_items[:split_index], pp_items[:split_index])
-        val_set = TensorDataset(lbs_item[split_index:], str_item[split_index:], bt_items[split_index:], pp_items[split_index:])
+        train_set = TensorDataset(lbs_item[:split_index], str_item[:split_index], bt_items[:split_index], pp_items[:split_index], pt_items[:split_index])
+        val_set = TensorDataset(lbs_item[split_index:], str_item[split_index:], bt_items[split_index:], pp_items[split_index:], pt_items[split_index:])
         #train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data")*nkeepsamps, config.get("Training", "n_val_data")*nkeepsamps))
     else:
-        dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions))
+        dataset = TensorDataset(torch.from_numpy(labels).to(torch.float32), torch.Tensor(strain), torch.Tensor(batch_times), torch.Tensor(previous_positions), torch.Tensor(previous_times))
         train_set, val_set = random_split(dataset, (config.get("Training", "n_train_data"), config.get("Training", "n_val_data")))
 
     train_loader = DataLoader(train_set, batch_size=config.get("Training","batch_size"),shuffle=True)
@@ -238,11 +245,11 @@ def run_training(config: dict, continue_train:bool = False) -> None:
         if continue_train:
             epoch = epoch + start_epoch
 
-        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=True, flow_package=flow_package, n_previous_positions=config.get("Data","n_previous_positions"))
+        train_loss = train_epoch(train_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=True, flow_package=flow_package, n_previous_positions=config.get("Data","n_previous_positions"),random_previous_positions=config.get("Data", "random_previous_positions_range"))
         train_losses.append(train_loss)
 
         with torch.no_grad():
-            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=False, flow_package=flow_package, n_previous_positions=config.get("Data","n_previous_positions"))
+            val_loss = train_epoch(val_loader, model, pre_model, optimiser, device=config.get("Training","device"), train=False, flow_package=flow_package, n_previous_positions=config.get("Data","n_previous_positions"),random_previous_positions=config.get("Data", "random_previous_positions_range"))
             val_losses.append(val_loss)
 
         if config.get("Training","scheduler") not in [None, "None", "none"]:

@@ -106,6 +106,9 @@ def create_models(config, device=None):
     else:
         extra_context = 0
 
+    if config.get("Data", "random_previous_positions_range") > 0:
+        extra_context += 1
+
     if config.get("Data", "timestep-predict"):
         tstep_context = 1
     else:

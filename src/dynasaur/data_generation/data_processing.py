@@ -368,7 +368,8 @@ def preprocess_data(
     basis_type="fourier",
     n_dimensions=3,
     split_data=False,
-    n_previous_positions="none"):
+    n_previous_positions="none",
+    random_previous_positions_range=0):
 
     if spherical_coords:
         print("Spherical not implemented yet")
@@ -402,24 +403,44 @@ def preprocess_data(
         batch_times = torch.linspace(0,1,n_t).repeat(batch_size).numpy()
 
         if n_previous_positions not in ["none", None, False, 0]:
-            # repeat basis dynamics n_time times
-            # define indices as the index minus 2 data points
-            indices = torch.stack([torch.arange(i-n_previous_positions, i) for i in range(n_t)])
-            # for first point just keep selecting the same point
-            #indices[indices<0] = 0
-            # select indices to use and move them to the second dimension equivalent to above dynamics, then flatten as before
-            previous_positions = torch.from_numpy(basis_dynamics)[:,:,:,indices]
-            # now has shape (batch_size, n_masses, n_dimensions, n_timesteps, n_prev_points)
-            #previous_positions[:,:,:,indices<0] = torch.rand(previous_positions[:,:,:,indices<0].size()).to(torch.float64) * 2 - 1
-            previous_positions[:,:,:,indices<0] = torch.zeros(previous_positions[:,:,:,indices<0].size()).to(torch.float64) 
-            #previous_positions += torch.randn(previous_positions.size())*0.01
-            previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
+            if random_previous_positions_range != 0:
+                # select time position at some random time step before current 
+                indices = torch.stack([torch.stack([i - torch.randint(0, random_previous_positions_range, size=(1,)) for i in range(n_t)]) for _ in range(batch_size)])
+                # get the time difference between the current time and the previous time
+                previous_times = torch.tensor([[batch_times[i] - batch_times[indices[b, i, 0]] for i in range(n_t)] for b in range(batch_size)]).unsqueeze(2)
+                # select the indices of the previous points
+                boolind = indices.unsqueeze(1).unsqueeze(1) < 0
+                previous_positions = torch.tensor([basis_dynamics[b, :, :, indices[b, :]] for b in range(batch_size)]).permute(0,3,4,1,2)
+                boolind = boolind.repeat((1, previous_positions.size(1), previous_positions.size(2), 1, 1))
+                # Use advanced indexing to set the values at the specified indices to zero
+                previous_positions[boolind] = 0
+                # set negative indices to zero
+                #previous_positions[:,:,:,indices<0] = torch.zeros(previous_positions[:,:,:,indices<0].size()).to(torch.float64) 
+                # reshape array to have - (batch, times, masses, dimensions, previous_positions)
+                previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
+                previous_times = previous_times.reshape(batch_size*n_t, 1)
+            else:
+                # repeat basis dynamics n_time times
+                # define indices as the index minus 2 data points
+                indices = torch.stack([torch.arange(i-n_previous_positions, i) for i in range(n_t)])
+                # for first point just keep selecting the same point
+                #indices[indices<0] = 0
+                # select indices to use and move them to the second dimension equivalent to above dynamics, then flatten as before
+                previous_positions = torch.from_numpy(basis_dynamics)[:,:,:,indices]
+                # now has shape (batch_size, n_masses, n_dimensions, n_timesteps, n_prev_points)
+                #previous_positions[:,:,:,indices<0] = torch.rand(previous_positions[:,:,:,indices<0].size()).to(torch.float64) * 2 - 1
+                previous_positions[:,:,:,indices<0] = torch.zeros(previous_positions[:,:,:,indices<0].size()).to(torch.float64) 
+                #previous_positions += torch.randn(previous_positions.size())*0.01
+                previous_positions = previous_positions.permute(0,3,1,2,4).reshape(batch_size*n_t, n_m, n_d, n_previous_positions)
+                previouos_times = torch.zeros((np.shape(previous_positions)[0], 1))
         else:
             previous_positions = torch.zeros((np.shape(split_dynamics)[0], 1))
+            previous_times = torch.zeros((np.shape(split_dynamics)[0], 1))
 
     else:
         batch_times = None
         previous_positions = None
+        previous_times = None
         split_dynamics = basis_dynamics
         split_velocities = basis_velocities
     
@@ -456,7 +477,7 @@ def preprocess_data(
         previous_positions, _ = normalise_data(previous_positions, pre_model.label_norm_factor)
 
 
-    return pre_model, labels, strain, batch_times, previous_positions
+    return pre_model, labels, strain, batch_times, previous_positions, previous_times
 
 def unpreprocess_data(
     pre_model, 
